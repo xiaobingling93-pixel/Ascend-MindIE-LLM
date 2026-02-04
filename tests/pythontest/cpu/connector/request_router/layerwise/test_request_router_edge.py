@@ -231,7 +231,7 @@ class TestRequestRouterEdge(unittest.TestCase):
 
     def test_recv_prefill(self):
         self.router.ctrl_comm.recv_prefill = Mock()
-        self.router.ctrl_comm.prefill_comm_finish_tcp = True
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 1
         self.router.ctrl_comm.prefill_recv_msg = None
         self.router.ctrl_comm.parse_shape = Mock()
         self.router.ctrl_comm.parse_shape.return_value = ''
@@ -330,6 +330,7 @@ class TestRequestRouterEdge(unittest.TestCase):
     def test_get_all_request(self):
         self.router.initialize = Mock()
         self.router.router_impl.seq_ctrl = Mock()
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 0
         self.router.inference_queue.put(self.mock_prefill_request())
         self.router.inference_queue.put(self.mock_decode_request())
         self.router.inference_queue.put(self.mock_init_request())
@@ -387,6 +388,7 @@ class TestRequestRouterEdge(unittest.TestCase):
         self.router.prefill_chunk_instance = Mock()
         self.router.prefill_chunk_instance.map_prefill_chunk_num = Mock()
         self.router.prefill_chunk_instance.map_prefill_chunk_num.return_value = 6
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 0
         self.router.get_all_request()
         self.router.calc_decision_type()
         self.assertEqual(self.router.decision_type, DecisionType.DO_PREFILL_FIRST)

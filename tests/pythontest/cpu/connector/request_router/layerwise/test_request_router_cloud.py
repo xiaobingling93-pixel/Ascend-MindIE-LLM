@@ -137,6 +137,9 @@ class TestRequestRouterCloud(unittest.TestCase):
     def test_get_all_request(self):
         self.router.initialize = Mock()
         self.router.router_impl.seq_ctrl = Mock()
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 0
+        self.router.data_comm.p_shape = [0]
+        self.router.data_comm.recv_index = 0
         self.router.calc_seq_len = Mock(return_value=1024)
         self.router.calc_batch_size = Mock(return_value=1)
         self.router.prefill_layers_divi_switch = False
@@ -211,7 +214,7 @@ class TestRequestRouterCloud(unittest.TestCase):
     def test_recv_prefill(self):
         self.router.prefill_comm_finish = False
         self.router.ctrl_comm.recv_prefill = Mock()
-        self.router.ctrl_comm.prefill_comm_finish_tcp = True
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 1
         self.router.ctrl_comm.prefill_recv_msg = None
         self.router.ctrl_comm.parse_shape = Mock()
         self.router.ctrl_comm.parse_shape.return_value = ''
@@ -517,6 +520,9 @@ class TestRequestRouterCloud(unittest.TestCase):
         self.router.isqwenvl = False
         self.router.data_comm.prefill_seq_len_queue = queue.Queue()
         self.router.data_comm.decode_batch_size_queue = queue.Queue() 
+        self.router.ctrl_comm.prefill_comm_finish_tcp_count = 0
+        self.router.data_comm.p_shape = [0]
+        self.router.data_comm.recv_index = 0
         self.router.accept(self.mock_prifill_request())
         self.router.accept(self.mock_decode_request())
         self.router.accept(self.mock_init_request())

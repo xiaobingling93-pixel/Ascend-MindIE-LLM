@@ -78,7 +78,7 @@ class RequestRouterLwd(RequestRouter):
         self.decode_comm_finish = False
         self.prefill_comm_finish = False
         self.prefill_comm_irecv_finish = False
-        self.prefill_comm_tcp_finish = False
+        self.prefill_comm_tcp_finish_count = 0
 
         self.prefill_chunk_instance = None
         self.prefill_seq_len = 0
@@ -202,18 +202,21 @@ class RequestRouterLwd(RequestRouter):
         if self.prefill_comm_finish:
             return
 
-        self.ctrl_comm.recv_prefill()
-        self.prefill_comm_irecv_finish = True
-        self.prefill_comm_tcp_finish = self.ctrl_comm.prefill_comm_finish_tcp
-        if self.prefill_comm_tcp_finish:
-            self.prefill_shape = self.ctrl_comm.parse_shape(self.ctrl_comm.prefill_recv_msg)
-            logger.info("[layerwiseDisaggregated] recv_prefill tcp comm finish.")
+        if self.prefill_comm_tcp_finish_count == 0: 
+            self.ctrl_comm.recv_prefill() 
+            self.prefill_comm_tcp_finish_count = self.ctrl_comm.prefill_comm_finish_tcp_count 
 
-        if self.prefill_comm_irecv_finish and self.prefill_comm_tcp_finish:
-            self.prefill_comm_finish = True
-            self.prefill_comm_irecv_finish = False
-            self.prefill_comm_tcp_finish = False
-            self.ctrl_comm.prefill_comm_finish_tcp = False
+        self.prefill_comm_irecv_finish = True 
+          
+        if self.prefill_comm_tcp_finish_count > 0: 
+            self.prefill_shape = self.ctrl_comm.parse_shape(self.ctrl_comm.prefill_recv_msg) 
+            logger.info("[layerwiseDisaggregated] recv_prefill tcp comm finish.") 
+
+        if self.prefill_comm_irecv_finish and self.prefill_comm_tcp_finish_count > 0: 
+            self.prefill_comm_finish = True 
+            self.prefill_comm_irecv_finish = False 
+            self.prefill_comm_tcp_finish_count -= 1 
+            self.ctrl_comm.prefill_comm_finish_tcp_count -= 1
 
     def recv_decode(self):
         self.ctrl_comm.recv_decode()

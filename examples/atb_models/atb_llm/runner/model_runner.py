@@ -536,7 +536,7 @@ class ModelRunner:
                 self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(new_hidden.shape)
                 self.ctrl_comm.send_prefill()
 
-                self.data_comm.p_shape = self.data_comm.prefill_seq_len_queue.get()
+                self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
                 self.data_comm.recv_hidden('p', self.data_comm.p_shape)
                 return hidden
             else:
@@ -602,13 +602,11 @@ class ModelRunner:
 
                 if not (layerwise_disaggregated_exe_stage.is_long_seq and \
                         layerwise_disaggregated_exe_stage.long_seq_start_idx == 0):
-                    self.data_comm.p_shape = self.data_comm.prefill_seq_len_queue.get()
+                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
                     self.data_comm.recv_hidden('p', self.data_comm.p_shape)
                 return hidden
             else:
                 tmp = self.data_comm.data_wait_after_recv('p')
-                if not layerwise_disaggregated_exe_stage.is_long_seq:
-                    self.data_comm.ret_p = None
                 hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv {hidden.shape}")
                 new_params = {OUT_HIDDEN: hidden}
@@ -617,7 +615,7 @@ class ModelRunner:
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill logits {res.shape}")
                 
                 if not self.data_comm.prefill_seq_len_queue.empty():
-                    self.data_comm.p_shape = self.data_comm.prefill_seq_len_queue.get()
+                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
                     self.data_comm.recv_hidden('p', self.data_comm.p_shape)
                     logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv start, "
                                 f"self.data_comm.p_shape: {self.data_comm.p_shape}")
@@ -772,7 +770,6 @@ class ModelRunner:
                                     self.prefill_input_lengths: {self.prefill_input_lengths}")
             if layerwise_disaggregated_exe_stage.start_exec_layer == 0:
                 tmp = self.data_comm.data_wait_after_recv('p')
-                self.data_comm.ret_p = None
                 hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
                 logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} prefill recv {hidden.shape}")
                 if layerwise_disaggregated_exe_stage.is_long_seq and \
@@ -782,7 +779,7 @@ class ModelRunner:
                     self.data_comm.prefill_seq_len_queue.put(prefill_seq_len)
                     logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank}, "
                                 f"queue input is {prefill_seq_len}")
-                    self.data_comm.p_shape = self.data_comm.prefill_seq_len_queue.get()
+                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
                     self.data_comm.recv_hidden('p', self.data_comm.p_shape)
                 
                 new_params = {OUT_HIDDEN: hidden}

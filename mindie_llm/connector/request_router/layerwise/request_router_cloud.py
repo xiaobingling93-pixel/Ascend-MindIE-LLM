@@ -365,7 +365,7 @@ class RequestRouterCloud(RequestRouterLwd):
         if not self.data_comm.need_set_prefill_device:
             self.data_comm.need_set_prefill_device = True
 
-        self.data_comm.p_shape = self.data_comm.prefill_seq_len_queue.get()
+        self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
         self.data_comm.recv_hidden('p', self.data_comm.p_shape)
 
         logger.info(f"[layerwiseDisaggregated] cloud prefill seq len putted, rank{self.rank} seq_len: {seq_len}")
