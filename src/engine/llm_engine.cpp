@@ -503,6 +503,16 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         auto spanPostSchedule = PROF(L2, Domain("Schedule").SpanStart("PostSchedule"));
         auto [allDpMetas, allDpOuts] = PostScheduleSyncUp(needSync, seqGroupMetadata, scheduleOut, localDPRank);
         PROF(spanPostSchedule.SpanEnd());
+        if (schedulerConfig_->layerwiseDisaggregated) {
+            for (auto tmpOut : allDpOuts) {
+                for (auto scOut : tmpOut) {
+                    if (scOut.forwardMode_ == ForwardMode::PREFILL) {
+                        scheduleOut.forwardMode_ = ForwardMode::PREFILL;    // 陪跑也需要改成和下发一致的类型, 默认decode
+                        break;
+                    }
+                }
+            }
+        }
 
         // 6. batch下发给Executor执行
         // 如果单dp下自身batch不空， 或者多dp下其他dp的batch不空（集中式）

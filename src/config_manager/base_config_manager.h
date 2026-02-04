@@ -61,6 +61,8 @@ public:
 private:
     struct ScheduleConfig scheduleConfig_;
 
+    bool LoadLwdConfig(Json &scheduleJsonData);
+
     bool LoadBasicScheduleConfig(Json &scheduleJsonData);
 
     void LoadPolicyConfig(Json &scheduleJsonData);
@@ -176,6 +178,8 @@ private:
     bool InitTlsConfigFromJson(Json &backendConfigData);
 
     void InitKvPoolConfigFromJson(Json &backendConfigData);
+
+    void InitLwdConfigFromJson(Json &backendConfigData);
 
     bool CheckInterTlsParam();
 

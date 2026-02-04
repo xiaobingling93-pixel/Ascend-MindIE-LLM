@@ -216,12 +216,25 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
         WaitingAvoidDummyBatch(pdPriorityType, needSync);
     }
 
+    LwdPDelayType pDelayType = LwdPDelayType::INVALID;
+    if (schedulerConfig_->layerwiseDisaggregated && pdPriorityType == PDPriorityType::PREFILL_FIRST) {
+        pDelayType = LayerwiseDecidePDelay();
+        if (pDelayType == LwdPDelayType::PREFILL_TO_DECODE) {
+            pdPriorityType = PDPriorityType::DECODE_FIRST;
+        }
+    }
+
     size_t batchSize = (pdPriorityType == PDPriorityType::PREFILL_FIRST) ? schedulerConfig_->maxPrefillBatchSize
                                                                          : schedulerConfig_->maxBatchSize;
     // maxSeqLen和maxPrefillTokens哪个大，哪个作为budget的batch 最大token数。
     size_t budgetTokenNum = (schedulerConfig_->maxSeqLen > schedulerConfig_->maxPrefillTokens)
                                 ? schedulerConfig_->maxSeqLen
                                 : schedulerConfig_->maxPrefillTokens;
+    if (pDelayType == LwdPDelayType::PREFILL_SKIP) {
+        // 仅开启Lwd特性下2P调度情况下，可能决策p延迟下发，且延迟策略为跳过本轮p调度
+        batchSize = 0;
+        budgetTokenNum = 0;
+    }
     SchedulingBudget budget(budgetTokenNum, batchSize, schedulerConfig_);
 
     // 2. apply policy
@@ -402,6 +415,42 @@ PDPriorityType Scheduler::LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t
     return priority;
 }
 
+LwdPDelayType Scheduler::LayerwiseDecidePDelay()
+{
+    // 开启Lwd特性前提下，本函数决定本轮是否延迟下发Prefill请求，以及若延迟下发采用的处理策略
+    if (schedulerConfig_->batchPnum == 2 && waiting_.Size() > 0) { // 2为最大的P batch数量
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        int32_t pWaitTime = -1;
+        if (pDelayTime != INVALID_TIME) {
+            pWaitTime = static_cast<int32_t>(duration_cast<milliseconds>(currentTime - pDelayTime).count());
+        }
+        int32_t maxPWaitTime = 1000; // 最大等待1000ms
+        if (waiting_.Front()->requestGap_ > 0) {
+            // maxPWaitTime = waiting_.Front()->requestGap_ / 2;
+            maxPWaitTime = std::min(maxPWaitTime, waiting_.Front()->requestGap_ / 2);
+            // 这里稍微调了下，一是避免重计算情况下延迟下发太久，二是真是情况下也可能请求率就是特别低
+        }
+        std::shared_ptr<EdgeCloudPolicy> lwdPolicy = std::static_pointer_cast<EdgeCloudPolicy>(stagePolicy_);
+        // 判断当前waiting队列中有2P，或等待已超限，则停止延迟，立即下发，延迟计时复位
+        if (waiting_.Size() >= 2 || pWaitTime > maxPWaitTime) {
+            pDelayTime = INVALID_TIME;
+            return LwdPDelayType::PREFILL_KEEP;
+        } else if (lwdPolicy->GetDecodeBatchCnt() < 1 && running_.Size() > 0) {
+            // 若上述不延迟条件均不满足，P下发延迟，若D batch计数为0且有D，则尝试下发D
+            // pDelayTime标识延迟初始时刻，默认为INVALID_TIME，若为INVALID_TIME说明第一次打算等，置为决策延迟下发时刻，否则保持延长计时
+            pDelayTime = (pDelayTime == INVALID_TIME ? currentTime : pDelayTime);
+            return LwdPDelayType::PREFILL_TO_DECODE;
+        } else {
+            // 若上述不延迟条件均不满足，P下发延迟，且不满足下D条件，则跳过本轮调度
+            pDelayTime = (pDelayTime == INVALID_TIME ? currentTime : pDelayTime);
+            return LwdPDelayType::PREFILL_SKIP;
+        }
+    } else {
+        pDelayTime = INVALID_TIME;
+        return LwdPDelayType::PREFILL_KEEP;
+    }
+}
+
 // decide what to schedule in this round ,  prefill or decode
 PDPriorityType Scheduler::DecidePDPriority(bool needSync)
 {
@@ -412,15 +461,13 @@ PDPriorityType Scheduler::DecidePDPriority(bool needSync)
             size_t freeBlocksNum = blockManager_->GetNumFreeNpuBlocks();
             size_t totalBlocksNum = blockManager_->GetTotalNpuBlocks();
             size_t reserveBlockNum4Decode = static_cast<size_t>(PRESERVED_FACTOR_FOR_DECODE * totalBlocksNum);
-            if (schedulerConfig_->layerwiseDisaggregated) {
-                priority = LayerwiseDecidePDPriority(freeBlocksNum, reserveBlockNum4Decode);
-                break;
-            }
             if (schedulerConfig_->enableChunkedPrefill) {
                 // PD混部场景，chunked prefill优先
                 return PDPriorityType::MIX;
             }
-            if (lastScheduleEmpty_ && !running_.Empty()) {
+            if (schedulerConfig_->layerwiseDisaggregated) {
+                priority = LayerwiseDecidePDPriority(freeBlocksNum, reserveBlockNum4Decode);
+            } else if (lastScheduleEmpty_ && !running_.Empty()) {
                 priority = PDPriorityType::DECODE_FIRST;
             } else if (schedulerConfig_->stageSelectPolicy > static_cast<uint32_t>(StagePolicyType::PREFILL_FIRST)) {
                 priority = stagePolicy_->Apply(waiting_, running_, swapped_);

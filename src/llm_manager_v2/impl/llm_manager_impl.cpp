@@ -381,6 +381,7 @@ static void InitbackendConfig(EngineConfig &engineConfig, const BackendConfig &b
     engineConfig.interNodeTlsCrlPath = backendConfig.interNodeTlsCrlPath;
     engineConfig.interNodeTlsCrlFiles = backendConfig.interNodeTlsCrlFiles;
     engineConfig.kvPoolConfig = backendConfig.kvPoolConfig;
+    engineConfig.lwdMultiNodesEnable = backendConfig.lwdMultiNodesEnable;
 }
 
 static void UpdateFromEnv(std::set<size_t> &npuDeviceIds, uint32_t modelInstanceId)
@@ -673,6 +674,7 @@ static bool InitEngineConfig(EngineConfig &engineConfig, std::vector<ModelDeploy
 
     if (ConfigManager::GetInstance().IslayerwiseDisaggregated()) {
         auto &serverConfig = GetServerConfig();
+        engineConfig.layerwiseDisaggregated = true;
         std::string role = serverConfig.layerwiseDisaggregatedRoleType;
         engineConfig.isMaster = (role == "master");
         engineConfig.masterIP = serverConfig.layerwiseDisaggregatedMasterIpAddress;
@@ -681,6 +683,28 @@ static bool InitEngineConfig(EngineConfig &engineConfig, std::vector<ModelDeploy
         for (auto &modelParam : engineConfig.modelDeployParam) {
             modelParam.npuDeviceIds = npuDeviceIds;
             modelParam.worldSize = modelParam.npuDeviceIds.size();
+        }
+
+        // 云侧真多机的rankTable处理; 边侧就是dp=n的实现, 不用传特殊参数
+        if (backendConfig.lwdMultiNodesEnable && !engineConfig.isMaster) {
+            engineConfig.isLwdMultiNodesMaster = ranktableParam.isMaster;
+
+            engineConfig.globalWorldSize = ranktableParam.globalWorldSize;
+            for (auto device : ranktableParam.local.device) {
+                engineConfig.globalRankIds.emplace_back(device.rankId);
+            }
+            std::vector<size_t> npuIds;
+            for (auto device : ranktableParam.local.device) {
+                npuIds.push_back(stoul(device.deviceId));
+            }
+            // 多机场景下对 npuids 进行 替换
+            for (auto &modelParam : engineConfig.modelDeployParam) {
+                modelParam.npuDeviceIds.clear();
+                for (auto id : npuIds) {
+                    modelParam.npuDeviceIds.insert(id);
+                }
+                modelParam.worldSize = modelParam.npuDeviceIds.size();
+            }
         }
     }
 
@@ -816,11 +840,13 @@ static std::string IsAsyncBatchscheduler(const EngineConfig &engineConfig)
     return "true";
 }
 
-static void LLMSetLayerwiseDisaggregatedModelConfig(std::map<std::string, std::string> &modelConfig)
+static void LLMSetLayerwiseDisaggregatedModelConfig(std::map<std::string, std::string> &modelConfig,
+    const EngineConfig &engineConfig)
 {
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
     auto &serverConfig = configManager.GetServerConfig();
     auto &backendConfig = configManager.GetBackendConfig();
+    auto &scheduleConfig = configManager.GetScheduleConfig();
 
     modelConfig["layerwiseDisaggregated"] = "true";
     modelConfig["layerwiseDisaggregatedRoleType"] = serverConfig.layerwiseDisaggregatedRoleType;
@@ -851,6 +877,23 @@ static void LLMSetLayerwiseDisaggregatedModelConfig(std::map<std::string, std::s
     modelConfig["interNodeTlsPk"] = backendConfig.interNodeTlsPk;
     modelConfig["interNodeTlsCrlPath"] = backendConfig.interNodeTlsCrlPath;
     modelConfig["interNodeTlsCrlFiles"] = backendConfig.interNodeTlsCrlFiles;
+
+    if (backendConfig.lwdMultiNodesEnable) {
+        modelConfig["layerwiseDisaggregatedMultiNodesInferEnabled"] = "true";
+        modelConfig["layerwiseDisaggregatedMultiNodesCtrlPort"] = std::to_string(backendConfig.lwdMultiNodesCtrlPort);
+        modelConfig["lwd_multi_nodes_enable"] = "true";
+    }
+
+    modelConfig["lwdNextPHeadPrior"] = scheduleConfig.lwdNextPHeadPrior ? "true" : "false";
+    if (modelConfig["lwd_multi_nodes_enable"] == "true") {
+        modelConfig["lwd_multi_nodes_is_master"] = engineConfig.isLwdMultiNodesMaster ? "true" : "false";
+        modelConfig["layerwiseDisaggregatedMultiNodesMaster"] = \
+            engineConfig.isLwdMultiNodesMaster ? "true" : "false";
+        if (configManager.GetLwdRoleType() != "master") {
+            modelConfig["localIP"] = engineConfig.isLwdMultiNodesMaster ? \
+                engineConfig.slaveIPs[0] : engineConfig.slaveIPs[1];
+        }
+    }
 }
 
 static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, const std::string &homePath,
@@ -871,11 +914,6 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
     modelConfig["max_prefill_batch_size"] = std::to_string(engineConfig.maxPrefillBatchSize);
     modelConfig["kv_pool_backend"] = engineConfig.kvPoolConfig.backend;
     modelConfig["kv_pool_config_path"] = engineConfig.kvPoolConfig.configPath;
-
-    auto &configManager = mindie_llm::ConfigManager::GetInstance();
-    if (configManager.IslayerwiseDisaggregated()) {
-        LLMSetLayerwiseDisaggregatedModelConfig(modelConfig);
-    }
    
     std::string npuIds;
     if (!modelParam.npuDeviceIds.empty()) {
@@ -909,6 +947,11 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
     g_modelParams["maxIterTimes"] = std::to_string(engineConfig.maxIterTimes);
     modelConfig["asyncBatchscheduler"] = IsAsyncBatchscheduler(engineConfig);
     modelConfig["threadNum"] = (modelConfig["asyncBatchscheduler"] == "true") ? "2" : "1";
+
+    auto &configManager = mindie_llm::ConfigManager::GetInstance();
+    if (configManager.IslayerwiseDisaggregated()) {
+        LLMSetLayerwiseDisaggregatedModelConfig(modelConfig, engineConfig);
+    }
 }
 
 static void InitPolicyConfig(SchedulerConfig &schedulerConfig, const EngineConfig &engineConfig)
@@ -1048,9 +1091,12 @@ static void InitLayerwiseDisaggregated(SchedulerConfig &schedulerConfig)
 {
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
     auto &serverConfig = configManager.GetServerConfig();
+    auto &scheduleConfig = configManager.GetScheduleConfig();
     if (serverConfig.layerwiseDisaggregated) {
         schedulerConfig.stageSelectPolicy = 3; // 边云策略为3
-        schedulerConfig.maxDispatchBatchNum = 2; // 下发batchsize为2
+        schedulerConfig.batchPnum = scheduleConfig.lwdNextPHeadPrior ? 2 : 1; // 2是允许下发P batch最大数量
+        // 下发batchsize为P batch数目（batchPnum）加D batch数目（1）
+        schedulerConfig.maxDispatchBatchNum = schedulerConfig.batchPnum + 1;
         schedulerConfig.layerwiseDisaggregated = true;
     }
 }
@@ -1239,10 +1285,6 @@ Status LlmManagerImpl::Init(uint32_t modelInstanceId, std::set<size_t> npuDevice
     isMaster_ = engineConfig_.isMaster;
     
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
-    if (configManager.IslayerwiseDisaggregated()) {
-        engineConfig_.layerwiseDisaggregated = true;
-    }
-    
     if (!LlmSetModelConfig(engineConfig_, modelConfigs_, ipInfo_, isDmiInfer_)) {
         MINDIE_LLM_LOG_ERROR("Malloc modelBackends_ failed.");
         return Status(Error::Code::ERROR, "Engine init model failed: new modelBackends_ failed");
@@ -1257,9 +1299,12 @@ Status LlmManagerImpl::Init(uint32_t modelInstanceId, std::set<size_t> npuDevice
     // 表示当前机器上需要创建几份共享内存
     size_t shmCount = 1;
     auto it = engineConfig_.modelDeployParam[0].modelConfig.find("dp");
-    
+
     if (engineConfig_.layerwiseDisaggregated) {
         executorNum = 1;
+        if (configManager.IsLwdMultiNodesEnable() && configManager.GetLwdRoleType() == "master") {
+            executorNum = std::stoul(it->second);   // 多机场景 = dp数
+        }
     } else if (engineConfig_.distributedEnable && !multiNodesInferEnabled_) {
         executorNum = 1;
     } else if (it != engineConfig_.modelDeployParam[0].modelConfig.end()) {

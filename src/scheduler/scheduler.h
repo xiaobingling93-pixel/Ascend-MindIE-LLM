@@ -14,6 +14,7 @@
 #define SCHEDULER_H
 
 #include <algorithm>
+#include <climits>
 
 #include "ischeduler.h"
 #include "policy/policy.h"
@@ -293,6 +294,8 @@ private:
     // 边云新增
     PDPriorityType LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t reserveBlockNum4Decode);
     bool LayerwiseDiscardToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId);
+    LwdPDelayType LayerwiseDecidePDelay();
+    std::chrono::time_point<std::chrono::high_resolution_clock> pDelayTime{INVALID_TIME};
     LayerwiseMixin layerwiseMixin_;
 };
 
