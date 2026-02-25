@@ -38,7 +38,7 @@ def _prepend_ld_library_path(env: dict, paths: list[Path]) -> None:
         return
 
     old = env.get("LD_LIBRARY_PATH", "")
-    env["LD_LIBRARY_PATH"] = ":".join(([old] if old else []) + valid_paths)
+    env["LD_LIBRARY_PATH"] = ":".join(valid_paths + ([old] if old else []))
 
 
 def main():
