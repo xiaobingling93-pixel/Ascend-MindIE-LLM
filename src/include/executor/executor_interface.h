@@ -75,6 +75,7 @@ struct KVCacheOverview {
     uint32_t cpuBlockNum{0xFFFFFFFF};
     uint32_t npuBlockNum{0xFFFFFFFF};
     uint32_t maxPositionEmbeddings{0xFFFFFFFF};
+    uint32_t lwdCloudNpuBlockNum{0xFFFFFFFF};
     mutable std::mutex updateValueMutex; // Internal mutex to support thread-safe updates
 
     void UpdateIfSmaller(uint32_t newCpuBlockNum, uint32_t newNpuBlockNum, uint32_t newMaxPositionEmbeddings)
@@ -124,6 +125,8 @@ public:
     virtual uint32_t GetCpuBlockNum() const = 0;
 
     virtual uint32_t GetNpuBlockNum() const = 0;
+
+    virtual uint32_t GetLwdCloudNpuBlockNum() const = 0;
 
     virtual uint32_t GetMaxPositionEmbeddings() const = 0;
 

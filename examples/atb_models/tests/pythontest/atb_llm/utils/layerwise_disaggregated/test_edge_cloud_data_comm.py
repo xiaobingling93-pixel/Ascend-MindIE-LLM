@@ -481,6 +481,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         comm.streams = [[[MagicMock(), MagicMock()]], [MagicMock(), MagicMock()]]
         self.dp_group = 0
         comm.hidden_size = 64
+        comm.npu_device_id = 0
         comm.hccl_comm_warmup(comm.hidden_size)
 
         peer_index = 0
@@ -558,6 +559,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         comm.streams = [[[MagicMock(), MagicMock()]], [MagicMock(), MagicMock()]]
         self.dp_group = 0
         comm.hidden_size = 64
+        comm.npu_device_id = 0
         comm.hccl_comm_warmup(comm.hidden_size)
 
         peer_index = 0

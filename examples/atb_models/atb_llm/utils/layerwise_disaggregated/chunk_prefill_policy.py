@@ -28,7 +28,7 @@ class ChunkPrefilPolicy():
             self.model_type = self.__get_model_name(model_name_or_path)
             self.batch_p_num = batch_p_num
             # For NPU Soc is Ascend910B2 or other models, use the following default prefill_chunk_map
-            self.prefill_chunk_map = {128: 33, 64: 20, 32: 10, 16: 6, 8: 2}
+            self.prefill_chunk_map = {125: 33, 64: 20, 32: 10, 16: 6, 8: 2}
             self.__ajust_prefill_chunk_map_for_diff_npu_soc()
             if self.model_type == CloudCutModelType.DEEP_SEEK:
                 self.prefill_chunk_map = {31.5: 20, 15.5: 5, 7.5: 2}
@@ -56,13 +56,13 @@ class ChunkPrefilPolicy():
             return
         if self.soc_name == 'Ascend910B3':
             if self.batch_p_num == 1:
-                self.prefill_chunk_map = {128: 33, 64: 20, 32: 10, 16: 6, 8: 2}
+                self.prefill_chunk_map = {125: 33, 64: 20, 32: 10, 16: 6, 8: 2}
             else:
-                self.prefill_chunk_map = {128: 33, 64: 20, 32: 10, 16: 6, 8: 2}
+                self.prefill_chunk_map = {125: 33, 64: 20, 32: 10, 16: 6, 8: 2}
             return
         if self.soc_name == 'Ascend910B4':
             if self.batch_p_num == 1:
-                self.prefill_chunk_map = {128: 33, 64: 20, 32: 10, 16: 6, 8: 2}
+                self.prefill_chunk_map = {125: 33, 64: 20, 32: 10, 16: 6, 8: 2}
             else:
-                self.prefill_chunk_map = {128: 33, 64: 20, 32: 10, 16: 6, 8: 2}
+                self.prefill_chunk_map = {125: 33, 64: 20, 32: 10, 16: 6, 8: 2}
             return

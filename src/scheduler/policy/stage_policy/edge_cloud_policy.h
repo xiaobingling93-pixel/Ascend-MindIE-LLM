@@ -37,6 +37,8 @@ public:
 
     int GetDecodeBatchCnt() const {return decodeBatchCount_;};
 
+    bool LwdNeedWaiting4Response(ForwardMode forwardMode) const;
+
 private:
     std::shared_ptr<LatencyPredictor> predictor_;
     int prefillBatchCount_{0};

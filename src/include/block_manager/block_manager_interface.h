@@ -25,6 +25,7 @@ using SequenceGroupSPtr = std::shared_ptr<SequenceGroup>;
 using SequenceSPtr = std::shared_ptr<Sequence>;
 enum class BlockManagerType : int32_t {
     SELFATTNBLOCKMANGER,
+    LWDSELFATTNBLOCKMANGER,
 };
 
 struct RankedBlockId {
@@ -154,6 +155,17 @@ public:
     virtual size_t GetLocalDPRank() const = 0;
 
     virtual std::vector<size_t> GetPrefixBlockOrder(SequenceId seqId, std::vector<size_t> &computedBlocksNum) const = 0;
+
+    virtual void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank) = 0;
+
+    virtual void LwdGetCloudRankedBlockIds(SequenceId seqId,
+        std::vector<std::vector<BlockId>> &rankedBlockIds) const = 0;
+
+    virtual size_t LwdGetCloudLatestAppendedRankId(SequenceId seqId) const = 0;
+
+    virtual size_t LwdGetCloudAppendedBlockRankId(SequenceId seqId) const = 0;
+
+    virtual std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const = 0;
 };
 
 using BlockSpaceManagerSPtr = std::shared_ptr<BlockSpaceManager>;

@@ -159,6 +159,9 @@ private:
     std::vector<BlockId> SetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta, SequenceGroupSPtr seqGrpSPtr,
                                                         SequenceId seqId, ForwardMode forwardMode) const;
 
+    std::vector<BlockId> LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta, SequenceGroupSPtr seqGrpSPtr,
+                                                        SequenceId seqId, ForwardMode forwardMode) const;
+
     std::vector<BlockId> GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const;
     void SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) const;
 

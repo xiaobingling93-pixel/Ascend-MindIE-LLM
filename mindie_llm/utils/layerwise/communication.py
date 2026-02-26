@@ -22,6 +22,7 @@ ROLE_SLAVE = 'slave'
 class LwdCommunicationManager:
     __slots__ = (
         "rank",
+        "npu_device_id",
         "role_type",
         "edge_ip_address",
         "cloud_ip_addresses",
@@ -40,6 +41,7 @@ class LwdCommunicationManager:
 
     def __init__(self):
         self.rank = None
+        self.npu_device_id = None
         self.role_type = None
         self.edge_ip_address = None
         self.cloud_ip_addresses = None
@@ -222,6 +224,7 @@ class LwdCommunicationManager:
 
         data_comm_args = {'edge_ip': self.edge_ip_address, 'edge_port': self.hccl_comm_edge_ip_port,
                           'npuEdgeNum': self.npu_edge_num, 'npuCloudNum': self.npu_cloud_num}
+        self.data_comm.initialize(self.npu_device_id)
         self.data_comm.init_hccl(rank=self.rank, role=self.role_type, data_comm_args=data_comm_args,
                                  multi_nodes_infer_args=multi_nodes_infer_args)
         if self.data_comm.init_finish:
@@ -249,8 +252,12 @@ class LwdCommunicationManager:
 
     def initialize(self, model_config: DmiConfig, initialize_result, generator):
         self.rank = model_config.local_rank
+        self.npu_device_id = model_config.npu_device_id
         self.generator = generator
         self.multi_nodes_dp_size = model_config.dp_size
+        # cp need same communication domain as dp
+        if model_config.cp_size == 2:
+            self.multi_nodes_dp_size = 2
 
         self.parse(model_config)
 

@@ -23,7 +23,7 @@ EDGE = "master"
 CLOUD = "slave"
 HCCL = 'hccl'
 
-SEQ_LEN = 64 * 1024
+SEQ_LEN = 32 * 1024
 MULTY_NODES_SEQ_LEN = 136 * 1024
 BATCH_LEN = 1024
 
@@ -46,6 +46,7 @@ class EdgeCloudDataComm:
         self.edge_ip = None
         self.edge_port = None
         self.rank = None
+        self.npu_device_id = None
         self.dtype = dtype
         self.edge_ranks_num = None
         self.cloud_ranks_num = None
@@ -92,6 +93,10 @@ class EdgeCloudDataComm:
         self.multi_nodes_is_master = False
 
         self.rank_file = None
+
+    def initialize(self, npu_device_id):
+        self.npu_device_id = npu_device_id
+        logger.info(f"[layerwiseDisaggregated]data comm init npu device is {npu_device_id}")
 
     def temp_unset_rank_table(self):
         self.rank_file = os.environ.get('RANK_TABLE_FILE')
@@ -378,7 +383,7 @@ class EdgeCloudDataComm:
         if self.rank == src_rank: # 对应的卡才进行收发
             if mode == 'p':
                 if self.role == CLOUD and not self.set_prefill_device_done:
-                    torch.npu.set_device(torch.device(f"npu:{self.rank}"))
+                    torch.npu.set_device(torch.device(f"npu:{self.npu_device_id}"))
                     self.set_prefill_device_done = True
                 self.target_p[recv_index] = self.out_hidden_p[recv_index][:shape[recv_index], :]
                 with torch.npu.stream(self.streams[P_INDEX][recv_index][RECV_INDEX]):
@@ -390,7 +395,7 @@ class EdgeCloudDataComm:
                 logger.info(f"[rank-{self.rank}] prefill start async recv, shape={shape[recv_index]}")
             else:
                 if self.role == CLOUD and not self.set_decode_device_done:
-                    torch.npu.set_device(torch.device(f"npu:{self.rank}"))
+                    torch.npu.set_device(torch.device(f"npu:{self.npu_device_id}"))
                     self.set_decode_device_done = True
                 self.target_d = self.out_hidden_d[:shape, :]
                 with torch.npu.stream(self.streams[D_INDEX][RECV_INDEX]):

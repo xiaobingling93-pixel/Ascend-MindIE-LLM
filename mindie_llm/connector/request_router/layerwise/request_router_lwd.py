@@ -16,6 +16,8 @@ import sys
 import time
 from enum import IntEnum
 from pathlib import Path
+from itertools import chain
+import numpy as np
 
 from mindie_llm.connector.common import send_model_execute_response
 from mindie_llm.connector.common.input_metadata_builder import parse_all_dp_batches_seq_lens
@@ -33,7 +35,7 @@ sys.path.append(str(Path(__file__).parent / "sync"))
 
 MASTER_ID = 0   # 接收通信, 广播决策, 创建共享内存的主rank号
 LONG_SEQ_LEN_MIN = 7500
-MULTI_NODES_LONG_SEQ_LEN_MIN = 18000
+MULTI_NODES_LONG_SEQ_LEN_MIN = 150000
 
 
 class LastExecType(IntEnum):
@@ -86,6 +88,7 @@ class RequestRouterLwd(RequestRouter):
         self.prefill_dp_seq_len = 0             # 自身dp域的长度, 如果dp=1就直接得到这个dp的总长度; 如果dp域是空, 则赋值为1
         self.prefill_dp_max_seq_len = 0         # 多dp中的最大长度, 如果只有一个dp就是本身的长度
         self.prefill_dp_empty = False           # dp域中本身是否为empty
+        self.cp_size = 1
 
         super().__init__()
 
@@ -115,6 +118,7 @@ class RequestRouterLwd(RequestRouter):
         config = self.get_model_impl_config(model_config)
         self.enable_dp_distributed = config.distributed_enable
         initialize_result = self.initialize_impl(config)
+        self.cp_size = config.cp_size
 
         edge_cloud_comm = LwdCommunicationManager()
         edge_cloud_comm.initialize(config, initialize_result, self.router_impl.generator)
@@ -371,3 +375,11 @@ class RequestRouterLwd(RequestRouter):
 
     def is_request_long_seq(self, execute_request: ExecuteRequest):
         return self.calc_max_seq_len(execute_request) > self.get_long_seq_len_min()
+
+    def calc_cp_seq_len(self, execute_request: ExecuteRequest):
+        seq_lens = parse_all_dp_batches_seq_lens(execute_request.execute_model_request.all_dp_batches_seq_lens)
+        seq_lens_list = list(chain.from_iterable(seq_lens))
+        pad_token_count = (-np.array(seq_lens_list)) % (2 * self.cp_size)
+        seq_lens_list += pad_token_count
+        total_seq_num = seq_lens_list.sum()
+        return total_seq_num // self.cp_size

@@ -51,9 +51,25 @@ Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                                     schedulerConfig->kvPoolConfig.backend,
                                     schedulerConfig->kvPoolConfig.configPath};
     dpRankId_ = schedulerConfig_->dpRankId_;
-    blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANGER,
-                                                                 std::move(blockConf), localDPRank);
-
+    if (schedulerConfig_->layerwiseDisaggregated && schedulerConfig->spSize * schedulerConfig->cpSize > 1) {
+        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::LWDSELFATTNBLOCKMANGER,
+            std::move(blockConf), localDPRank);
+        BlockManagerConfig blockConf = {schedulerConfig->cacheBlockSize,
+                                        schedulerConfig->cpuBlockNum,
+                                        schedulerConfig->lwdCloudNpuBlockNum,
+                                        0,
+                                        schedulerConfig->speculationGamma,
+                                        schedulerConfig->enablePrefixCache,
+                                        16,
+                                        1,
+                                        schedulerConfig->enableKvPool,
+                                        schedulerConfig->kvPoolConfig.backend,
+                                        schedulerConfig->kvPoolConfig.configPath};
+        blockManager_->LwdInitCloudBlockManager(std::move(blockConf), localDPRank);
+    } else {
+        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANGER,
+                                                                     std::move(blockConf), localDPRank);
+    }
     // create inference scheduling policy and kv transfer scheduling policy according to role
     // If role is P only or D only, polices will be created again.
     SetRole(pdRole); // 默认是非PD分离的。因为非PD分离场景，Server不会调用SetRole方法。
@@ -214,6 +230,10 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
     PDPriorityType pdPriorityType = DecidePDPriority(needSync);
     if (role_ == Role::P) {
         WaitingAvoidDummyBatch(pdPriorityType, needSync);
+    }
+
+    if (schedulerConfig_->layerwiseDisaggregated && schedulerConfig_->dpSize > 1) {
+        layerwiseMixin_.LwdWaitingResponse(pdPriorityType, stagePolicy_);
     }
 
     LwdPDelayType pDelayType = LwdPDelayType::INVALID;
@@ -930,6 +950,32 @@ std::vector<BlockId> Scheduler::SetSpCpParamAndReturnAllBlocks(SequenceGroupMeta
     return blockIds;
 }
 
+std::vector<BlockId> Scheduler::LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta,
+                                                                  SequenceGroupSPtr seqGrpSPtr, SequenceId seqId,
+                                                                  ForwardMode forwardMode) const
+{
+    std::vector<BlockId> blockIds;
+    std::vector<std::vector<BlockId>> allRankBlocks;
+    blockManager_->LwdGetCloudRankedBlockIds(seqId, allRankBlocks);
+    size_t maxRankBlockNum = allRankBlocks.at(0).size();
+    for (std::vector<BlockId> &rankBlocks : allRankBlocks) {
+        maxRankBlockNum = rankBlocks.size() > maxRankBlockNum ? rankBlocks.size() : maxRankBlockNum;
+    }
+
+    // 获取spcp rank 所有的block table的数据
+    for (std::vector<BlockId> &rankBlocks : allRankBlocks) {
+        blockIds.insert(blockIds.end(), rankBlocks.begin(), rankBlocks.end());
+        meta.lwdCloudSpRankBlockNum_.push_back(rankBlocks.size());
+    }
+
+    if (meta.isSp_ or meta.isCp_) {
+        meta.lwdCloudSpRankId_ = blockManager_->LwdGetCloudLatestAppendedRankId(seqId);
+        meta.lwdCloudAppendBlockRankId_ = blockManager_->LwdGetCloudAppendedBlockRankId(seqId);
+        meta.lwdCloudSpRankPromptTokenNum_ = blockManager_->LwdGetCloudTokenCountPerRank(seqId);
+    }
+    return blockIds;
+}
+
 std::vector<BlockId> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const
 {
     std::vector<BlockId> blockIds;
@@ -1009,6 +1055,7 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
 
         for (auto seq : runningSeqSPtrs) {
             std::vector<BlockId> blockIds;
+            std::vector<BlockId> lwdCloudBlockIds;
             bool isSimulateSeq = (seq->seqId_ == SIMULATE_SEQUENCE_ID);
             if (isSimulateSeq) {
                 MINDIE_LLM_LOG_INFO("GetBlockIds called for special seqId: " << seq->seqId_);
@@ -1018,6 +1065,10 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
             } else {
                 blockIds =
                     SetSpCpParamAndReturnAllBlocks(metaList[i], seqGroup, seq->seqId_, schedulerOut.forwardMode_);
+                if (schedulerConfig_->layerwiseDisaggregated) {
+                    lwdCloudBlockIds = LwdSetSpCpParamAndReturnAllBlocks(metaList[i],
+                        seqGroup, seq->seqId_, schedulerOut.forwardMode_);
+                }
             }
 
             // 虚推请求跳过 PrefixCache 的 LRU 访问时间更新
@@ -1026,6 +1077,8 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
             }
             metaList[i].seqIds_.push_back(seq->seqId_);
             metaList[i].blockIds_.insert(metaList[i].blockIds_.end(), blockIds.begin(), blockIds.end());
+            metaList[i].lwdCloudBlockIds_.insert(metaList[i].lwdCloudBlockIds_.end(),
+                lwdCloudBlockIds.begin(), lwdCloudBlockIds.end());
 
             if (schedulerOut.forwardMode_ == ForwardMode::MIXED ||
                 (role_ == Role::P && schedulerConfig_->enableChunkedPrefill)) {

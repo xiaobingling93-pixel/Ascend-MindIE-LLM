@@ -89,5 +89,15 @@ void EdgeCloudPolicy::LayerwiseSubBatchCnt(ForwardMode forwardMode)
             << ", decodeBatchCount_ is " << decodeBatchCount_);
     }
 }
+
+bool EdgeCloudPolicy::LwdNeedWaiting4Response(ForwardMode forwardMode) const
+{
+    int maxModeBatchNum = forwardMode == ForwardMode::PREFILL ? batchPnum_ : 1;
+    int runningModeBatchNum = forwardMode == ForwardMode::PREFILL ? prefillBatchCount_ : decodeBatchCount_;
+    if (runningModeBatchNum < maxModeBatchNum) {
+        return false;
+    }
+    return true;
+}
 }
 

@@ -62,10 +62,9 @@ class CloudCutPolicy():
             # if less than 1, set to 1 chunk (one additional chunk will be added by default, resulting in cut_num + 1
             # chunks); if greater than 8, set to 31 chunks.
             # For NPU Soc is Ascend910B2 or other models, use the following default prefill_cut_num
-            self.prefill_default_cut_map = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-            self.prefill_cut_num_max = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-            self.prefill_cut_num_min = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
-            self.__ajust_prefill_cut_num_for_diff_npu_soc()
+            self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+            self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+            self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
             # The default inference time of the Qwen3-32B model across various sequence lengths, which requires
             #adjustment depending on the hardware card.
             self.prefill_seq_k_len_default_forward_time = {16: 100000000000,
@@ -91,6 +90,7 @@ class CloudCutPolicy():
             self.decode_time_queue = deque(maxlen=10)
             self.prefill_gap_list = deque(maxlen=50)
             self.request_rate = []
+            self.moe_quantize = None
 
             if self.model_type == CloudCutModelType.DEEP_SEEK:
                 self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 44, 1.8: 40, 0.8: 21, 0: 21}
@@ -98,8 +98,10 @@ class CloudCutPolicy():
                 self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 43, 1.8: 40, 0.8: 21, 0: 21}
                 self.prefill_seq_k_len_default_forward_time = {31.5: 10000, 15.5: 10000, 7.5: 10000, 3.8: 10000,
                     3.3: 1000, 1.8: 10000, 0.8: 10000, 0: 10000}
-            logger.info(f"[layerwiseDisaggregated] cut policy init success, model_type: {self.model_type} role_type: "
-                f"{self.role_type} default_cut_map: {self.prefill_default_cut_map}")
+            self.__ajust_prefill_cut_num_for_diff_npu_soc()
+            logger.info(f"[layerwiseDisaggregated] cut policy init, model_type: {self.model_type.name} role_type: "
+                f"{self.role_type.name} soc_name: {self.soc_name} default_cut_map: {self.prefill_default_cut_map}"
+                f"cut_num_max: {self.prefill_cut_num_max} cut_num_min: {self.prefill_cut_num_min} ")
 
             self.cut_state = CloudCutState.FIND_IN_TBL
 
@@ -117,12 +119,12 @@ class CloudCutPolicy():
             return CloudCutModelType.DEEP_SEEK
         return CloudCutModelType.QWEN
 
-    def initialize(self, name, rank_id, max_cut_num, min_cut_num, multi_nodes_enable):
+    def initialize(self, name, rank_id, cut_num_range, multi_nodes_enable, moe_quantize):
         self.role_type = CloudCutClassType.CLOUD if name == "slave" else CloudCutClassType.OTHER
         self.rank_id = rank_id
-        self.max_cut_num = max_cut_num
-        self.min_cut_num = min_cut_num
+        self.min_cut_num, self.max_cut_num = cut_num_range
         self.multi_nodes_enable = multi_nodes_enable
+        self.moe_quantize = moe_quantize
         if self.model_type == CloudCutModelType.DEEP_SEEK and self.multi_nodes_enable:
             self.__ajust_prefill_cut_num_for_multi_nodes()
         self.initialized = True
@@ -135,7 +137,10 @@ class CloudCutPolicy():
             return self.last_cut_num
 
         batch_size = len(input_data.prefill_gap_time)
-        tmp_k_len = input_data.seq_len / 1024 / batch_size
+        if self.multi_nodes_enable and self.moe_quantize == 'w4a8_dynamic' and input_data.seq_len <= 7500:
+            tmp_k_len = input_data.seq_len / 1024
+        else:
+            tmp_k_len = input_data.seq_len / 1024 / batch_size
         # DS暂时保留一位小数
         self.seq_k_len = round(tmp_k_len, 1) if self.model_type == CloudCutModelType.DEEP_SEEK else round(tmp_k_len)
         self.adjust_ds_1k_cut_map(self.seq_k_len, batch_size)
@@ -266,41 +271,64 @@ class CloudCutPolicy():
         self.prefill_default_cut_map[0.8] = cut_num_1k
         self.prefill_cut_num_max[0.8] = cut_num_1k
         self.prefill_cut_num_min[0.8] = cut_num_1k
-        
-    def __ajust_prefill_cut_num_for_diff_npu_soc(self):
+
+    def __ajust_prefill_cut_num_for_diff_npu_soc_qwen(self):
         if self.soc_name == 'Ascend910B2':
-            logger.info(f"[layerwiseDisaggregated] npu soc is Ascend910B2, ajust prefill cut num.")
             if self.batch_p_num != 1:
-                self.prefill_default_cut_map = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
             return
         if self.soc_name == 'Ascend910B3':
-            logger.info(f"[layerwiseDisaggregated] npu soc is Ascend910B3, ajust prefill cut num.")
             if self.batch_p_num == 1:
-                self.prefill_default_cut_map = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
             else:
-                self.prefill_default_cut_map = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {128: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
             return
         if self.soc_name == 'Ascend910B4':
-            logger.info(f"[layerwiseDisaggregated] npu soc is Ascend910B4, ajust prefill cut num.")
             if self.batch_p_num == 1:
-                self.prefill_default_cut_map = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
             else:
-                self.prefill_default_cut_map = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {128: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
+            return
+        if self.soc_name == 'Ascend910_9362':   # 910C
+            self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
+            self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+            self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 23, 8: 9, 4: 5, 3: 5, 2: 4, 1: 4, 0: 8}
+            return
+
+    def __ajust_prefill_cut_num_for_diff_npu_soc_deepseek(self):
+        if self.soc_name == 'Ascend910_9362':   # 910C
+            self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+            return
+
+    def __ajust_prefill_cut_num_for_diff_npu_soc(self):
+        if self.model_type == CloudCutModelType.QWEN:
+            self.__ajust_prefill_cut_num_for_diff_npu_soc_qwen()
+            return
+
+        if self.model_type == CloudCutModelType.DEEP_SEEK:
+            self.__ajust_prefill_cut_num_for_diff_npu_soc_deepseek()
             return
 
     def __ajust_prefill_cut_num_for_multi_nodes(self):
-        self.prefill_default_cut_map = {31.5: 80, 15.5: 59, 7.5: 45, 3.8: 19, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
-        self.prefill_cut_num_max = {31.5: 80, 15.5: 59, 7.5: 45, 3.8: 19, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
-        self.prefill_cut_num_min = {31.5: 80, 15.5: 59, 7.5: 45, 3.8: 19, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
+        if self.moe_quantize == 'w4a8_dynamic':
+            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+        else:
+            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
         logger.info(f"[layerwiseDisaggregated] cut policy init multi nodes success, model_type: {self.model_type} "
                 f"role_type: {self.role_type} default_cut_map: {self.prefill_default_cut_map}")

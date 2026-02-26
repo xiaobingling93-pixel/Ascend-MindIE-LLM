@@ -1204,6 +1204,9 @@ Status LlmManagerImpl::LaunchLlmEngine(Role pdRole)
 
     SchedulerConfig schedulerConfig;
     LLMInitSchedulerConfig(schedulerConfig, blockNum, engineConfig_, ipInfo_);
+    if (schedulerConfig.layerwiseDisaggregated && schedulerConfig.cpSize * schedulerConfig.spSize > 1) {
+        schedulerConfig.lwdCloudNpuBlockNum = iExecutorSPtrs_.front()->GetLwdCloudNpuBlockNum();
+    }
     schedulerConfig.activateAsyncInference = modelConfigs_[0]["asyncBatchscheduler"] == "true";
     // 当前pdRole_ 与给定pdRole角色不同
     if (pdRole_ != pdRole) {

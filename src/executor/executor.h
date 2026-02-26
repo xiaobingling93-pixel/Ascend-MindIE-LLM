@@ -34,6 +34,7 @@ struct ModelLaunchConfig {
     uint32_t npuNumPerDP{1};
     uint32_t ipcCommunicatorNum{1};
     uint32_t dp{1};
+    uint32_t scp{1};
     bool layerwiseDisaggregated{false};
     std::string layerwiseDisaggregatedRoleType{};
     bool lwdMultiNodesEnable{false};
@@ -73,6 +74,8 @@ public:
     uint32_t GetCpuBlockNum() const override;
 
     uint32_t GetNpuBlockNum() const override;
+
+    uint32_t GetLwdCloudNpuBlockNum() const override;
 
     uint32_t GetMaxPositionEmbeddings() const override;
 

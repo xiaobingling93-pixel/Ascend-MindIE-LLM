@@ -182,4 +182,19 @@ void LayerwiseMixin::LwdHandlerSubBatchCnt(bool layerwiseNeedUpdate, std::shared
     std::shared_ptr<EdgeCloudPolicy> lwdPolicy = std::static_pointer_cast<EdgeCloudPolicy>(stagePolicy);
     lwdPolicy->LayerwiseSubBatchCnt(lastForwardMode);
 }
+
+void LayerwiseMixin::LwdWaitingResponse(PDPriorityType pdPriorityType, std::shared_ptr<StagePolicy> stagePolicy)
+{
+    ForwardMode forwardMode = pdPriorityType == PDPriorityType::PREFILL_FIRST ?
+        ForwardMode::PREFILL : ForwardMode::DECODE;
+    std::shared_ptr<EdgeCloudPolicy> lwdPolicy = std::static_pointer_cast<EdgeCloudPolicy>(stagePolicy);
+    bool needWaiting = lwdPolicy->LwdNeedWaiting4Response(forwardMode);
+
+    size_t waitTime = 5;
+    while (needWaiting) {
+        MINDIE_LLM_LOG_INFO("scheduler need waiting for response!");
+        std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+        needWaiting = lwdPolicy->LwdNeedWaiting4Response(forwardMode);
+    }
+}
 }

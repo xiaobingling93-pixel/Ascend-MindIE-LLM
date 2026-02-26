@@ -43,17 +43,60 @@ class EdgeCloudPolicyTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        edgeCloudPolicy_ = std::make_shared<EdgeCloudPolicy>(1);
     }
     void TearDown() override
     {
         MOCKCPP_NS::GlobalMockObject::reset();
     }
-    std::shared_ptr<EdgeCloudPolicy> edgeCloudPolicy_;
 };
 
 TEST_F(EdgeCloudPolicyTest, TestApply)
 {
+    std::shared_ptr<EdgeCloudPolicy> edgeCloudPolicy_ = std::make_shared<EdgeCloudPolicy>(1);
+    ConcurrentDeque<SequenceGroupSPtr> waiting_;
+    ConcurrentDeque<SequenceGroupSPtr> running_;
+    ConcurrentDeque<SequenceGroupSPtr> swapped_;
+    int blockSize = 4;
+    std::string reqId = "0";
+    auto seqGroup = createDummySeqGroup(reqId, /*promptLength=*/blockSize, blockSize);
+
+    // 计数00，waiting和running都空，下P
+    auto type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::PREFILL_FIRST);
+
+    // 计数00，waiting为空，running非空，下D
+    running_.PushBack(seqGroup);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::DECODE_FIRST);
+
+    // 计数00，waiting不为空，下P
+    waiting_.PushBack(seqGroup);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::PREFILL_FIRST);
+
+    // 计数01,下P
+    ForwardMode forwardMode = ForwardMode::DECODE;
+    edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::PREFILL_FIRST);
+
+    // 计数10,下D
+    forwardMode = ForwardMode::PREFILL;
+    edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
+    forwardMode = ForwardMode::DECODE;
+    edgeCloudPolicy_->LayerwiseSubBatchCnt(forwardMode);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::DECODE_FIRST);
+
+    // 计数11,进入异常分支
+    forwardMode = ForwardMode::DECODE;
+    edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
+    EXPECT_THROW(edgeCloudPolicy_->Apply(waiting_, running_, swapped_), std::runtime_error);
+}
+
+TEST_F(EdgeCloudPolicyTest, TestApply2P)
+{
+    std::shared_ptr<EdgeCloudPolicy> edgeCloudPolicy_ = std::make_shared<EdgeCloudPolicy>(2);
     ConcurrentDeque<SequenceGroupSPtr> waiting_;
     ConcurrentDeque<SequenceGroupSPtr> running_;
     ConcurrentDeque<SequenceGroupSPtr> swapped_;
@@ -87,9 +130,24 @@ TEST_F(EdgeCloudPolicyTest, TestApply)
     forwardMode = ForwardMode::DECODE;
     edgeCloudPolicy_->LayerwiseSubBatchCnt(forwardMode);
     type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::PREFILL_FIRST);
+
+    // 计数11,下P
+    forwardMode = ForwardMode::DECODE;
+    edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
+    EXPECT_EQ(type, PDPriorityType::PREFILL_FIRST);
+
+
+    // 计数20,下D
+    forwardMode = ForwardMode::PREFILL;
+    edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
+    forwardMode = ForwardMode::DECODE;
+    edgeCloudPolicy_->LayerwiseSubBatchCnt(forwardMode);
+    type = edgeCloudPolicy_->Apply(waiting_, running_, swapped_);
     EXPECT_EQ(type, PDPriorityType::DECODE_FIRST);
 
-    // 计数11,进入异常分支
+    // 计数21,进入异常分支
     forwardMode = ForwardMode::DECODE;
     edgeCloudPolicy_->LayerwiseAddBatchCnt(forwardMode);
     EXPECT_THROW(edgeCloudPolicy_->Apply(waiting_, running_, swapped_), std::runtime_error);

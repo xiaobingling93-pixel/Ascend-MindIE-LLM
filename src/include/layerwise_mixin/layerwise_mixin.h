@@ -40,6 +40,9 @@ public:
                                    const std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const;
     void LwdHandlerSubBatchCnt(bool layerwiseNeedUpdate, std::shared_ptr<StagePolicy> stagePolicy,
         ForwardMode lastForwardMode) const;
+
+    void LwdWaitingResponse(PDPriorityType pdPriorityType, std::shared_ptr<StagePolicy> stagePolicy);
+
 private:
     std::chrono::time_point<std::chrono::high_resolution_clock> lastArriveTime_;
 };
