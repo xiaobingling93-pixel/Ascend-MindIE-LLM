@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import json
+import threading
 from enum import IntEnum
 from pathlib import Path
 
@@ -58,6 +59,11 @@ class RequestRouterCloud(RequestRouterLwd):
         self.prefill_chunk_policy = None
         self.prefill_chunk_num = 1
         self.long_seq_start_idx = 0
+        
+        self.is_doing_decode = False
+        self.is_next_decode_arrived = False
+        self.is_wait_prefill = False
+        self.lock = threading.Lock()
 
         self.total_layer_num = 64
         self.start_layer_num = 1
@@ -87,10 +93,11 @@ class RequestRouterCloud(RequestRouterLwd):
         self.total_layer_num = (64 if not hasattr(model_runner_config, 'num_hidden_layers')
             else model_runner_config.num_hidden_layers)
         self.cloud_layer_num = self.total_layer_num - self.start_layer_num - self.end_layer_num
+        moe_quantize = getattr(model_runner_config, 'moe_quantize', None)
 
         cloud_cut_instance = self.router_impl.generator.model_wrapper.model_runner.time_counter
-        cloud_cut_instance.initialize("slave", self.rank, self.cloud_layer_num, LAYERS_DIVI_MIN_NUM,
-            self.lwd_multi_nodes_enable)
+        cut_num_range = (LAYERS_DIVI_MIN_NUM, self.cloud_layer_num)
+        cloud_cut_instance.initialize("slave", self.rank, cut_num_range, self.lwd_multi_nodes_enable, moe_quantize)
         self.prepare_prefill_cut_policy(self.prefill_layers_divi_num)
 
         logger.info(f"[layerwiseDisaggregated] cloud initliaze ok rank:{self.rank}, "
@@ -155,6 +162,8 @@ class RequestRouterCloud(RequestRouterLwd):
                 if self.prefill_dp_max_seq_len > self.get_long_seq_len_min() else 1
             if self.isqwenvl:
                 self.prefill_dp_seq_len = self.prefill_dp_seq_len * 2
+            if self.cp_size > 1:
+                self.prefill_dp_seq_len = self.calc_cp_seq_len(self.prefill_request)
             self.data_comm.p_shape[self.data_comm.recv_index] = \
                 math.ceil(self.prefill_dp_seq_len / self.prefill_chunk_num) 
             self.data_comm.recv_hidden('p', self.data_comm.p_shape)
@@ -220,7 +229,7 @@ class RequestRouterCloud(RequestRouterLwd):
 
     def decision_do_decode_type(self):
         has_decode_finish = self.decode_request and self.decode_comm_finish
-        if has_decode_finish:
+        if has_decode_finish and not self.is_wait_prefill:
             self.decision_type = DecisionType.DO_DECODE
             return True
 
@@ -317,6 +326,7 @@ class RequestRouterCloud(RequestRouterLwd):
             self.prefill_exec_chunk_cnt = 0
             self.prefill_chunk_num = 0
             self.long_seq_start_idx = 0
+            self.is_wait_prefill = False
 
     def do_prefill(self):
         prof = span_start("Prefill")
@@ -344,6 +354,9 @@ class RequestRouterCloud(RequestRouterLwd):
 
     def do_decode(self):
         prof = span_start("Decode")
+        with self.lock:
+            self.is_doing_decode = True
+            self.is_next_decode_arrived = False
         logger.info(f"[layerwiseDisaggregated] execute do_decode before, rank:{self.rank}.")
         while self.decode_request is None:
             self.get_all_request()
@@ -357,6 +370,8 @@ class RequestRouterCloud(RequestRouterLwd):
         self.decode_request = None
         logger.info(f"[layerwiseDisaggregated] execute do_decode, time exec cost "
             f"{1000 * (decode_end_time - decode_start_time)}ms, rank{self.rank}.")
+        with self.lock:
+            self.is_doing_decode = False
         span_end(prof)
         return
 
@@ -442,7 +457,13 @@ class RequestRouterCloud(RequestRouterLwd):
         if execute_request.execute_type == ExecuteType.MODEL_INFER:
             forward_type = execute_request.execute_model_request.forward_type
             if forward_type == ForwardType.DECODE:
+                with self.lock:
+                    self.is_next_decode_arrived = True
                 self.accept_decode_prepare(execute_request)
+            elif forward_type == ForwardType.PREFILL:
+                with self.lock:
+                    self.is_wait_prefill = self.is_wait_prefill or \
+                        self.is_doing_decode and not self.is_next_decode_arrived
             self.inference_queue.put(execute_request)
         elif execute_request.execute_type == ExecuteType.PD_LINK:
             self.link_queue.put(execute_request)

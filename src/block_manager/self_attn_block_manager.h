@@ -10,7 +10,8 @@
  * See the Mulan PSL v2 for more details.
  */
  
-#pragma once
+#ifndef SELF_ATTN_BLOCK_MANAGER_H
+#define SELF_ATTN_BLOCK_MANAGER_H
 
 #include <unordered_map>
 #include "basic_types.h"
@@ -120,6 +121,17 @@ public:
     std::vector<size_t> GetPrefixBlockOrder(SequenceId seqId, std::vector<size_t> &computedBlocksNum) const override;
     size_t GetAppendedBlockRankId(SequenceId seqId) const override;
 
+    void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank = 0) override {};
+
+    void LwdGetCloudRankedBlockIds(SequenceId seqId,
+        std::vector<std::vector<BlockId>> &rankedBlockIds) const override {};
+
+    size_t LwdGetCloudLatestAppendedRankId(SequenceId seqId) const override {return 0;};
+
+    size_t LwdGetCloudAppendedBlockRankId(SequenceId seqId) const override {return 0;};
+
+    std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const override {return {};};
+
 private:
     size_t GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const;
 
@@ -159,3 +171,5 @@ private:
 using SelfAttnBlockManagerPtr = std::unique_ptr<SelfAttnBlockManager>;
 using SelfAttnBlockManagerSPtr = std::shared_ptr<SelfAttnBlockManager>;
 } // namespace mindie_llm
+
+#endif // SELF_ATTN_BLOCK_MANAGER_H

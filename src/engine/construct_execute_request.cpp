@@ -196,6 +196,24 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
     }
 }
 
+void ConstructExecuteRequest::LwdConstructCloudProtoMeta(const SequenceGroupMetaData &metaData,
+    model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill)
+{
+    auto* lwdMeta = protoMeta.mutable_lwd_cloud_metadata();
+    lwdMeta->set_lwd_cloud_block_tables(metaData.lwdCloudBlockIds_.data(),
+        metaData.lwdCloudBlockIds_.size() * sizeof(BlockId));
+    if (metaData.isSp_ || metaData.isCp_) {
+        lwdMeta->set_lwd_cloud_sp_rank_id(metaData.lwdCloudSpRankId_);
+        lwdMeta->set_lwd_cloud_append_block_rank_id(metaData.lwdCloudAppendBlockRankId_);
+        for (size_t tokenNum : metaData.lwdCloudSpRankPromptTokenNum_) {
+            lwdMeta->add_lwd_cloud_sp_rank_token_num(tokenNum);
+        }
+        for (size_t blockNum : metaData.lwdCloudSpRankBlockNum_) {
+            lwdMeta->add_lwd_cloud_sp_rank_block_num(blockNum);
+        }
+    }
+}
+
 void ConstructExecuteRequest::ClearBeamParam4ChunkedPrefill(model_execute_data::SamplingParams &sampleParams,
                                                             model_execute_data::SequenceGroupMetadata &protoMeta)
 {
@@ -230,6 +248,7 @@ void ConstructExecuteRequest::ConstructExecuteModelRequest(ExecuteModelRequestPt
         }
 
         ConstructProtoMeta(metadata, *protoMeta, isPrefill);
+        LwdConstructCloudProtoMeta(metadata, *protoMeta, isPrefill);
         protoMeta->set_dp_rank_id(dpRankId);
     }
 

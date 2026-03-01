@@ -83,6 +83,8 @@ bool Executor::ParseFromModelConfig(std::unordered_map<std::string, std::string>
     modelLaunchConfig.localIP = config.at("localIP");
     uint32_t tp = (config.count("tp") > 0) ? std::stoul(config.at("tp")) : 1;
     uint32_t cp = (config.count("cp") > 0) ? std::stoul(config.at("cp")) : 1;
+    uint32_t sp = (config.count("sp") > 0) ? std::stoul(config.at("sp")) : 1;
+    modelLaunchConfig.scp = cp * sp;
     if (tp > std::numeric_limits<uint32_t>::max() / cp) {
         MINDIE_LLM_LOG_ERROR("ParseFromModelConfig failed: tp * cp is out of range uint32_t, it should be worldSize/dp.");
         return false;
@@ -292,8 +294,13 @@ bool Executor::MasterHandleSlaveInitResponse(ExecuteResponse &response) const
         return false;
     }
     auto &slaveInfo = response.remote_model_init_results();
-    IExecutor::kvCacheOverview_.UpdateIfSmaller(slaveInfo.cpu_block_num(), slaveInfo.npu_block_num(),
-                                                slaveInfo.max_position_embeddings());
+    if (modelLaunchConfig_.layerwiseDisaggregated && modelLaunchConfig_.scp > 1) {
+        uint32_t lwdCloudNpuBlockNum = slaveInfo.npu_block_num();
+        kvCacheOverview_.lwdCloudNpuBlockNum = std::min(kvCacheOverview_.lwdCloudNpuBlockNum, lwdCloudNpuBlockNum);
+    } else {
+        IExecutor::kvCacheOverview_.UpdateIfSmaller(slaveInfo.cpu_block_num(), slaveInfo.npu_block_num(),
+                                                    slaveInfo.max_position_embeddings());
+    }
     MINDIE_LLM_LOG_INFO("[Executor::MasterHandleSlaveInitResponse]: Updated KV cache overview from slave: CPU blocks = "
                         << IExecutor::kvCacheOverview_.cpuBlockNum
                         << ", NPU blocks = " << IExecutor::kvCacheOverview_.npuBlockNum
@@ -581,6 +588,15 @@ uint32_t Executor::GetNpuBlockNum() const
         return 0;
     }
     return IExecutor::kvCacheOverview_.npuBlockNum;
+}
+
+uint32_t Executor::GetLwdCloudNpuBlockNum() const
+{
+    if (IExecutor::kvCacheOverview_.lwdCloudNpuBlockNum == 0xFFFFFFFF) {
+        MINDIE_LLM_LOG_ERROR("Cloud NPU block number is not initialized.");
+        return 0;
+    }
+    return IExecutor::kvCacheOverview_.lwdCloudNpuBlockNum;
 }
 
 uint32_t Executor::GetMaxPositionEmbeddings() const

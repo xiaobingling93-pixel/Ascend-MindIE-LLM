@@ -2281,6 +2281,10 @@ class FlashDeepseekv2ForCausalLM(FlashForCausalLM):
                 last_input[0] = out_hidden
                 logits = self.execute_ascend_operator(last_input, last_param, is_prefill,
                                                       split_part=LwdLayerStatus.EDGE_END_LAYER)
+                if self.mapping.has_attn_cp():
+                    # During the CP decode stage, each CP domain receives the same token as input,
+                    # resulting in the same output token. As a result, duplicates exist in the aggregated next_token.
+                    logits = logits[:logits.size(0) // self.mapping.attn_cp.group_size]
             else:
                 if layerwise_disaggregated_exe_stage.is_long_seq and \
                     layerwise_disaggregated_exe_stage.long_seq_start_idx != 0 and \
@@ -2340,6 +2344,10 @@ class FlashDeepseekv2ForCausalLM(FlashForCausalLM):
                 acl_inputs[0] = out_hidden
             else:
                 acl_inputs[0] = self.layerwise.p_out_hidden
+            
+            self.layerwise.p_out_hidden = None
+            self.layerwise.acl_inputs_prefill = None
+            self.layerwise.acl_param_prefill = None
             
             for i in range(layerwise_disaggregated_exe_stage.start_exec_layer,
                             layerwise_disaggregated_exe_stage.end_exec_layer):

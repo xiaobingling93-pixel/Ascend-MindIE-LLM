@@ -373,9 +373,11 @@ class TestRouterImpl(unittest.TestCase):
         self.router.config.dp_inst_id_to_cluster_id = {3:[3001]}
         self.mock_generator.kvcache_settings.num_npu_blocks = 10
 
+        # failed_p_id 应为底层实际的 cluster_id（3001），而非 dp_instance_id（30000）
+        # 因为 pull_kv_items 中使用的是通过 dp_inst_id_to_cluster_id 映射后的实际 cluster_id
         self.mock_generator.pull_kv.return_value = (
             ErrorCode.TEXT_GENERATOR_PD_PULL_KV_ERROR,
-            30000
+            3001
         )
 
         self.router.transfer_data(mock_request)
@@ -386,6 +388,156 @@ class TestRouterImpl(unittest.TestCase):
         self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].pd_error_code, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "3001")
+
+    @patch('mindie_llm.connector.request_router.router_impl.convert_pull_kv_request_to_input_metadata_composite')
+    @patch('mindie_llm.connector.request_router.router_impl.send_transfer_response')
+    def test_transfer_data_pull_kv_fail_dp1_scale_down_p(self, mock_send, mock_convert):
+        """
+        模拟 2P1D 静态缩容场景（dp_size=1）：
+        - 缩容1个P节点时，pull_kv 失败，generator.pull_kv 返回的 failed_p_id 是实际 cluster_id
+        - pull_kv_info.cluster_id 是 dp_instance_id（格式：pInstanceId * 10000 + dpRank）
+        - 修复后的代码通过 dp_inst_id_to_cluster_id 映射正确检测到失败
+        - 若使用修复前的代码（直接比较 dp_instance_id），则无法检测到失败，D 节点会崩溃
+        """
+        mock_metadata = Mock()
+        mock_convert.return_value = mock_metadata
+
+        mock_request = Mock(spec=ExecuteRequest)
+
+        # dp_instance_id = 10000，表示 P instance 1, dpRank 0
+        # 通过映射 10000 // 10000 = 1，得到实际 cluster_id [1000000001]
+        mock_kv = Mock(
+            dst_block_tables=np.array([10, 20], dtype=np.int64).tobytes(),
+            src_block_tables=np.array([1, 2], dtype=np.int64).tobytes(),
+            seq_group_metadata=Mock(request_id="req_450", prompt_lens=struct.pack("<q", 100)),
+            cluster_id="10000"
+        )
+        mock_request.pull_kv_request = Mock(pull_kv_infos=[mock_kv])
+
+        self.router.block_size = 64
+        self.router.dp_size = 1
+        self.router.config.p_inst_enable_sp_cp = False
+        # P instance 1 对应的实际 cluster_id 为 1000000001（与日志中 Destroy cluster id:1000000001 对应）
+        self.router.config.dp_inst_id_to_cluster_id = {1: [1000000001]}
+        self.mock_generator.kvcache_settings.num_npu_blocks = 10
+
+        # 缩容P节点导致 pull_kv 失败，返回的 failed_p_id 是实际 cluster_id
+        self.mock_generator.pull_kv.return_value = (
+            ErrorCode.TEXT_GENERATOR_PD_PULL_KV_ERROR,
+            1000000001  # 实际 cluster_id，非 dp_instance_id
+        )
+
+        self.router.transfer_data(mock_request)
+
+        mock_send.assert_called_once()
+        proto_response = mock_send.call_args[0][0]
+        # 验证：修复后能正确检测 pull_kv 失败，返回 PD_PULL_KV_ERROR
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "req_450")
+        self.assertEqual(
+            proto_response.pull_kv_response.pull_kv_results[0].pd_error_code,
+            ModelWrapperErrorCode.PD_PULL_KV_ERROR.value
+        )
+
+    @patch('mindie_llm.connector.request_router.router_impl.convert_pull_kv_request_to_input_metadata_composite')
+    @patch('mindie_llm.connector.request_router.router_impl.send_transfer_response')
+    def test_transfer_data_pull_kv_fail_partial_two_p_nodes(self, mock_send, mock_convert):
+        """
+        模拟 2P1D 缩容其中1个P的场景：
+        - 2个请求分别来自 P1 和 P2
+        - P1 被缩容，pull_kv 失败（failed_p_id 指向 P1 的 cluster_id）
+        - P2 正常
+        - 验证：来自 P1 的请求被正确标记为失败，后续请求也被标记为失败
+          （因为 result_code 不重置，一旦出现失败后续全部标记失败）
+        """
+        mock_metadata = Mock()
+        mock_convert.return_value = mock_metadata
+
+        mock_request = Mock(spec=ExecuteRequest)
+
+        # 请求1：来自 P1（dp_instance_id=10000，P instance 1）
+        mock_kv1 = Mock(
+            dst_block_tables=np.array([10], dtype=np.int64).tobytes(),
+            src_block_tables=np.array([1], dtype=np.int64).tobytes(),
+            seq_group_metadata=Mock(request_id="req_100", prompt_lens=struct.pack("<q", 100)),
+            cluster_id="10000"
+        )
+        # 请求2：来自 P2（dp_instance_id=20000，P instance 2）
+        mock_kv2 = Mock(
+            dst_block_tables=np.array([30], dtype=np.int64).tobytes(),
+            src_block_tables=np.array([3], dtype=np.int64).tobytes(),
+            seq_group_metadata=Mock(request_id="req_200", prompt_lens=struct.pack("<q", 100)),
+            cluster_id="20000"
+        )
+        mock_request.pull_kv_request = Mock(pull_kv_infos=[mock_kv1, mock_kv2])
+
+        self.router.block_size = 64
+        self.router.dp_size = 1
+        self.router.config.p_inst_enable_sp_cp = False
+        self.router.config.dp_inst_id_to_cluster_id = {
+            1: [1001],  # P1 的 cluster_id
+            2: [2001],  # P2 的 cluster_id
+        }
+        self.mock_generator.kvcache_settings.num_npu_blocks = 10
+
+        # P1（cluster_id=1001）被缩容，pull_kv 失败
+        self.mock_generator.pull_kv.return_value = (
+            ErrorCode.TEXT_GENERATOR_PD_PULL_KV_ERROR,
+            1001  # P1 的实际 cluster_id
+        )
+
+        self.router.transfer_data(mock_request)
+
+        mock_send.assert_called_once()
+        proto_response = mock_send.call_args[0][0]
+        # 整体状态应为失败
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        # req_100（来自P1）应标记为失败
+        results = {r.request_id: r.pd_error_code for r in proto_response.pull_kv_response.pull_kv_results}
+        self.assertEqual(results["req_100"], ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+
+    @patch('mindie_llm.connector.request_router.router_impl.convert_pull_kv_request_to_input_metadata_composite')
+    @patch('mindie_llm.connector.request_router.router_impl.send_transfer_response')
+    def test_transfer_data_pull_kv_fail_dp_gt1(self, mock_send, mock_convert):
+        """
+        dp_size > 1 场景下的失败检测：
+        - dp_instance_id 直接用作映射 key（不做 // 10000 换算）
+        - 验证 dp_size > 1 时 cluster_id 映射也能正确检测 pull_kv 失败
+        """
+        mock_metadata = Mock()
+        mock_convert.return_value = mock_metadata
+
+        mock_request = Mock(spec=ExecuteRequest)
+
+        # dp_size > 1 时，cluster_id 传入的直接是 dp_instance_id
+        mock_kv = Mock(
+            dst_block_tables=np.array([10], dtype=np.int64).tobytes(),
+            src_block_tables=np.array([1], dtype=np.int64).tobytes(),
+            seq_group_metadata=Mock(request_id="req_500", prompt_lens=struct.pack("<q", 100)),
+            cluster_id="5"
+        )
+        mock_request.pull_kv_request = Mock(pull_kv_infos=[mock_kv])
+
+        self.router.block_size = 64
+        self.router.dp_size = 2  # dp_size > 1
+        self.router.config.p_inst_enable_sp_cp = False
+        # dp_instance_id=5 对应的实际 cluster_ids
+        self.router.config.dp_inst_id_to_cluster_id = {5: [5001, 5002]}
+        self.mock_generator.kvcache_settings.num_npu_blocks = 10
+
+        # pull_kv 失败，返回其中一个实际 cluster_id
+        self.mock_generator.pull_kv.return_value = (
+            ErrorCode.TEXT_GENERATOR_PD_PULL_KV_ERROR,
+            5001
+        )
+
+        self.router.transfer_data(mock_request)
+
+        mock_send.assert_called_once()
+        proto_response = mock_send.call_args[0][0]
+        # 验证 dp_size > 1 时也能通过映射正确检测失败
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "req_500")
 
     def test_initialize_distributed_mode(self):
         with patch('mindie_llm.connector.request_router.router_impl.set_npu_compile_mode') as _, \

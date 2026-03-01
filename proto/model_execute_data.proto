@@ -120,6 +120,14 @@ message DPBatchSeqLen {
   repeated int32 seq_lens = 1; // 分布式多DP的P节点，1个DP的batch的seq的长度。
 }
 
+message LwdCloudMetadata {
+  int32 lwd_cloud_sp_rank_id = 1; // decode本轮调度使用的rank
+  int32 lwd_cloud_append_block_rank_id = 2;
+  repeated int32 lwd_cloud_sp_rank_token_num = 3; // 每个spcp rank的prompt的token 长度
+  repeated int32 lwd_cloud_sp_rank_block_num = 4; // 每个spcp rank的block的个数
+  bytes lwd_cloud_block_tables = 5;
+}
+
 message SequenceGroupMetadata {
   string request_id = 1;
   bool is_prompt = 2;
@@ -154,6 +162,7 @@ message SequenceGroupMetadata {
   string server_id = 31;
   int32 append_block_rank_id = 32;
   int32 request_gap = 33; // 边云动态切块新增
+  optional LwdCloudMetadata lwd_cloud_metadata = 34; //边云特性spcp云侧block管理
 }
 
 message IntPair {

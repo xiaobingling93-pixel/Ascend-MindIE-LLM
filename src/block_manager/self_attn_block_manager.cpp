@@ -18,6 +18,7 @@
 #include "cpu_npu_block_allocator.h"
 #include "msServiceProfiler/msServiceProfiler.h"
 #include "math_utils.h"
+#include "lwd_self_attn_block_manager.h"
 
 namespace mindie_llm {
 SelfAttnBlockManager::SelfAttnBlockManager(const BlockManagerConfig &config, size_t localDPRank)
@@ -67,6 +68,8 @@ BlockSpaceManagerSPtr BlockManagerFactory::CreateBlockSpaceManager(BlockManagerT
 {
     switch (type) {
         case BlockManagerType::SELFATTNBLOCKMANGER: return std::make_shared<SelfAttnBlockManager>(config, localDPRank);
+        case BlockManagerType::LWDSELFATTNBLOCKMANGER:
+            return std::make_shared<LwdSelfAttnBlockManager>(config, localDPRank);
         default: throw std::invalid_argument("Invalid block manager type");
     }
 }

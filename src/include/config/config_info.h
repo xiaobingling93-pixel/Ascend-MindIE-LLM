@@ -430,6 +430,7 @@ struct SchedulerConfig {
     uint32_t maxIterTimes;
     uint32_t cpuBlockNum;
     uint32_t npuBlockNum;
+    uint32_t lwdCloudNpuBlockNum;
     uint32_t speculationGamma;
     std::vector<std::string> globalRankIds{};
     uint32_t globalWorldSize = 0;

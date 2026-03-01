@@ -29,6 +29,8 @@ private:
     static model_execute_data::SequenceData MakeSequenceData(SequenceData &metaData);
     static void ConstructProtoMeta(const SequenceGroupMetaData &metaData,
                                    model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill);
+    static void LwdConstructCloudProtoMeta(const SequenceGroupMetaData &metaData,
+                                   model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill);
     static model_execute_data::ForwardType ConvertToProtoForwardType(ForwardMode fMode);
     static void ConstructSampleParam(model_execute_data::SamplingParams &sampleParams,
                                      const SequenceGroupMetaData &metaData);

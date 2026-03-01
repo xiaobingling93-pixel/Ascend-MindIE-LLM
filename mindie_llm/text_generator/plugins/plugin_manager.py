@@ -658,9 +658,10 @@ class PluginManager:
                     model_inputs.input_ids[hit_sequence_ids_mask_tensor] = \
                         self.generator_backend.to_tensor(true_token_ids)
                     model_inputs.position_ids[hit_sequence_ids_mask_tensor] += 1
-                model_inputs.input_lengths[hit_sequence_ids_mask_tensor] += 1
-                model_inputs.context_length[hit_sequence_ids_mask] += 1
-                model_inputs.max_seq_len = max(model_inputs.context_length)
+                if not self.generator_backend.mapping.has_attn_cp():
+                    model_inputs.input_lengths[hit_sequence_ids_mask_tensor] += 1
+                    model_inputs.context_length[hit_sequence_ids_mask] += 1
+                    model_inputs.max_seq_len = max(model_inputs.context_length)
 
     def _get_token_num_per_seq(self, input_metadata):
         # computed_blocks为None时prefixcache无命中，batch_seq_len即为q_len

@@ -107,7 +107,7 @@ class PluginManagerLwd(PluginManager):
         self.infer_context.clear_finished_context(np.array([0]), np.array([0]))
 
     @timer.track_time_async('generate_token')
-    def generate_token(self, input_metadata: InputMetadata):
+    def generate_token(self, input_metadata: InputMetadata, warmup=False):
         prof = span_start("preprocess")
         cache_ids, model_inputs, sampling_metadata, trace_ids = self.preprocess(input_metadata)
         if not self.is_mix_model:

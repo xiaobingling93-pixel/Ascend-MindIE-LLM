@@ -11,7 +11,8 @@ import unittest
 from unittest.mock import Mock, patch
 import time
 from collections import deque
-from atb_llm.utils.layerwise_disaggregated.cloud_cut_policy import CloudCutState, CloudCutInputData, CloudCutPolicy
+from atb_llm.utils.layerwise_disaggregated.cloud_cut_policy import\
+    CloudCutState, CloudCutInputData, CloudCutPolicy, CloudCutModelType
 
 
 class TestCloudCutPolicy(unittest.TestCase):
@@ -20,7 +21,7 @@ class TestCloudCutPolicy(unittest.TestCase):
         mock_acl.get_soc_name = Mock()
         mock_acl.get_soc_name.return_value = 'Ascend910B4'
         self.cloud_cut_policy = CloudCutPolicy("slave")
-        self.cloud_cut_policy.initialize("slave", 0, 62, 2, False)
+        self.cloud_cut_policy.initialize("slave", 0, (2, 62), False, None)
         pass
 
     @classmethod
@@ -58,19 +59,19 @@ class TestCloudCutPolicy(unittest.TestCase):
     def test_get_in_range_cut_num(self):
         self.cloud_cut_policy.max_cut_num = 62
         cut_num = self.cloud_cut_policy.get_in_range_cut_num(10)
-        self.assertEqual(cut_num, 8)
+        self.assertEqual(cut_num, 21)
         self.cloud_cut_policy.max_cut_num = 1
         cut_num = self.cloud_cut_policy.get_in_range_cut_num(10)
-        self.assertEqual(cut_num, 8)
+        self.assertEqual(cut_num, 21)
     
     def test_cal_cut_num_by_decode(self):
         self.cloud_cut_policy.decode_avg_time = 1
         cut_num = self.cloud_cut_policy.cal_cut_num_by_decode()
-        self.assertEqual(cut_num, 8)
+        self.assertEqual(cut_num, 21)
         
         self.cloud_cut_policy.decode_avg_time = 0
         cut_num = self.cloud_cut_policy.cal_cut_num_by_decode()
-        self.assertEqual(cut_num, 8)
+        self.assertEqual(cut_num, 21)
         
     def test_ajust_prefill_cut_num_for_diff_npu_soc(self):
         self.cloud_cut_policy.soc_name = 'Ascend910B2'
@@ -85,6 +86,20 @@ class TestCloudCutPolicy(unittest.TestCase):
         self.cloud_cut_policy.batch_p_num = 2
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_diff_npu_soc()
         self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(32), 70)
+
+        self.cloud_cut_policy.model_type = CloudCutModelType.DEEP_SEEK
+        self.cloud_cut_policy.soc_name = 'Ascend910_9362'
+        self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_diff_npu_soc()
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
+
+    def test_ajust_prefill_cut_num_for_multi_nodes(self):
+        self.cloud_cut_policy.moe_quantize = 'w4a8_dynamic'
+        self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 32)
+
+        self.cloud_cut_policy.moe_quantize = None
+        self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 45)
         
 if __name__ == "__main__":
     unittest.main()

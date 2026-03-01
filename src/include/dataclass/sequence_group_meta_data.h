@@ -91,6 +91,12 @@ struct SequenceGroupMetaData {
 
     // 边云动态切块新增, 单位ms，给TG侧传请求到达时间间隔用于切图
     int32_t requestGap_{0};
+
+    size_t lwdCloudSpRankId_{0};
+    size_t lwdCloudAppendBlockRankId_{0};
+    std::vector<size_t> lwdCloudSpRankPromptTokenNum_;
+    std::vector<size_t> lwdCloudSpRankBlockNum_;
+    std::vector<BlockId> lwdCloudBlockIds_;
 };
 
 struct SequenceGroupMetaDatas {

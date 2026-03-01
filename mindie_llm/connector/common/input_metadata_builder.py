@@ -376,6 +376,9 @@ def convert_execute_model_request_to_input_metadata_composite(
             is_sp_enable = config.sp_size > 1
             is_cp_enable = config.cp_size > 1
             is_mtp_enable = config.enable_mtp
+        lwd_multi_nodes_enable = getattr(config, 'model_config', {}).get('lwd_multi_nodes_enable', 'false') == 'true'
+        lwd_is_slave = getattr(config, 'model_config', {}).get('layerwiseDisaggregatedRoleType', 'master') == 'slave'
+        is_scp_enbale = is_sp_enable or is_cp_enable
 
         # 根据请求类型构建 block table
         if seq_ids[0] == SIMULATE_SEQUENCE_ID:
@@ -384,6 +387,8 @@ def convert_execute_model_request_to_input_metadata_composite(
             )
         else:
             seq_blocks = convert_bytes_to_list(seq_group_metadata.block_tables)
+            if lwd_multi_nodes_enable and lwd_is_slave and is_scp_enbale:
+                seq_blocks = convert_bytes_to_list(seq_group_metadata.lwd_cloud_metadata.lwd_cloud_block_tables)
             sp_rank_block_num = None
             sp_rank_token_num = None
 
@@ -393,10 +398,20 @@ def convert_execute_model_request_to_input_metadata_composite(
             if seq_ids[0] == SIMULATE_SEQUENCE_ID:
                 ibis_batch_sp_tokens.append(sp_rank_token_num)
             else:
-                ibis_batch_sp_tokens.append(list(seq_group_metadata.sp_rank_token_num))
-                sp_rank_block_num = list(seq_group_metadata.sp_rank_block_num)
-            ibis_batch_sp_rank_id.append(seq_group_metadata.sp_rank_id)
-            ibis_batch_block_rank_id.append(seq_group_metadata.append_block_rank_id)
+                if lwd_multi_nodes_enable and lwd_is_slave:
+                    lwd_cloud_metadata = seq_group_metadata.lwd_cloud_metadata
+                    ibis_batch_sp_tokens.append(list(lwd_cloud_metadata.lwd_cloud_sp_rank_token_num))
+                    sp_rank_block_num = list(lwd_cloud_metadata.lwd_cloud_sp_rank_block_num)
+                else:
+                    ibis_batch_sp_tokens.append(list(seq_group_metadata.sp_rank_token_num))
+                    sp_rank_block_num = list(seq_group_metadata.sp_rank_block_num)
+            if lwd_multi_nodes_enable and lwd_is_slave:
+                lwd_cloud_metadata = seq_group_metadata.lwd_cloud_metadata
+                ibis_batch_sp_rank_id.append(lwd_cloud_metadata.lwd_cloud_sp_rank_id)
+                ibis_batch_block_rank_id.append(lwd_cloud_metadata.lwd_cloud_append_block_rank_id)
+            else:
+                ibis_batch_sp_rank_id.append(seq_group_metadata.sp_rank_id)
+                ibis_batch_block_rank_id.append(seq_group_metadata.append_block_rank_id)
             if is_mtp_enable:
                 ibis_batch_is_append_block.append(seq_group_metadata.is_append_block)
                 if is_prefill:
@@ -812,7 +827,8 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
     computed_blocks = None
     remote_computed_blocks = None
     batch_computed_block_order = None
-    if scp_size > 1:
+    lwd_multi_nodes_enable = getattr(config, 'model_config', {}).get('lwd_multi_nodes_enable', 'false') == 'true'
+    if scp_size > 1 and not lwd_multi_nodes_enable:
         if computed:
             computed_blocks = np.array(computed, dtype=np.int64).reshape(-1, scp_size)
             if np.count_nonzero(computed_blocks) == 0:
