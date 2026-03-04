@@ -7,12 +7,24 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
+import os
+import json
+import sys
+from pathlib import Path
 import queue
 import unittest
 from unittest.mock import Mock, MagicMock, patch
 import numpy as np
 
+from mindie_llm.text_generator.adapter import get_generator_backend, parse_config, ParseType
+from mindie_llm.utils.env import ENV
+from mindie_llm.modeling.backend_type import BackendType
+from mindie_llm.text_generator.generator import Generator
+from mindie_llm.text_generator.utils.request import Request
+from mindie_llm.text_generator.utils.config import ModelConfig
 from mindie_llm.text_generator.utils.input_metadata import InputMetadata, LwdMetadata
+from mindie_llm.text_generator.adapter.generator_torch import GeneratorTorch
+from mindie_llm.text_generator.utils.generation_metadata import GenerationParams
 from mindie_llm.text_generator.plugins.plugin_manager_lwd import PluginManagerLwd
 from mindie_llm.text_generator.utils.model_input import ModelInputWrapper
 

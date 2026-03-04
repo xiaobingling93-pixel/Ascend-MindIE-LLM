@@ -7,7 +7,8 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
-
+import json
+from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -19,11 +20,63 @@ from ..utils.sampling_output import SamplingOutput
 from ..utils.sampling_metadata import SamplingMetadata, SamplingData, SamplingParam
 from ...modeling.model_wrapper import get_model_wrapper
 from ...utils.decorators.time_decorator import timer
-from ...utils.tensor import op
-from ...utils.validation import parse_config, ParseType, MODEL_CONFIG_KEY_TYPE
+from ...utils.tensor import op, npu
 
 MAX_WORLD_SIZE = 1048576
 MAX_KEY_LENGTH = 256
+
+
+class ParseType(int, Enum):
+    TO_STR = 0
+    TO_INT = 1
+    TO_FLOAT = 2
+    TO_BOOL = 3
+    TO_JSON = 4
+
+
+MODEL_CONFIG_KEY_TYPE = {
+    "load_tokenizer": ParseType.TO_BOOL,
+    "max_position_embeddings": ParseType.TO_INT,
+    "max_sequence_length": ParseType.TO_INT,
+    "max_seq_len": ParseType.TO_INT,
+    "bos_token_id": ParseType.TO_INT,
+    "eos_token_id": ParseType.TO_JSON,
+    "pad_token_id": ParseType.TO_INT,
+    "cpu_mem": ParseType.TO_INT,
+    "npu_mem": ParseType.TO_INT,
+    "block_size": ParseType.TO_INT,
+    "temperature": ParseType.TO_FLOAT,
+    "top_k": ParseType.TO_INT,
+    "top_p": ParseType.TO_FLOAT,
+    "typical_p": ParseType.TO_FLOAT,
+    "do_sample": ParseType.TO_BOOL,
+    "seed": ParseType.TO_INT,
+    "repetition_penalty": ParseType.TO_FLOAT,
+    "frequency_penalty": ParseType.TO_FLOAT,
+    "presence_penalty": ParseType.TO_FLOAT,
+    "watermark": ParseType.TO_BOOL,
+    "length_penalty": ParseType.TO_FLOAT,
+    'num_speculative_tokens': ParseType.TO_INT,
+}
+
+
+def parse_config(model_config, item_name, required=False, parse_type=ParseType.TO_STR, default_value=None):
+    value = model_config.get(item_name)
+    if value is None:
+        if required:
+            raise ValueError(f"model_config: `{item_name}` is required, but not set")
+        if default_value is not None:
+            value = default_value
+    elif parse_type == ParseType.TO_INT:
+        value = int(value)
+    elif parse_type == ParseType.TO_FLOAT:
+        value = float(value)
+    elif parse_type == ParseType.TO_BOOL:
+        value = value.lower() if isinstance(value, str) else value
+        value = value is True or value == 'true' or value == '1'
+    elif parse_type == ParseType.TO_JSON:
+        value = json.loads(value)
+    return value
 
 
 class GeneratorBackend:
@@ -216,3 +269,34 @@ class GeneratorBackend:
         else:
             output = self.sampler(logits, sampling_metadata)
         return output
+
+    def _warm_up(self, model_inputs: ModelInput, **kwargs) -> None:
+        """Warm-up without anything returned."""
+        sampling_metadata = kwargs.pop('sampling_metadata', None)
+        logits = self.forward(model_inputs, **kwargs)
+        npu.synchronize()
+        npu.empty_cache()
+        if sampling_metadata:
+            warmup_logits = logits[0] if isinstance(logits, tuple) else logits
+            if warmup_logits.shape[0] != sampling_metadata.repetition_penalty.shape[0]:
+                repeat_num = warmup_logits.shape[0] // sampling_metadata.repetition_penalty.shape[0]
+                logits_num_per_batch = [repeat_num] * warmup_logits.shape[0]
+                top_k_idx = self.repeat_sample_param(sampling_metadata.top_k_idx, logits_num_per_batch)
+                sampling_metadata.top_k_idx = top_k_idx
+                top_k_disabled_mask = self.repeat_sample_param(sampling_metadata.top_k_disabled_mask,
+                                                            logits_num_per_batch)
+                sampling_metadata.top_k_disabled_mask = top_k_disabled_mask
+                repetition_penalty = self.repeat_sample_param(sampling_metadata.repetition_penalty,
+                                                            logits_num_per_batch)
+                sampling_metadata.repetition_penalty = repetition_penalty
+                frequency_penalty = self.repeat_sample_param(sampling_metadata.frequency_penalty, logits_num_per_batch)
+                sampling_metadata.frequency_penalty = frequency_penalty
+                presence_penalty = self.repeat_sample_param(sampling_metadata.presence_penalty, logits_num_per_batch)
+                sampling_metadata.presence_penalty = presence_penalty
+                temperature = self.repeat_sample_param(sampling_metadata.temperature, logits_num_per_batch)
+                sampling_metadata.temperature = temperature
+                all_sequence_ids = sampling_metadata.all_sequence_ids
+                seq_id = np.concatenate([[req_id] * n for req_id, n in zip(all_sequence_ids, logits_num_per_batch)])
+                sampling_metadata.all_sequence_ids = seq_id
+            batch_size = sampling_metadata.repetition_penalty.shape[0]
+            _ = self.sample(warmup_logits[:batch_size, :], sampling_metadata)

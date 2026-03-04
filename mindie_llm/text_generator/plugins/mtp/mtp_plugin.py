@@ -16,7 +16,7 @@ from ....utils.tensor import backend
 
 
 class MtpPlugin(Plugin):
-    def __init__(self, generator_backend, kvcache_settings, infer_context, plugin_data_param, **kwargs):
+    def __init__(self, generator_backend, kvcache_settings, infer_context, output_filter, plugin_data_param, **kwargs):
         super().__init__()
         self.pad_token_id = 0
         self.generator_backend = generator_backend
@@ -24,6 +24,7 @@ class MtpPlugin(Plugin):
         self.kvcache_settings = kvcache_settings
         self.infer_context = infer_context
 
+        self.output_filter = output_filter
         kv_device = self.model_wrapper.device
         kv_dtype = self.kvcache_settings.dtype
         device_and_type = (kv_device, kv_dtype)

@@ -617,6 +617,39 @@ class GeneratorTorch(GeneratorBackend):
             input_lengths_sp = all_sp_tokens[:, self.sp_rank]
         return input_lengths_sp
 
+    def _warm_up(self, model_inputs: ModelInput, **kwargs) -> None:
+        inference_mode = kwargs.get('inference_mode', None)
+
+        if inference_mode.enable_prefill_pa and model_inputs.is_prefill:
+            q_lens = list(map(lambda x: int(x / self.mapping.attn_cp.group_size), model_inputs.context_length.tolist()))
+            kv_device = self.model_wrapper.device
+            kv_dtype = self.model_wrapper.model_info.dtype
+            # 300I DUO doesn't support splitfusepa
+            if self.model_wrapper.model_runner.soc_info.is_300i():
+                attn_mask = self.model_wrapper.model_runner.attn_mask.get_attn_mask(
+                    model_inputs.max_seq_len, kv_dtype, kv_device)
+                if attn_mask.numel() > 0 and len(attn_mask[0]) > 1 and attn_mask[0][1] > 0:
+                    attn_mask = attn_mask * - 10000.0
+                req_mask_list = []
+                for _, q_len in enumerate(q_lens):
+                    req_mask = attn_mask[0: q_len]
+                    req_mask_list.append(req_mask)
+                spec_mask = torch.cat(req_mask_list, dim=0)
+            else:
+                spec_mask = self.model_wrapper.model_runner.attn_mask.get_splitfuse_mask(kv_device)
+            super()._warm_up(model_inputs, q_lens=q_lens, attn_mask=spec_mask, **kwargs)
+        elif inference_mode.enable_decode_pa and not model_inputs.is_prefill:
+            q_lens = model_inputs.context_length.tolist()
+            kv_device = self.model_wrapper.device
+            kv_dtype = self.model_wrapper.model_info.dtype
+            model_inputs.is_need_mask = [0] * len(q_lens)
+            attn_mask = self.model_wrapper.model_runner.attn_mask.get_attn_mask(
+                model_inputs.max_seq_len, kv_dtype, kv_device)
+            super()._warm_up(model_inputs, q_lens=q_lens, attn_mask=attn_mask, **kwargs)
+        else:
+            super()._warm_up(model_inputs, **kwargs)
+        self.model_wrapper.model_runner.model.warmup_is_end = True
+
     def _update_lm_head_indices_dp_rank_ids(self, model_inputs, kwargs):
         is_sub_model = kwargs.get("sub_model", False)
         if not is_sub_model or model_inputs.is_prefill:

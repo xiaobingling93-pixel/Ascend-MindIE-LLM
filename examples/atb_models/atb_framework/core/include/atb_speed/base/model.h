@@ -81,7 +81,6 @@ public:
     virtual ~Model();
     int64_t Init(GetWorkspaceFunc getWorkSpaceFunc, CreateTensorFromTensorDescFunc createTensorFromTensorDescFunc,
             RunTaskFunc runTaskFunc = nullptr);
-    void ClearInternalTensors();
 
     virtual uint32_t GetInputNum() const = 0;
     virtual uint32_t GetOutputNum() const = 0;
@@ -116,6 +115,7 @@ protected:
     void PushTask(int nodeId);
     int PopTask();
     void WaitAsyncPlanExecuteFinish();
+    void ClearInternalTensors();
     atb::Tensor MallocInternalTensor(atb::Tensor* outTensor, size_t nodeId, size_t outTensorId,
         const atb::TensorDesc &tensorDesc);
     void FreeInternalTensor(const atb::Tensor *tensorDeviceData, int nodeId = 0);
@@ -147,7 +147,7 @@ protected:
     std::thread taskProcessThread_;
     std::atomic_bool allTaskFinish_;
     int32_t currentDevId_ = 0;
-    static std::map<uint32_t, std::vector<std::pair<atb::Tensor, bool>>> internalTensors_;
+    std::map<uint32_t, std::vector<std::pair<atb::Tensor, bool>>> internalTensors_;
     std::map<uint32_t, std::vector<atb::Tensor*>> nodeOutTensors_;
     std::vector<std::pair<atb::Operation*, atb::common::EventParam>> eventOps_;
 };

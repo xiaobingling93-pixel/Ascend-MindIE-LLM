@@ -418,6 +418,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         input_metadata = composite.input_metadata
 
         self.assertTrue(input_metadata.is_mix)
+        self.assertEqual(input_metadata.mix_decode_bs, 1)
         self.assertEqual(input_metadata.batch_size, 1)
         self.assertEqual(input_metadata.split_end_position.tolist(), [])
 

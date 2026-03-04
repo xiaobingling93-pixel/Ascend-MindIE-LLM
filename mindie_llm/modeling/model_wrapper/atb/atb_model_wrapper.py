@@ -187,6 +187,9 @@ class ATBModelWrapper(ModelWrapper):
         skip_padding_token_indices = kwargs.get("skip_padding_token_indices")
         if skip_padding_token_indices is not None:
             kwargs["skip_padding_token_indices"] = torch.tensor(skip_padding_token_indices).to(self.device)
+        k_sp_gather_indices = kwargs.get("k_sp_gather_indices")
+        if k_sp_gather_indices is not None:
+            kwargs["k_sp_gather_indices"] = torch.tensor(k_sp_gather_indices).to(self.device)
         input_lengths_sp = kwargs.get("input_lengths_sp")
         if input_lengths_sp is not None:
             kwargs["input_lengths_sp"] = torch.tensor(input_lengths_sp, dtype=torch.int32).to(self.device)

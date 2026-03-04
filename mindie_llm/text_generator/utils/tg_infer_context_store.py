@@ -146,25 +146,52 @@ class TGInferContextStore:
                 sampling_metadata = self._batch_context.build_sampling_meta(context_handles, metadata, is_prefill=True)
                 self.last_sampling_metadata.add_to_cache(metadata.all_sequence_ids, sampling_metadata)  # !!!!
         else:
-            if self.spcp_parallel_info.scp_size > 1:
-                metadata.batch_block_tables = metadata.batch_block_tables[:, self.spcp_parallel_info.scp_rank, :]
-            last_input_ids, position_ids, all_tokens_kv_slots, seq_lengths, max_seq_len, adapter_ids = (
-                self._batch_context.join_context(context_handles, metadata, kwargs.get("hit_mask", None))
-            )
-            prefill_head_indices = None
-
-            if metadata.has_sampling:
-                sampling_metadata = self.last_sampling_metadata.get_from_cache(
-                    sequence_ids=metadata.all_sequence_ids
-                )
-                if sampling_metadata is None or sampling_metadata.is_prefill:
+            if kwargs.get("warmup", False):  # warmup should be unified
+                max_seq_len = metadata.max_seq_len
+                dp_size = kwargs.get("dp_size", 1)
+                batch_size = metadata.batch_size
+                decode_input_len = kwargs.get("decode_input_len", 1)
+                last_input_ids = np.zeros(decode_input_len * batch_size, dtype=np.int64)
+                position_ids = np.zeros(decode_input_len * batch_size, dtype=np.int64)
+                metadata.batch_block_tables = np.zeros(batch_size, dtype=np.int64) \
+                    .reshape(batch_size, -1)
+                all_tokens_kv_slots = np.zeros(decode_input_len * batch_size, dtype=np.int64)
+                seq_lengths = decode_input_len * np.ones(batch_size, dtype=np.int64)
+                prefill_head_indices = None
+                batch_seq_len = np.ones(batch_size, dtype=np.int64) * decode_input_len
+                metadata.batch_seq_len = batch_seq_len
+                base_repeats = batch_size // dp_size
+                remainder = batch_size % dp_size
+                repeats = [base_repeats + 1 if i < remainder else base_repeats for i in range(dp_size)]
+                metadata.batch_dp_rank_ids = np.repeat(np.arange(0, dp_size), repeats)
+                adapter_ids = [None] * batch_size
+                metadata.input_ids = np.zeros(decode_input_len * batch_size, dtype=np.int64)
+                if metadata.has_sampling:
+                    metadata.batch_logprobs = metadata.batch_logprobs[:batch_size]
+                    metadata.batch_sampling_params = metadata.batch_sampling_params[:batch_size]
                     sampling_metadata = self._batch_context.build_sampling_meta(
-                        context_handles, metadata, is_prefill=False
+                        context_handles, metadata, is_prefill=True
                     )
-                    self.last_sampling_metadata.add_to_cache(
-                        sequence_ids=metadata.all_sequence_ids, sampling_metadata=sampling_metadata
+            else:
+                if self.spcp_parallel_info.scp_size > 1:
+                    metadata.batch_block_tables = metadata.batch_block_tables[:, self.spcp_parallel_info.scp_rank, :]
+                last_input_ids, position_ids, all_tokens_kv_slots, seq_lengths, max_seq_len, adapter_ids = (
+                    self._batch_context.join_context(context_handles, metadata, kwargs.get("hit_mask", None))
+                )
+                prefill_head_indices = None
+
+                if metadata.has_sampling:
+                    sampling_metadata = self.last_sampling_metadata.get_from_cache(
+                        sequence_ids=metadata.all_sequence_ids
                     )
-                self._batch_context.sync_sampling_token_ids(context_handles, sampling_metadata, max_seq_len)
+                    if sampling_metadata is None or sampling_metadata.is_prefill:
+                        sampling_metadata = self._batch_context.build_sampling_meta(
+                            context_handles, metadata, is_prefill=False
+                        )
+                        self.last_sampling_metadata.add_to_cache(
+                            sequence_ids=metadata.all_sequence_ids, sampling_metadata=sampling_metadata
+                        )
+                    self._batch_context.sync_sampling_token_ids(context_handles, sampling_metadata, max_seq_len)
         trace_ids = None
         if context_handles is not None:
             trace_ids = self._batch_context.all_dict_context.get_trace_ids(context_handles)
@@ -405,21 +432,21 @@ class TGInferContextStore:
             prefill_block_rank_id
         )
 
-    def splitfuse_concatenate(self, metadata: InputMetadata, context_handles, warmup=False, hit_mask=None):
+    def splitfuse_concatenate(self, metadata: InputMetadata, context_handles, hit_mask=None):
         is_prefill = metadata.is_prefill
         if is_prefill:
             model_inputs, sampling_metadata, q_len, trace_ids = \
-                self.concatenate_mix(metadata, context_handles, warmup=warmup, hit_mask=hit_mask)
+                self.concatenate_mix(metadata, context_handles, hit_mask=hit_mask)
         else:
             model_inputs, sampling_metadata, trace_ids = \
-                self.compose_model_inputs(metadata, context_handles, warmup=warmup, hit_mask=hit_mask)
+                self.compose_model_inputs(metadata, context_handles, warmup=False, hit_mask=hit_mask)
             q_len = None
             sampling_metadata.is_seq_prefill = metadata.batch_is_prefill
         q_lens = q_len.tolist() if q_len is not None else None
         res = (model_inputs, sampling_metadata, q_lens, trace_ids)
         return res
 
-    def concatenate_mix(self, metadata: InputMetadata, context_handles: np.ndarray, warmup=False, hit_mask=None):
+    def concatenate_mix(self, metadata: InputMetadata, context_handles: np.ndarray, hit_mask=None):
         input_ids = np.array(metadata.input_ids, dtype=np.int64)
         position_ids = np.zeros(metadata.total_seq_num, dtype=np.int32)
         slots = np.zeros(metadata.total_seq_num, dtype=np.int32)
@@ -459,15 +486,10 @@ class TGInferContextStore:
             for _, (i, start_idx, end_idx) in enumerate(zip(prefill_seq_idx, start_positions, end_positions)):
                 position_ids[start_idx:end_idx] = \
                     range(metadata.split_start_position[i], metadata.split_end_position[i])
-
-                if not warmup:
-                    slots[start_idx:end_idx] = \
-                        self.block_table_to_slots(metadata.batch_block_tables[i]).reshape(-1)[
-                            metadata.split_start_position[i]:metadata.split_end_position[i]
-                        ]
-                else:
-                    slots[start_idx] = 0
-                    slots[start_idx + 1:end_idx] = -1
+                slots[start_idx:end_idx] = \
+                    self.block_table_to_slots(metadata.batch_block_tables[i]).reshape(-1)[
+                        metadata.split_start_position[i]:metadata.split_end_position[i]
+                    ]
 
         self._batch_context.update_context_for_splitfuse(metadata, context_handles, input_lengths, last_position_ids)
         trace_ids = None
@@ -539,7 +561,7 @@ class TGInferContextStore:
             cumulative_seq_len += seq_len
             prefill_head_indices[i] = cumulative_seq_len - pad_token_count[i] - 1
             if prefill_new_tokens is not None:
-                prefill_new_tokens[i] = input_ids[cumulative_seq_len - 1]
+                prefill_new_tokens[i] = input_ids[cumulative_seq_len - pad_token_count[i] - 1]
 
         self._batch_context.update_context(
             context_handles,
@@ -567,7 +589,7 @@ class TGInferContextStore:
         **kwargs,
     ):
         start_idx, end_idx, all_tokens_kv_slots = start_end_token_slots
-        if kwargs.get("warmup", None):
+        if kwargs.get("dummy", None):
             if start_idx == 0:
                 all_tokens_kv_slots[0] = 0
                 all_tokens_kv_slots[1:end_idx] = -1

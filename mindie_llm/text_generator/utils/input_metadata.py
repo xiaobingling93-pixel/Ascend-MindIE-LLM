@@ -14,9 +14,20 @@ from typing import Any, List, Optional, Union
 import numpy as np
 import numpy.typing as npt
 
-from mindie_llm.utils.log import ErrorCode, logger
 from .request import Request
-from .config import SAMPLING_DTYPE
+from ...utils.log.error_code import ErrorCode
+from ...utils.log.logging import logger
+
+SAMPLING_DTYPE = np.dtype([
+    ('repetition_penalty', np.float64),
+    ('frequency_penalty', np.float64),
+    ('presence_penalty', np.float64),
+    ('temperature', np.float64),
+    ('top_k', np.float64),
+    ('top_p', np.float64),
+    ('do_sample', np.float64),
+    ('top_logprobs', np.float64)
+])
 
 # Reserved sequence ID for simulate inference requests
 # Should match SIMULATE_SEQUENCE_ID in C++ code (src/include/request_response/request_id.h)
@@ -93,13 +104,16 @@ class InputMetadata:
     total_seq_num: Optional[int] = None
     trace_ids: Optional[List[Any]] = None
     simulator_ids: Optional[List[Any]] = None
+    batch_tools: Optional[List[Any]] = None
+    batch_tool_choice: Optional[List[Any]] = None
 
     # attributes for prefixcache
     computed_blocks: Optional[np.ndarray] = None
     remote_computed_blocks: Optional[np.ndarray] = None
-    batch_computed_block_order: Optional[List[List[Any]]] = None # [[0],[],[],[]]
+    batch_computed_block_order: Optional[List[List[Any]]] = None
 
     # attributes for features
+    mix_decode_bs: int = 0
     split_start_position: Optional[np.ndarray] = None
     split_end_position: Optional[np.ndarray] = None
     batch_last_prompt: Optional[np.ndarray] = None
@@ -111,6 +125,7 @@ class InputMetadata:
     sp_rank_id: Optional[np.ndarray] = None
     is_append_block: Optional[np.ndarray] = None
     block_rank_id: Optional[np.ndarray] = None
+
     prefill_block_rank_id: Optional[np.ndarray] = None
 
     # attributes computed automatically
@@ -119,6 +134,7 @@ class InputMetadata:
 
     max_seq_len: Optional[int] = None
     max_batch_size: Optional[int] = None
+    decoder_batch_size: Optional[int] = None
 
     # dp dummy batch
     is_dummy_batch: Optional[bool] = False
@@ -131,6 +147,7 @@ class InputMetadata:
     # 动态切块新增
 
     def __post_init__(self):
+        """数据类初始化后处理，替代原本__init__方法"""
         self.all_sequence_ids = np.concatenate(self.batch_sequence_ids)
 
         if self.is_prefill:
@@ -149,53 +166,34 @@ class InputMetadata:
                 )
                 logger.error(message, ErrorCode.TEXT_GENERATOR_MAX_BLOCK_SIZE_INVALID)
                 raise ZeroDivisionError(message)
-            default_max_block_num = math.ceil(self.max_seq_len / self.max_block_size)
+            max_block_num = math.ceil(self.max_seq_len / self.max_block_size)
         else:
-            default_max_block_num = np.count_nonzero(self.block_tables > -1, axis=-1).max()
+            max_block_num = np.count_nonzero(self.block_tables > -1, axis=-1).max()
 
         if self.sp_tokens is not None:
             max_block_num = np.count_nonzero(self.block_tables > -1, axis=-1).max()
             self.batch_block_tables = self.block_tables[:, :, :max_block_num].astype(np.int32)
-        else:
-            self.batch_block_tables = self.block_tables[:, :default_max_block_num].astype(np.int32)
-    
-    @staticmethod
-    def form_block_tables(llm_requests: List[Request]) -> np.ndarray:
-        batch_size = len(llm_requests)
-        block_tables = [req.block_tables for req in llm_requests]
-        first_block_table = block_tables[0]
-
-        if first_block_table.ndim == 1:
-            max_block_num = max(len(block_table) for block_table in block_tables)
-            result = np.full((batch_size, max_block_num), -1, dtype=np.int32)
-            for i, block_table in enumerate(block_tables):
-                result[i, :len(block_table)] = block_table
-
-        elif first_block_table.ndim == 2:
-            scp_size = first_block_table.shape[0] 
-            max_block_num = max(block_table.shape[1] for block_table in block_tables)
-            result = np.full((batch_size, scp_size, max_block_num), -1, dtype=np.int32)
-            for i, block_table in enumerate(block_tables):
-                result[i, :, :block_table.shape[1]] = block_table
-        return result
+            return
+        self.batch_block_tables = self.block_tables[:, :max_block_num].astype(np.int32)
 
     @classmethod
     def from_requests(
         cls,
-        llm_requests: list[Request],
-        req_block_tables: np.ndarray | None = None,
-        is_prefill: bool | np.ndarray = False,
+        llm_requests: List[Request],
+        block_tables: np.ndarray,
+        is_prefill: Union[bool, np.ndarray] = False,
         max_block_size: int = 128
     ):
         enable_splitfuse = False
         is_mix = None
+        decode_bs = 0
         split_start_pos = None
         split_end_pos = None
         batch_last_prompt = None
         batch_is_prefill = None
         if isinstance(is_prefill, np.ndarray):
             batch_is_prefill = is_prefill
-            is_prefill, is_mix, _ = get_batch_size(is_prefill, llm_requests)
+            is_prefill, is_mix, decode_bs = get_batch_size(is_prefill, llm_requests)
             split_start_pos = np.asarray([request.split_start_position for request in llm_requests])
             split_end_pos = np.asarray([request.split_end_position for request in llm_requests])
             batch_last_prompt = np.asarray([request.last_prompt for request in llm_requests])
@@ -205,7 +203,7 @@ class InputMetadata:
         batch_request_ids = np.asarray([req.req_id for req in llm_requests])
         batch_sequence_ids = [np.asarray(list(req.sequences.keys())) for req in llm_requests]
         reserved_sequence_ids = [np.asarray(req.reserved_seq_ids) for req in llm_requests]
-        
+
         adapter_ids = None
         batch_best_of = None
         batch_n = None
@@ -218,11 +216,6 @@ class InputMetadata:
         batch_stop_strings = None
         batch_stop_token_ids = None
 
-        # prefix cache
-        batch_computed_blocks = None
-        batch_remote_computed_blocks = None
-        computed_block_orders = [req.computed_block_order for req in llm_requests]
-
         batch_dp_rank_ids = None
         batch_sampling_params = None
         batch_seq_len = None
@@ -231,9 +224,6 @@ class InputMetadata:
         total_seq_num = 0
         batch_sp_tokens = []
         batch_sp_rank_ids = []
-        batch_prefill_block_rank_id = []
-        batch_is_append_block = []
-        batch_block_rank_id = []
 
         if is_prefill:
             batch_seq_len = []
@@ -251,9 +241,6 @@ class InputMetadata:
             batch_seeds = []
             adapter_ids = []
             batch_dp_rank_ids = []
-            batch_computed_blocks = []
-            batch_remote_computed_blocks = []
-
             for llm_request in llm_requests:
                 input_ids_list.extend(llm_request.input_ids)
                 seq_num = llm_request.input_ids.shape[0]
@@ -273,28 +260,9 @@ class InputMetadata:
                 batch_stop_token_ids.append(llm_request.stop_token_ids)
                 adapter_ids.append(llm_request.adapter_id)
                 batch_dp_rank_ids.append(llm_request.dp_rank_id)
-                batch_computed_blocks.append(llm_request.computed_blocks)
-                batch_remote_computed_blocks.append(llm_request.remote_computed_blocks)
                 if llm_request.sp_tokens is not None:
                     batch_sp_tokens.append(llm_request.sp_tokens)
                     batch_sp_rank_ids.append(llm_request.sp_rank_id)
-                    batch_prefill_block_rank_id.append(llm_request.prefill_block_rank_id)
-
-            if batch_computed_blocks:
-                computed_blocks = np.array(batch_computed_blocks, dtype=np.int64)
-                if np.count_nonzero(computed_blocks) == 0:
-                    batch_computed_blocks = []
-            if batch_remote_computed_blocks:
-                remote_computed_blocks = np.array(batch_remote_computed_blocks, dtype=np.int64)
-                if np.count_nonzero(remote_computed_blocks) == 0:
-                    batch_remote_computed_blocks = []
-
-            if batch_prefill_block_rank_id:
-                max_len = max(len(x) for x in batch_prefill_block_rank_id)
-                batch_prefill_block_rank_id = [
-                    np.pad(arr, (0, max_len - len(arr)), constant_values=-1)
-                    for arr in batch_prefill_block_rank_id
-                ]
 
             if all(e is None for e in batch_stop_strings):
                 batch_stop_strings = None
@@ -302,7 +270,7 @@ class InputMetadata:
                 batch_stop_token_ids = None
             if has_sampling:
                 batch_sampling_params = []
-                for llm_request in llm_requests:
+                for _, llm_request in enumerate(llm_requests):
                     batch_sampling_params.append(llm_request.sampling_params[0])
                 batch_sampling_params = np.array(batch_sampling_params, SAMPLING_DTYPE)
             if enable_splitfuse:
@@ -310,22 +278,10 @@ class InputMetadata:
                 total_seq_num = sum(batch_seq_len)
         else:
             batch_max_output_lens = []
-            batch_dp_rank_ids = []
             for llm_request in llm_requests:
                 batch_max_output_lens.extend([llm_request.max_new_tokens] * len(llm_request.sequences.keys()))
-                batch_dp_rank_ids.append(llm_request.dp_rank_id)
-                if llm_request.sp_tokens is not None:
-                    batch_sp_tokens.append(llm_request.sp_tokens)
-                    batch_sp_rank_ids.append(llm_request.sp_rank_id)
-                    batch_is_append_block.append(llm_request.is_append_block)
-                    batch_block_rank_id.append(llm_request.block_rank_id)
 
         batch_max_output_lens = np.array(batch_max_output_lens, dtype=np.int64)
-        if req_block_tables is not None:
-            block_tables = req_block_tables
-        else:
-            block_tables = InputMetadata.form_block_tables(llm_requests)
-
         return cls(
             batch_size=batch_size,
             batch_request_ids=batch_request_ids,
@@ -351,18 +307,13 @@ class InputMetadata:
             batch_stop_strings=batch_stop_strings,
             batch_stop_token_ids=batch_stop_token_ids,
             adapter_ids=adapter_ids,
-            batch_dp_rank_ids=np.asarray(batch_dp_rank_ids) if batch_dp_rank_ids else None,
-            sp_tokens=np.asarray(batch_sp_tokens) if batch_sp_tokens else None,
-            sp_rank_id=np.asarray(batch_sp_rank_ids) if batch_sp_rank_ids else None,
-            prefill_block_rank_id=np.asarray(batch_prefill_block_rank_id) if batch_prefill_block_rank_id else None,
-            is_append_block=np.asarray(batch_is_append_block) if batch_is_append_block else None,
-            block_rank_id=np.asarray(batch_block_rank_id) if batch_block_rank_id else None,
+            batch_dp_rank_ids=np.asarray(batch_dp_rank_ids) if batch_dp_rank_ids is not None else None,
+            sp_tokens=np.asarray(batch_sp_tokens) if len(batch_sp_tokens) > 0 else None,
+            sp_rank_id=np.asarray(batch_sp_rank_ids) if len(batch_sp_rank_ids) > 0 else None,
             is_mix=is_mix,
+            mix_decode_bs=decode_bs,
             split_start_position=split_start_pos,
             split_end_position=split_end_pos,
             batch_last_prompt=batch_last_prompt,
-            batch_is_prefill=batch_is_prefill,
-            computed_blocks=np.asarray(batch_computed_blocks) if batch_computed_blocks else None,
-            remote_computed_blocks=np.asarray(batch_remote_computed_blocks) if batch_remote_computed_blocks else None,
-            batch_computed_block_order=computed_block_orders
+            batch_is_prefill=batch_is_prefill
         )

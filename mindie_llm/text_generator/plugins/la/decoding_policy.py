@@ -607,16 +607,14 @@ class DecodingPolicy():
         batch_mask = tensor_backend.tensor(batch_mask, dtype=self.dtype, device=self.device)
         return model_inputs, batch_mask[:mask_pos, :max_seq_len]
 
-    def la_preprocess(self, model_inputs, meta_data, seed_array: np.ndarray):
+    def la_preprocess(self, model_inputs, meta_data, seed_array):
         past_tokens = []
         prep_guess_tokens = []
         last_gen_tokens = []
         for batch, _ in enumerate(meta_data.all_sequence_ids):
             req_id = meta_data.all_sequence_ids[batch]
             batch_past_token = self.la_cache.get_past_tokens(req_id)
-            # seed maybe array(None, dtype=object)
-            seed = seed_array.item() if seed_array.ndim == 0 else seed_array[batch]
-            seed = seed if seed is not None else 1
+            seed = seed_array[batch] if len(seed_array) > 0 else 1
             if batch_past_token is None:
                 self.la_cache.fill_pool_with_prompt(req_id, seed)
                 prep_guess_tokens.append(None)

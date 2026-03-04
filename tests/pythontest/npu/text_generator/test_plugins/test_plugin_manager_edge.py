@@ -13,32 +13,25 @@ import sys
 from pathlib import Path
 
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import torch
 
-import numpy as np
-
 from atb_llm.utils.dist import FakeGroup
+from atb_llm.utils.mapping import Mapping
 from atb_llm.utils.layers import AttentionMask
 from atb_llm.utils.file_utils import safe_open
 from atb_llm.models.llama.config_llama import LlamaConfig
 from mindie_llm.utils.env import ENV
-
 from mindie_llm.modeling.backend_type import BackendType
-from mindie_llm.text_generator.generator import Generator
-from mindie_llm.text_generator.utils.request import Request
 from mindie_llm.text_generator.utils.config import ModelConfig
-from mindie_llm.text_generator.utils.input_metadata import InputMetadata
-from mindie_llm.text_generator.adapter.generator_torch import GeneratorTorch
-from mindie_llm.text_generator.utils.generation_metadata import GenerationParams
-
 
 current_file_path = Path(__file__).resolve()
 target_dir = current_file_path.parent.parent.parent.parent
 
 MODEL_PATH = target_dir.joinpath("test_weights/llama3")
-PLUGIN_PARAMS = '{\"plugin_type\": \"splitfuse\"}'
-SPECULATION_GAMMA = 30
+PLUGIN_PARAMS = ('{"plugin_type": "memory_decoding", "decoding_length": 8, "dynamic_algo": true,'
+                 '"soc_version": "Ascend310B"}')
+SPECULATION_GAMMA = 16
 
 
 class FakeModel:
@@ -49,13 +42,12 @@ class FakeModelRunner:
     def __init__(self):
         with safe_open(os.path.join(MODEL_PATH, 'config.json'), 'r') as f:
             config_dict = json.loads(f.read())
-        
+
         config = LlamaConfig.from_dict(config_dict)
         self.config = config
         self.config_dict = config_dict
         self.llm_config = MagicMock()
         self.tokenizer = None
-        from atb_llm.utils.mapping import Mapping
         self.mapping = Mapping(world_size=ENV.world_size, rank=ENV.local_rank)
         self.process_group = FakeGroup(rank=ENV.local_rank, size=ENV.world_size)
         self.device = torch.device('cpu')
@@ -70,13 +62,11 @@ class FakeModelRunner:
         self.kvcache_quant_layers = []
 
         self.max_position_embeddings = config_dict['max_position_embeddings']
-        self.soc_info = MagicMock()
-        self.soc_info.is_300i.return_value = False
+        self.soc_info = None
         self.adapter_manager = None
         self.lora_adapter = None
         self.attn_mask = AttentionMask.static(1024, dtype=torch.float16)
         self.model = None
-        self.enable_nz = False
 
     @staticmethod
     def decode():
@@ -85,14 +75,11 @@ class FakeModelRunner:
     @staticmethod
     def generate_position_ids(input_ids):
         return range(len(input_ids))
-    
+
     def load_weights(self, **kwargs):
         self.model = FakeModel()
         self.model.max_position_embeddings = self.max_position_embeddings
         return None
-
-    def clear_internal_tensors(self):
-        pass
 
 
 class TestPlugin(unittest.TestCase):
@@ -119,13 +106,14 @@ class TestPlugin(unittest.TestCase):
             env_rank: ENV.rank,
             env_world_size: ENV.world_size,
             env_local_rank: ENV.local_rank,
+            "soc_version": 'Ascend310B',
             **vars(args)
         }
 
         backend_type = input_dict.get('backend_type', 'atb')
         self.backend_type = BackendType.MS if backend_type and backend_type.lower() == BackendType.MS \
             else BackendType.ATB
-        
+
         self.ignore_eos = input_dict.get('ignore_eos', False)
         self.load_tokenizer = input_dict.get('load_tokenizer', True)
         self.rank = input_dict.get(env_rank, '0')
@@ -134,7 +122,6 @@ class TestPlugin(unittest.TestCase):
         self.max_input_length = input_dict.get('max_input_length', 1024)
         self.max_output_length = input_dict.get('max_output_length', 20)
         self.max_batch_size = input_dict.get('max_batch_size', 200)
-        self.max_prefill_batch_size = input_dict.get('max_prefil_batch_size', 200)
         self.max_prefill_tokens = input_dict.get('max_prefill_tokens', 4096)
         self.max_position_embeddings = input_dict.get('max_position_embeddings', 2048)
         self.max_seq_len = self.max_position_embeddings if self.max_position_embeddings else \
@@ -166,7 +153,6 @@ class TestPlugin(unittest.TestCase):
             'max_input_len': self.max_input_length,
             'max_iter_times': self.max_output_length,
             'max_batch_size': self.max_batch_size,
-            'max_prefill_batch_size': self.max_prefill_batch_size,
             'max_prefill_tokens': self.max_prefill_tokens,
             'max_seq_len': self.max_seq_len,
             'model_id': self.model_path,
@@ -183,7 +169,7 @@ class TestPlugin(unittest.TestCase):
             'remote_model_instance_ids': self.remote_model_instance_ids,
             'remote_device_ips': self.remote_device_ips,
             'trust_remote_code': True,
-            'enable_warmup_with_sampling': False
+            'soc_version': 240,
         }
 
         if isinstance(self.model_config, ModelConfig):
@@ -191,68 +177,6 @@ class TestPlugin(unittest.TestCase):
         if self.eos_token_id is not None:
             self.model_config['eos_token_id'] = self.eos_token_id
 
-    def test_generate_token_gready(self):
-        
-        def side_effect_initialize_distributed(rank, npu_id, world_size):
-            return FakeGroup(rank, world_size), torch.device("cpu")
-
-        def side_effect_forward(model_inputs, **kwargs):
-            if model_inputs.is_prefill:
-                token_num = model_inputs.prefill_head_indices.shape[0]
-            else:
-                token_num = len(model_inputs.input_ids)
-            logits = torch.zeros(token_num, 10) # 假定词表长度为10
-            for i in range(logits.shape[0]):
-                logits[i][2] = 2
-                logits[i][5] = 3
-                logits[i][8] = 4
-            return logits
-        
-        with patch.object(GeneratorTorch, 'forward') as mock_forward, \
-             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
-             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
-             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
-             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
-             patch('torch.npu.synchronize', return_value=None) as _, \
-             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func', \
-                    return_value=None) as _:
-        
-            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
-            mock_forward.side_effect = side_effect_forward
-            mock_kvcache_settings = MagicMock(dtype=None)
-            mock_kvcache_settings_class.return_value = mock_kvcache_settings
-            generator = Generator(self.model_config)
-
-            splitfuse_plugin = generator.plugin
-            sample_dtype = generator.infer_context._batch_context.default_sampling_params.dtype
-            greedy_param = np.array([(1.0, 0., 0., 0.7, 3., 0.92, False, 0)], dtype=sample_dtype)
-            input1 = [5159, 636, 374, 31346, 323, 358]
-            block_tables = np.array([[0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]])
-            
-            gen_len = 2
-            req = Request.request_from_token(input1, sampling_params=greedy_param,
-                                             generation_params=GenerationParams(max_new_tokens=gen_len))
-            req.split_start_position = 0
-            req.split_end_position = len(input1)
-            meta_data = InputMetadata.from_requests([req], block_tables, np.array([1]))
-            meta_data.batch_block_tables = block_tables
-
-            generation_output = splitfuse_plugin.generate_token(meta_data)
-
-            # 自回归推理
-            meta_data.is_prefill = False
-            tokens_list = []
-            while generation_output.finish_reason[0] == 0:
-                generation_output = splitfuse_plugin.generate_token(meta_data)
-                tokens_list.extend(generation_output.token_ids[0])
-
-            # 验证greedy是否每轮都选择logits最大的token
-            is_greedy = True
-            for token in tokens_list:
-                if token != 8:
-                    is_greedy = False
-                    break
-            self.assertTrue(is_greedy)
 
 if __name__ == "__main__":
     unittest.main()

@@ -220,11 +220,10 @@ class NdarrayContext:
         )
         if self.spcp_parallel_info.scp_size > 1:
             self.mtp_last_rank = np.full(self.cache_config.cache_size, self.cache_config.pad_rank_id, dtype=np.int32)
-            # column +1 for case where seq_len is almost equal to max_seq_len and is_append_block is true.
             self.mtp_seq_block_rank_id = np.full(
                 (
                     self.cache_config.cache_size,
-                    math.ceil((self.cache_config.max_seq_len + 1) / self.cache_config.max_block_size) + 1,
+                    math.ceil((self.cache_config.max_seq_len + 1) / self.cache_config.max_block_size),
                 ),
                 self.cache_config.pad_rank_id,
                 dtype=np.int32,

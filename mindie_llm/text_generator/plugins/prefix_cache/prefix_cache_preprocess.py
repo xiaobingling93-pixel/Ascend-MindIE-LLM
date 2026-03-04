@@ -25,14 +25,14 @@ class PrefixCachePreprocess:
         if not metadata.is_prefill or metadata.remote_computed_blocks is None:
             return model_inputs
         remote_computed_blocks = metadata.remote_computed_blocks
-        
-        decode_len = 0
-        batch_size = metadata.batch_size
-        prefill_idx = list(range(0, metadata.batch_size))
         if metadata.batch_is_prefill is not None: # prefix_cache + splitfuse
             decode_len = metadata.batch_is_prefill.shape[0] - np.sum(metadata.batch_is_prefill)
             batch_size = metadata.batch_is_prefill.shape[0]
             prefill_idx = list(range(decode_len, batch_size))
+        else:
+            decode_len = metadata.mix_decode_bs
+            batch_size = metadata.batch_size
+            prefill_idx = list(range(metadata.mix_decode_bs, metadata.batch_size))
 
         computed_blocks = []
         for i, batch_sequence_ids in enumerate(metadata.batch_sequence_ids):

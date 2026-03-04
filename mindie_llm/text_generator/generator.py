@@ -12,8 +12,7 @@ import os
 from pathlib import Path
 import queue
 import time
-from typing import Any, Dict, List, Tuple, Union
-from dataclasses import dataclass, fields
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -21,59 +20,40 @@ import torch
 
 import acl
 from mindie_llm.connector.common.model_execute_data_pb2 import LoraOperationStatus
+from mindie_llm.text_generator.utils.kvcache_settings import KVCacheSettings
 from mindie_llm.text_generator.utils.npu_mem_tool import (
+    calc_npu_mem,
     calc_block_mem,
     gb,
-    memory_profiling,
-    NpuMemoryWatcher,
-    WeightMemoryProfiler
+    NpuMemoryWatcher
 )
+from mindie_llm.text_generator.utils.tg_infer_context_store import TGInferContextStore
 from mindie_llm.modeling.backend_type import BackendType
-from mindie_llm.text_generator.adapter import get_generator_backend
-from mindie_llm.utils.validation import parse_config, ParseType
-from mindie_llm.text_generator.plugins import get_plugin
-from mindie_llm.text_generator.plugins.plugin_utils import (
-    InferenceMode, PluginParameterValidator
-)
-from mindie_llm.text_generator.utils import (
-    TGInferContextStore, KVCacheSettings, InputMetadata,
-    GenerationOutput, OutputFilter
-)
-from mindie_llm.text_generator.utils.block_copy import BlockCopy
-from mindie_llm.text_generator.utils.config import (
-    CacheConfig, ModelConfig, ContextParams, ResponseConfig
-)
-from mindie_llm.text_generator.utils.request import Request
-from mindie_llm.utils.decorators.time_decorator import timer
-from mindie_llm.utils.env import ENV
-from mindie_llm.utils.log import ErrorCode, logger, print_log
-from mindie_llm.utils.status import MindieLlmStatusCode
-from mindie_llm.utils.tensor import npu
-from mindie_llm.text_generator.utils.separate_deployment_engine import (
-    SeparateDeploymentWorker, LinkParams, DmiModeNodeRole
-)
-from mindie_llm.utils import file_utils
 
+from .adapter import get_generator_backend, parse_config, ParseType
+from .plugins import get_plugin, InferenceMode, PluginParameterValidator
+from .utils.block_copy import BlockCopy
+from .utils.config import CacheConfig, ModelConfig, ContextParams
+from .utils.input_metadata import InputMetadata
+from .utils.output_filter import OutputFilter
+from .utils.request import Request
+from .utils.generation_output import GenerationOutput
+from ..utils.decorators.time_decorator import timer
+from ..utils.env import ENV
+from ..utils.log.error_code import ErrorCode
+from ..utils.log.logging import logger, print_log
+from ..utils.status import MindieLlmStatusCode
+from ..utils.tensor import npu
+from .utils.separate_deployment_engine import SeparateDeploymentWorker, LinkParams, DmiModeNodeRole
+from ..utils import file_utils
 
+DECODER_TAG = 'decoder'
+PREFILL_TAG = 'prefill'
 STANDARD_TAG = 'standard'
 NPU_OUT_OF_MEMORY_TAG = 'NPU out of memory'
 EOS_TOKEN_ID = 'eos_token_id'
 KV_HALF_BYTE = 4
 MEM_POOL_WORKER_ROLE = "worker"
-
-
-@dataclass
-class WarmupParams:
-    max_prefill_tokens: int = 4096
-    max_seq_len: int = 2560
-    max_input_len: int = 1
-    max_iter_times: int = 2560
-
-    def __post_init__(self):
-        for field in fields(self):
-            value = getattr(self, field.name)
-            if not isinstance(value, int) or value <= 0:
-                raise ValueError(f"{field.name} must be a positive integer, got {value}")
 
 
 class PDModelConfig:
@@ -131,7 +111,7 @@ class PDInterface:
                 p_d_infos: List[Tuple[int, List[int], List[int]]]
                 ) -> Tuple[Union[MindieLlmStatusCode, ErrorCode], int]:
         """
-        从远程模型实例拉取 kv cache, 并将 input_metadata 放入队列。
+        从远程模型实例拉取 kv cache，并将 input_metadata 放入队列。
         """
         if not self.device_inited:
             npu.set_device(int(self.pd_config.local_logic_device_id))
@@ -208,8 +188,6 @@ class Generator(PDInterface):
                                               parse_type=ParseType.TO_BOOL, default_value=False)
         self.distributed_enable = parse_config(model_config, 'distributed_enable', required=False, 
                                                 parse_type=ParseType.TO_BOOL, default_value=False)
-        self.enable_warmup_with_sampling = parse_config(model_config, 'enable_warmup_with_sampling',
-                                                    parse_type=ParseType.TO_BOOL, default_value=True)
 
         self.pd_config = PDModelConfig(model_config)
         super().__init__(self.pd_config)
@@ -229,8 +207,8 @@ class Generator(PDInterface):
         plugin_config, self.is_mix_model, plugin_list = validator.validate(plugin_params)
         self.num_speculative_tokens = plugin_config.get('num_speculative_tokens', 0)
         self.enable_mtp = 'mtp' in plugin_list
-        self.enable_prefix_cache = 'prefix_cache' in plugin_list
-
+        self.enable_warmup_with_sampling = parse_config(model_config, 'enable_warmup_with_sampling',
+                                                    parse_type=ParseType.TO_BOOL, default_value=True)
         model_config['num_speculative_tokens'] = self.num_speculative_tokens
         model_config['inference_mode'] = InferenceMode(plugin_list, plugin_config, self.is_mix_model)
         self.inference_mode = model_config['inference_mode']
@@ -259,12 +237,7 @@ class Generator(PDInterface):
         model_config["layerwise_disaggregated"] = self.layerwise_disaggregated
         model_config["layerwise_disaggregated_role_type"] = self.layerwise_disaggregated_role_type
 
-        with WeightMemoryProfiler() as prof:
-            self.generator_backend = get_generator_backend(model_config)
-    
-        self.model_memory_usage = prof.model_weight
-        print_log(self.rank, logger.info, f'Model loading took {gb(self.model_memory_usage):.2f} GiB memory.')
-
+        self.generator_backend = get_generator_backend(model_config)
         self.model_wrapper = self.generator_backend.model_wrapper
         self.sampler = self.generator_backend.sampler
         self.model_info = self.generator_backend.model_info
@@ -340,13 +313,23 @@ class Generator(PDInterface):
 
         self.hidden_size = getattr(self.model_wrapper.config, 'hidden_size', 0)
 
+        mapping = None
+        spcp_parallel_info = None
+        if hasattr(self.model_wrapper, "mapping"):
+            mapping = self.model_wrapper.mapping
+            spcp_parallel_info = (
+                mapping.attn_inner_sp,
+                mapping.attn_cp,
+            )
+
         self.is_multimodal = self.model_wrapper.is_multimodal
         if self.is_multimodal and "memory_decoding" in plugin_list:
             message = ("Memory decoding is not supported when the model type is multimodal.")
             logger.error(message, ErrorCode.TEXT_GENERATOR_FEAT_COMPAT_INVALID)
             raise NotImplementedError(message)
-        self.is_separated_pd = self.pd_config.model_role in [DmiModeNodeRole.PREFILL, DmiModeNodeRole.DECODER]
 
+        logger.debug(f"[Config]\t>>> rank:{self.rank} Warm up inference start...")
+        self.is_separated_pd = self.pd_config.model_role in [PREFILL_TAG, DECODER_TAG]
         self.context_params = ContextParams(
             self.is_separated_pd,
             self.num_speculative_tokens,
@@ -356,13 +339,32 @@ class Generator(PDInterface):
             self.async_inference,
             self.distributed_enable,
             self.max_generated_tokens,
-            BackendType.ATB if self.backend_type == "atb" else BackendType.MS,
+            {"atb": BackendType.ATB, "ms": BackendType.MS}.get(self.backend_type, BackendType.TORCH),
             self.layerwise_disaggregated,
             self.layerwise_disaggregated_role_type
         )
-        self.copy_blocks_ops = None
-        self.is_inference_pause = False
+        self.kvcache_settings = self.warm_up(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+        logger.debug(f"[Config]\t>>> rank:{self.rank} Warm up inference finish")
 
+        self.copy_blocks_ops = None
+        self.infer_context = TGInferContextStore(
+            self.kvcache_settings,
+            self.cache_config,
+            spcp_parallel_info,
+            self.model_wrapper.model_info.device,
+            self.context_params,
+            self.tokenizer,
+            self.tokenizer_sliding_window_size,
+            self.model_wrapper.generate_position_ids
+        )
+        self.output_filter = OutputFilter(self.cache_config, self.infer_context, self.tokenizer, self.async_inference)
+        plugin_utils = (
+            self.generator_backend,
+            self.kvcache_settings,
+            self.infer_context,
+            self.output_filter,
+            self.pd_config.model_role,
+        )
         plugin_config['eos_token_id'] = self.cache_config.eos_token_id
         plugin_config['cache_size'] = self.cache_config.cache_size
         plugin_config['max_gen_len'] = self.cache_config.max_gen_len
@@ -372,25 +374,16 @@ class Generator(PDInterface):
         plugin_config["layerwise_disaggregated"] = self.layerwise_disaggregated
         plugin_config["layerwise_disaggregated_role_type"] = self.layerwise_disaggregated_role_type
 
-        self.plugin_config = plugin_config
-        self.plugin_list = plugin_list
-
-        warmup_param = WarmupParams(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
-        npu_mem = self.warm_up(warmup_param)
-        self._init_sepd_engine()
-        self.kvcache_settings = self._update_kvcache_settings(npu_mem)
-
         total_mem, warmup_mem = self.watcher.watch_npu_mem(self.rank, f'After warmup', 
                                                            self.is_multimodal, max_input_len)
         self.watcher._set_warmup_mem_(warmup_mem)
-        
-        self._init_plugin_manager(self.kvcache_settings)
 
-        if (
-            self.pd_config.model_role == DmiModeNodeRole.DECODER
-            and len(self.generator_backend.kv_pool_backend) != 0
-            and len(self.generator_backend.kv_pool_config_path) != 0
-        ):
+        self.plugin = get_plugin(plugin_list, plugin_config, plugin_utils, self.is_mix_model, self.watcher)
+        self.plugin.initialize()
+        self.is_inference_pause = False
+
+        if self.pd_config.model_role == DmiModeNodeRole.DECODER and \
+            len(self.generator_backend.kv_pool_backend) != 0 and len(self.generator_backend.kv_pool_config_path) != 0:
             from mindie_llm.text_generator.mempool import MemPool
             self.m_store = MemPool.create_pool(
                 backend=self.generator_backend.kv_pool_backend,
@@ -478,11 +471,11 @@ class Generator(PDInterface):
                     input_metadata_pass = self.input_metadata_queue.get()
                     cache_ids = self.infer_context.get_batch_context_handles(input_metadata_pass)
                     _, sampling_metadata, _ = self.infer_context.compose_model_inputs(
-                        input_metadata_pass, cache_ids, warmup=warmup, is_pd_separate=True)
+                        input_metadata_pass, cache_ids, warmup=False, is_pd_separate=True)
                     if not input_metadata_pass.is_dummy_batch and sampling_metadata.do_sample_array is not None:
                         self.generator_backend.configure_sampler(sampling_metadata)
 
-            if self.plugin_manager:
+            if self.plugin:
                 if self.async_inference:
                     if self.layerwise_disaggregated and self.pd_config.model_role != STANDARD_TAG:
                         raise RuntimeError(f'Disaggregated-pd circumstance is not supported \
@@ -490,9 +483,9 @@ class Generator(PDInterface):
                         {self.pd_config.model_role} is not compatible with split inference settings. \
                         Please check pd config.')
 
-                    generation_output = self.plugin_manager.generate_token_async(input_metadata, warmup=warmup)
+                    generation_output = self.plugin.generate_token_async(input_metadata, warmup)
                 else:
-                    generation_output = self.plugin_manager.generate_token(input_metadata, warmup=warmup)
+                    generation_output = self.plugin.generate_token(input_metadata, warmup)
             else:
                 raise NotImplementedError('plugin not implemented')
             if generation_output is None:
@@ -559,8 +552,11 @@ class Generator(PDInterface):
 
     def warm_up(
         self,
-        warmup_params: WarmupParams
-    ) -> float | int:
+        max_prefill_tokens: int = 4096,
+        max_seq_len: int = 2560,
+        max_input_len: int = 1,
+        max_iter_times: int = 2560,
+    ) -> KVCacheSettings:
         """Warm-up to ensure normal performance.
 
         Since the performance during the first inference may be impacted by the initialization of certain objects, we
@@ -568,31 +564,22 @@ class Generator(PDInterface):
         optimal npu memory size for the kv cache based on the memory usage of the NPU during the simulated inference.
 
         Args:
-            warmup_params contains 4 fields:
             max_prefill_tokens: The maximum limit of the sum of tokens in a batch to prefill.
             max_seq_len: The maximum sequence length of the model.
             max_input_len: The maximum input length set by configuration.
             max_iter_times: The maximum number of iterations. It can also be considered as the max output length.
 
         Returns:
-            Available npu memory(GiB) for KVcache.
+            KVCacheSettings: The kv cache settings constructed based on the specified or calculated npu memory size.
 
         Raises:
             RuntimeError: Setting the above-mentioned upper limit parameters too large, or setting `NPU_MEMORY_FRACTION`
                 too large, could lead to an OOM (Out of Memory) exception.
         """
-        block_mem_size_gb = gb(calc_block_mem(self.model_info, self.block_size, self.num_speculative_tokens))
-        print_log(self.rank, logger.info,
-                  f'One block during warmup needs npu memory(GiB): {block_mem_size_gb}')
-        kvcache_settings = self._update_kvcache_settings(block_mem_size_gb)
-        self._init_plugin_manager(kvcache_settings)
-
-        npu_mem: float | int = self.npu_mem
-        if self.soc_version is not None and self.soc_version == 240:
-            npu_mem = 5
-
-        if npu_mem != -1:
-            self._warmup_specified(warmup_params)
+        if self.npu_mem != -1:
+            self._init_sepd_engine()
+            kvcache_settings = self.__warmup_specified(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times,
+                                                       self.npu_mem)
         else:
             if self.is_multimodal:
                 print_log(self.rank, logger.warning, 'When `npuMemSize` set to -1, the multimodal model may exhibit '
@@ -603,27 +590,27 @@ class Generator(PDInterface):
                 hidden_size = getattr(self.model_wrapper.config, 'hidden_size', 3584)
                 num_attention_heads = getattr(self.model_wrapper.config, 'num_attention_heads', 28)
                 kv_hidden_dim = num_key_value_heads * hidden_size // num_attention_heads
-                total_tokens = warmup_params.max_prefill_tokens + self.max_batch_size * warmup_params.max_iter_times
+                total_tokens = max_prefill_tokens + self.max_batch_size * max_iter_times
                 npu_mem = KV_HALF_BYTE * num_hidden_layers * kv_hidden_dim * total_tokens / self.world_size
-                return math.ceil(gb(npu_mem))
+                npu_mem = gb(npu_mem)
+                npu_mem = math.ceil(npu_mem)
+                kvcache_settings = self.__warmup_specified(max_prefill_tokens, max_seq_len, max_input_len,
+                                                           max_iter_times, npu_mem)
+                return kvcache_settings
 
-            with memory_profiling(
-                baseline_non_torch=0,
-                weights_memory=self.model_memory_usage
-            ) as profile_result:
-                if self.pd_config.model_role in {STANDARD_TAG, DmiModeNodeRole.FLEX}:
-                    self._warmup_standard(warmup_params)
-                elif self.pd_config.model_role == DmiModeNodeRole.PREFILL:
-                    self._warmup_prefill(warmup_params)
-                elif self.pd_config.model_role == DmiModeNodeRole.DECODER:
-                    self._warmup_decode(warmup_params)
-            requested_memory = profile_result.total_memory * ENV.memory_fraction
-            npu_mem = requested_memory - profile_result.non_kv_cache_memory
-            print_log(self.rank, logger.info,
-                      f'Requested memory: {ENV.memory_fraction} (util), {gb(requested_memory):.2f} GiB')
-            print_log(self.rank, logger.info, profile_result)
-            npu_mem = self._validate_warmup_memory(warmup_params, npu_mem)
-        return npu_mem
+            if self.pd_config.model_role == STANDARD_TAG:
+                npu_mem = self.__warmup_standard(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+            elif self.pd_config.model_role == DmiModeNodeRole.PREFILL:
+                npu_mem = self.__warmup_prefill(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+            elif self.pd_config.model_role == DmiModeNodeRole.DECODER:
+                npu_mem = self.__warmup_decode(max_iter_times)
+            elif self.pd_config.model_role == DmiModeNodeRole.FLEX:
+                npu_mem = self.__warmup_standard(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+            else:
+                raise RuntimeError(f'{self.pd_config.model_role} not defined. Please check pd config')
+            self._init_sepd_engine()
+            kvcache_settings = self.__update_kvcache_settings(npu_mem)
+        return kvcache_settings
 
     def swap(self, block_operation: Any) -> None:
         """Operate cache according to the swap decision.
@@ -725,23 +712,23 @@ class Generator(PDInterface):
         elif command == "CMD_START_ENGINE":
             # Resume engine: clear state and signal ready
             time.sleep(1)
-            self.plugin_manager.last_sequence_ids = None
-            self.plugin_manager.is_inference_pause = False
+            self.plugin.last_sequence_ids = None
+            self.plugin.is_inference_pause = False
             self.is_inference_pause = False
 
             # If the plugin supports asynchronous inference (indicated by the presence of 'output_queue'),
             # enqueue an empty ModelOutputWrapper to flush the pipeline when the output_queue is empty.
-            if hasattr(self.plugin_manager, 'output_queue') and self.plugin_manager.output_queue is not None and \
-                self.plugin_manager.output_queue.empty():
+            if hasattr(self.plugin, 'output_queue') and self.plugin.output_queue is not None and \
+                self.plugin.output_queue.empty():
                 from .utils.model_output import ModelOutputWrapper
-                self.plugin_manager.output_queue.put(ModelOutputWrapper.make_empty())
+                self.plugin.output_queue.put(ModelOutputWrapper.make_empty())
 
             ret_dict[command_res_key] = 0
 
         elif command == "CMD_PAUSE_ENGINE":
             # Delegate pause to generator backend
             self.is_inference_pause = True
-            self.plugin_manager.is_inference_pause = True
+            self.plugin.is_inference_pause = True
             time.sleep(20)
             ret_dict = self.generator_backend.execute_recover_command(command)
 
@@ -763,17 +750,18 @@ class Generator(PDInterface):
         )
         return ret_dict
 
-    def _init_plugin_manager(self, kvcache_settings: KVCacheSettings):
+    def __execute_warm_up(
+        self,
+        kvcache_settings: KVCacheSettings,
+        input_metadata: InputMetadata,
+        dummy: bool = False
+    ) -> None:
         mapping = None
         spcp_parallel_info = None
         if hasattr(self.model_wrapper, "mapping"):
             mapping = self.model_wrapper.mapping
-            spcp_parallel_info = (
-                mapping.attn_inner_sp,
-                mapping.attn_cp,
-            )
-        
-        self.infer_context = TGInferContextStore(
+            spcp_parallel_info = (mapping.attn_inner_sp, mapping.attn_cp)
+        infer_context = TGInferContextStore(
             kvcache_settings,
             self.cache_config,
             spcp_parallel_info,
@@ -783,133 +771,186 @@ class Generator(PDInterface):
             self.tokenizer_sliding_window_size,
             self.model_wrapper.generate_position_ids,
         )
-        self.output_filter = OutputFilter(self.cache_config, self.infer_context, self.tokenizer, self.async_inference)
-        plugin_utils = (
-            self.generator_backend,
-            kvcache_settings,
-            self.infer_context,
-            self.output_filter,
-            self.pd_config.model_role,
+        decode_input_len = self.num_speculative_tokens + 1 if self.num_speculative_tokens > 0 else 1
+        warmup_cache_ids = np.zeros(input_metadata.batch_size, dtype=np.int32)
+        model_inputs, sampling_metadata, _ = infer_context.compose_model_inputs(
+            input_metadata, warmup_cache_ids, warmup=True, dummy=dummy, decode_input_len=decode_input_len,
+            dp_size=self.model_wrapper.mapping.attn_dp.group_size if hasattr(self.model_wrapper, "mapping") else 1
         )
-
-        self.plugin_manager = get_plugin(self.plugin_list,
-                                         self.plugin_config,
-                                         plugin_utils,
-                                         self.is_mix_model,
-                                         self.watcher)
-        self.plugin_manager.initialize()
-
-    def _execute_warm_up(
-        self,
-        requests: List[Request],
-        is_prefill: bool
-    ) -> GenerationOutput:
         try:
-            if self.is_mix_model:
-                is_prefill_flag = (
-                    np.ones(len(requests), dtype=bool)
-                    if is_prefill
-                    else np.zeros(len(requests), dtype=bool)
-                )
-            else:
-                is_prefill_flag = is_prefill
-            input_metadata = InputMetadata.from_requests(requests, None, is_prefill_flag, self.block_size)
-            generation_output = self.generate_token(input_metadata, warmup=True)
-            return generation_output
+            self.generator_backend._warm_up(model_inputs, inference_mode=self.inference_mode,
+                                            sampling_metadata=sampling_metadata)
         except RuntimeError as e:
             if str(e).startswith(NPU_OUT_OF_MEMORY_TAG):
                 print_log(self.rank,
                           logger.error,
-                          f'Warmup failed due to NPU out of memory when `npuMemSize` set to {self.npu_mem}. '
-                          f'Try to decrease `npuMemSize` or `maxPrefillTokens`')
+                          f'Warmup failed, '
+                          f'because of model inference out of memory when `npuMemSize` set to {self.npu_mem}. '
+                          f'please try to decrease `npuMemSize`')
             raise e
 
-    def _get_warm_up_params(self, warmup_params: WarmupParams):
-        message = (
-            'warmup params: '
-            f'max_prefill_tokens={warmup_params.max_prefill_tokens}, '
-            f'max_seq_len={warmup_params.max_seq_len}, '
-            f'max_input_len={warmup_params.max_input_len}, '
-            f'max_iter_times={warmup_params.max_iter_times}'
-        )
-        print_log(self.rank, logger.info, message)
-        max_len = min(warmup_params.max_seq_len, warmup_params.max_input_len + warmup_params.max_iter_times)
-        return max_len
+    def __get_warm_up_params(self,
+                             max_prefill_tokens=4096,
+                             max_seq_len=2560,
+                             max_input_len=1,
+                             max_iter_times=2560):
+        params_checklist = (max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+        if not all(isinstance(param, int) for param in params_checklist):
+            raise ValueError(f'Warmup need all params int type, but got {max_prefill_tokens=}, '
+                             f'{max_seq_len=}, {max_input_len=}, {max_iter_times=}')
+        print_log(self.rank, logger.info, f'warmup params: {max_prefill_tokens=}, {max_seq_len=}, '
+                                          f'{max_input_len=}, {max_iter_times=}')
+        max_len = min(max_seq_len, max_input_len + max_iter_times)
+        if max_prefill_tokens < max_len:
+            max_prefill_tokens = max_len
+            self.max_prefill_tokens = max_len
+            print_log(self.rank, logger.warning, '`max_prefill_tokens` is smaller than `max_len`, '
+                                                 ' and it will be replaced by `max_len`, '
+                                                 '`max_len` = min(max_seq_len, max_input_len + max_iter_times)')
+        max_input_length = min(max_seq_len, max_input_len)
+        if max_input_length <= 0:
+            raise ValueError("max_input_len and max_seq_len should be greater than 0")
+        return max_prefill_tokens, max_input_length, max_len
 
-    def _get_warm_up_reqs(
+    def __calc_block_tables(self, batch_size, block_nums):
+        if self.scp_size > 1:
+            block_tables = np.zeros(batch_size * self.scp_size * block_nums[0],
+                                    dtype=np.int32).reshape([batch_size, self.sp_size * self.cp_size, -1])
+        else:
+            block_tables = np.zeros(batch_size * block_nums[0],
+                                    dtype=np.int32).reshape(batch_size, -1)
+        if block_nums[-1] != block_nums[0]:
+            block_tables[-1, block_nums[-1]:] = -1
+        return block_tables
+
+    def __get_warm_up_reqs(
         self,
-        warmup_params: WarmupParams,
-        max_output_len: int = 1,
-        do_prefix_cache_warmup: bool = False,
-        do_dap_warmup: bool = False
-    ) -> list[Request]:
-        
-        max_len = self._get_warm_up_params(warmup_params)
+        num_blocks,
+        warm_up_params=(4096, 2560, 1, 2560),
+        is_prefill=True
+    ) -> Tuple[List[Request], np.ndarray, List]:
+        max_prefill_tokens, max_seq_len, max_input_len, max_iter_times = warm_up_params
+        try:
+            max_prefill_tokens, _, max_len = \
+                self.__get_warm_up_params(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+        except ValueError as e:
+            print_log(self.rank, logger.error, f'ValueError: {e}')
+            raise e
 
         prefill_reqs = []
+        prefill_blocks = []
 
-        dp_group_size = self.dp_size if not self.distributed_enable else 1
+        prefill_blocks_per_dp_group = [0 for _ in range(self.dp_size if not self.distributed_enable else 1)]
+        if self.lwd_multi_nodes_enable and self.dp_size > 1 and is_prefill: # 多机多dp时显存优化
+            max_prefill_tokens_per_dp_group = [max_prefill_tokens, 1]
+        else:
+            max_prefill_tokens_per_dp_group = \
+                        [max_prefill_tokens for _ in range(self.dp_size if not self.distributed_enable else 1)]
+        while max(max_prefill_tokens_per_dp_group) > 0:
+            dp_idx = np.argmin(prefill_blocks_per_dp_group)
+            input_len = min(max_prefill_tokens_per_dp_group[dp_idx], max_len)
+            load_balance_cp_size = self.cp_size * 2  # 负载均衡
+            if self.cp_size > 1 and input_len % load_balance_cp_size != 0:
+                base = input_len // load_balance_cp_size
+                input_len = (base + 1) * load_balance_cp_size
+            output_len = 0
+            if self.block_size == 0:
+                raise ZeroDivisionError('self.kvcache_settings.block_size should be greater than 0')
+            num_required_block = math.ceil(input_len / self.block_size)
+            if prefill_blocks_per_dp_group[dp_idx] + num_required_block > num_blocks * self.scp_size:
+                print_log(self.rank, logger.warning, 'The `max_prefill_tokens` exceeds what the npu mem can hold.')
+                break
+            request = Request.from_warmup(input_len, output_len, self.warmup_topk_size, self.enable_warmup_with_sampling)
+            request.dp_rank_id = dp_idx
+            request.sp_tokens = None
 
-        request_lengths_per_dp_group = self._get_request_lengths_by_dp(
-            max_len=max_len,
-            do_prefix_cache_warmup=do_prefix_cache_warmup,
-            do_dap_warmup=do_dap_warmup
-        )
+            if self.scp_size > 1:
+                num_full_blocks = request.input_length // self.block_size
+                remainder = request.input_length % self.block_size
 
-        factor = 2 if self.async_inference else 1
-        max_placeholder_num = factor * self.max_generated_tokens if self.max_generated_tokens > 1 else 1
+                base = num_full_blocks // self.scp_size
+                extra = num_full_blocks % self.scp_size
 
-        for dp_idx in range(dp_group_size):
-            for input_len in request_lengths_per_dp_group:
-                request = Request.from_warmup(
-                    input_len,
-                    max_output_len=max_output_len,
-                    max_placeholder_num=max_placeholder_num,
-                    warmup_topk_size=self.warmup_topk_size,
-                    enable_warmup_sampling=self.enable_warmup_with_sampling
-                )
-                request.build(
-                    dp_rank_id=dp_idx,
-                    scp_size=self.scp_size,
-                    block_size=self.block_size,
-                    is_mix_model=self.is_mix_model
-                )
-                prefill_reqs.append(request)
+                input_len_per_sp = np.full(self.scp_size, base * self.block_size, dtype=int)
+                input_len_per_sp[:extra] += self.block_size
+                
+                remainder_rank = num_full_blocks % self.scp_size  # 下一个轮询位置
+                input_len_per_sp[remainder_rank] += remainder
+                request.sp_tokens = np.array(input_len_per_sp, dtype=np.int32)
+                request.sp_rank_id = remainder_rank
 
-        if do_prefix_cache_warmup:
-            self._update_request_for_prefix_cache(prefill_reqs)
+            max_prefill_tokens_per_dp_group[dp_idx] -= input_len
+            prefill_blocks_per_dp_group[dp_idx] += num_required_block
+            prefill_blocks.append(num_required_block)
+            prefill_reqs.append(request)
+        batch_size = len(prefill_reqs)
+        if batch_size == 0:
+            message = ('Warmup failed. This issue could be caused by setting both `max_prefill_tokens` and '
+                       '`max_input_length` to very large values, or setting insufficient `npu_mem`. Reducing either '
+                       '`max_prefill_tokens` or `max_input_length` may help resolve this issue. If `npu_mem` is -1, try'
+                       ' to increase the environment value `NPU_MEMORY_FRACTION` or `npu_mem` in configuration '
+                       'directly. Increase `world_size` can be another choice.')
+            logger.error(message)
+            raise RuntimeError(message)
+        block_tables = self.__calc_block_tables(batch_size, prefill_blocks)
+        return prefill_reqs, block_tables, prefill_blocks
 
-        return prefill_reqs
-    
-    def _warmup_prefill(self, warmup_params: WarmupParams):
-        self._auto_warmup_prefill(warmup_params)
-        if self.enable_prefix_cache:
-            self._auto_warmup_prefill(warmup_params, do_prefix_cache_warmup=True)
-
-    def _warmup_decode(self, warmup_params: WarmupParams):
-        self._auto_warmup_decode(warmup_params)
-
-    def _warmup_standard(self, warmup_params: WarmupParams):
+    def __warmup_prefill(self, max_prefill_tokens, max_seq_len, max_input_len, max_iter_times):
         if self.enable_dap:
-            self._auto_warmup(warmup_params, do_dap_warmup=True)
-        origin_enable_dap = self.generator_backend.enable_dap
+            npu_mem = self.__auto_warmup(
+                max_prefill_tokens, math.ceil(max_prefill_tokens / 2), max_input_len, max_iter_times, is_prefill=True
+            )
+        ori_enable_dap = self.generator_backend.enable_dap
         self.generator_backend.enable_dap = False
-        self._auto_warmup(warmup_params)
-        self.generator_backend.enable_dap = origin_enable_dap
-        if self.enable_prefix_cache:
-            self._auto_warmup(warmup_params, do_prefix_cache_warmup=True)
+        npu_mem = self.__auto_warmup(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times, is_prefill=True)
+        self.generator_backend.enable_dap = ori_enable_dap
+        return npu_mem
 
-    def _warmup_specified(self, warmup_params: WarmupParams):
-        prefill_reqs = self._get_warm_up_reqs(warmup_params)
+    def __warmup_decode(self, max_iter_times):
+        max_prefill_tokens = (self.num_speculative_tokens + 1) * self.max_batch_size
+        max_seq_len = self.num_speculative_tokens + 1
+        max_input_len = (self.num_speculative_tokens + 1) * self.max_batch_size
+        npu_mem = self.__auto_warmup(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times, is_prefill=False)
+        return npu_mem
 
-        _ = self._execute_warm_up(
-            requests=prefill_reqs,
-            is_prefill=True
-        )
+    def __warmup_standard(self, max_prefill_tokens, max_seq_len, max_input_len, max_iter_times):
+        npu_mem = self.__warmup_prefill(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+        if self.backend_type == 'atb':
+            npu_mem = self.__warmup_decode(max_iter_times)
+        return npu_mem
 
-        self.watcher.watch_npu_mem(self.rank, 'warmup specified success', self.is_multimodal, self.max_input_len)
+    def __warmup_specified(self, max_prefill_tokens, max_seq_len, max_input_len, max_iter_times, npu_mem):
+        kvcache_settings = self.__update_kvcache_settings(npu_mem)
+        prefill_token_length = max_seq_len
+        if self.enable_dap:
+            prefill_token_length = math.ceil(max_prefill_tokens / 2)
+        try:
+            warm_up_params = (max_prefill_tokens, prefill_token_length, max_input_len, max_iter_times)
+            prefill_reqs, block_tables, _ = self.__get_warm_up_reqs(kvcache_settings.num_npu_blocks, warm_up_params)
+        except Exception as e:
+            print_log(self.rank, logger.error, f'Error: {e}')
+            raise e
+        input_metadata = InputMetadata.from_requests(prefill_reqs, block_tables, True, self.block_size)
+        if self.pd_config.model_role == DmiModeNodeRole.DECODER:
+            input_metadata.max_seq_len = max_seq_len
+            input_metadata.max_batch_size = self.max_batch_size
+            input_metadata.is_prefill = False
+        self.__execute_warm_up(kvcache_settings, input_metadata, self.inference_mode)
+        if self.enable_dap and self.pd_config.model_role != DmiModeNodeRole.DECODER:
+            self.generator_backend.enable_dap = False
+            try:
+                warm_up_params = (max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+                prefill_reqs, block_tables, _ = self.__get_warm_up_reqs(kvcache_settings.num_npu_blocks, warm_up_params)
+            except Exception as e:
+                print_log(self.rank, logger.error, f'Error: {e}')
+                raise e
+            input_metadata = InputMetadata.from_requests(prefill_reqs, block_tables, True, self.block_size)
+            self.__execute_warm_up(kvcache_settings, input_metadata, self.inference_mode)
+            self.generator_backend.enable_dap = True
+        _, _ = self.watcher.watch_npu_mem(self.rank, 'warmup specified success', self.is_multimodal, self.max_input_len)
+        return kvcache_settings
 
-    def _update_kvcache_settings(self, npu_mem):
+    def __update_kvcache_settings(self, npu_mem):
         kvcache_settings = KVCacheSettings(
             self.rank,
             self.model_info,
@@ -951,6 +992,14 @@ class Generator(PDInterface):
                         blockshape=kvcache_settings.v_block_shape,
                         dtype=kvcache_settings.dtype_str,
                     )
+                if kvcache_settings.index_head_dim is not None:
+                    self.separate_deployment_worker.build(
+                        model_id=3,
+                        num_tensors=kvcache_settings.num_layers,
+                        num_blocks=kvcache_settings.num_npu_blocks,
+                        blockshape=kvcache_settings.index_block_shape,
+                        dtype=kvcache_settings.dtype_str,
+                    )
             else:
                 num_tensors = 2 * kvcache_settings.num_layers
                 self.separate_deployment_worker.build(
@@ -966,254 +1015,65 @@ class Generator(PDInterface):
             if str(e).startswith('Trying to create tensor with negative dimension'):
                 print_log(self.rank,
                           logger.error,
-                          'Warmup failed due to NPU out of memory when `npuMemSize` set to -1.'
-                          'Try to increase the environment value `NPU_MEMORY_FRACTION`'
+                          'Warmup failed, because of model inference out of memory when `npuMemSize` set to -1.'
+                          'please try to increase the environment value `NPU_MEMORY_FRACTION`'
                           'or decrease `max_prefill_tokens`')
                 raise e
         return kvcache_settings
 
-    def _auto_warmup(
-        self,
-        warmup_params: WarmupParams,
-        do_prefix_cache_warmup: bool = False,
-        do_dap_warmup: bool = False
-    ):
-        prefill_reqs = self._generate_warmup_requests(
-            warmup_params,
-            do_prefix_cache_warmup=do_prefix_cache_warmup,
-            do_dap_warmup=do_dap_warmup
-        )
-
-        prefill_output = self._execute_warm_up(
-            requests=prefill_reqs,
-            is_prefill=True
-        )
-        
-        decode_reqs, reqs_out_token_num = self._filter_end_reqs(prefill_reqs, prefill_output)
-        print_log(self.rank, logger.info, f"After prefill, number of decode requests: {len(decode_reqs)}")
-
-        if decode_reqs and self.generator_backend.backend_type == 'atb':
-            decode_rounds = 2 if self.async_inference else 1
-            self._warmup_decode_iterations(decode_reqs, reqs_out_token_num, decode_rounds)
-
-    def _auto_warmup_prefill(self, warmup_params: WarmupParams, do_prefix_cache_warmup=False):
-        prefill_reqs = self._generate_warmup_requests(warmup_params, do_prefix_cache_warmup)
-        
-        prefill_output = self._execute_warm_up(
-            requests=prefill_reqs,
-            is_prefill=True
-        )
-        
-        remaining_reqs, _ = self._filter_end_reqs(prefill_reqs, prefill_output)
-        if len(remaining_reqs) != 0:
-            raise ValueError(f"Expected 0 decode requests, got {len(remaining_reqs)}")
-
-    def _auto_warmup_decode(self, warmup_params: WarmupParams):
-        requests = self._generate_warmup_requests(warmup_params)
-        prefill_input_metadata = InputMetadata.from_requests(
-            requests, None, True, self.block_size
-        )
-        self.input_metadata_queue.put(prefill_input_metadata)
-
-        decode_output = self._execute_warm_up(
-            requests=requests,
-            is_prefill=False
-        )
-        
-        remaining_reqs, remaining_reqs_out_token_num = self._filter_end_reqs(requests, decode_output)
-        print_log(self.rank, logger.info, f"Number of decode requests after first round: {len(remaining_reqs)}")
-
-        decode_rounds = 1 if self.async_inference else 0
-        if decode_rounds > 0:
-            self._warmup_decode_iterations(remaining_reqs, remaining_reqs_out_token_num, decode_rounds)
-    
-    def _warmup_decode_iterations(
-        self,
-        decode_reqs: list[Request],
-        reqs_out_token_num: list[int],
-        num_rounds: int
-    ):
-        """Run multiple decode warmup rounds, updating requests and block tables each time."""
-        current_reqs = decode_reqs
-        current_reqs_out_token_num = reqs_out_token_num
-        for round_idx in range(num_rounds):
-            for req, num_new_token in zip(current_reqs, current_reqs_out_token_num):
-                req.step(
-                    num_new_token,
-                    self.scp_size,
-                    self.block_size,
-                    self.is_mix_model
-                )
-
-            generation_output = self._execute_warm_up(
-                requests=current_reqs,
-                is_prefill=False
-            )
-            current_reqs, current_reqs_out_token_num = self._filter_end_reqs(current_reqs, generation_output)
-            if round_idx == num_rounds - 1:
-                if len(current_reqs) != 0:
-                    raise RuntimeError(
-                        f"Decode warmup did not finish all requests: {len(current_reqs)} remaining"
-                    )
-            # if requests reach max_seq_len, current_reqs are empty
-            if not current_reqs:
-                break
-    
-    def _generate_warmup_requests(
-        self, 
-        warmup_params: WarmupParams,
-        do_prefix_cache_warmup: bool = False,
-        do_dap_warmup: bool = False
-    ) -> list[Request]:
-        # 根据模式确定 max_output_len
-        max_output_len = 1
-        if self.pd_config.model_role == STANDARD_TAG or self.pd_config.model_role == DmiModeNodeRole.FLEX:
-            max_output_len = 2
-
-        prefill_reqs = self._get_warm_up_reqs(
-            warmup_params,
-            max_output_len=max_output_len,
-            do_prefix_cache_warmup=do_prefix_cache_warmup,
-            do_dap_warmup=do_dap_warmup
-        )
-
-        total_request_length = sum(prefill_req.input_length for prefill_req in prefill_reqs)
-        message = (
-            f"Number of prefill requests (all dp groups): {len(prefill_reqs)}. "
-            f"First request length: {prefill_reqs[0].input_length}. "
-            f"Last request length: {prefill_reqs[-1].input_length}. "
-            f"Total request length (all dp groups): {total_request_length}. "
-        )
-        print_log(self.rank, logger.info, message)
-        return prefill_reqs
-    
-    def _validate_warmup_memory(self, warmup_params: WarmupParams, npu_mem):
+    def __auto_warmup(self, max_prefill_tokens, max_seq_len, max_input_len, max_iter_times, is_prefill=True):
+        total_mem, peak_mem = self.watcher.watch_npu_mem(self.rank, 
+            f'Before {"prefill" if is_prefill else "Decode"} warmup', self.is_multimodal, self.max_input_len)
         block_mem_size = calc_block_mem(self.model_info, self.block_size, self.num_speculative_tokens)
-        total_blocks = max(math.floor(npu_mem / block_mem_size), 0)
-        
+        total_blocks = int((total_mem * ENV.memory_fraction - peak_mem) // block_mem_size)
+
         try:
-            max_len = self._get_warm_up_params(warmup_params)
-            num_required_block = math.ceil(max_len / self.block_size)
-            if num_required_block > total_blocks * self.scp_size:
-                message = (
-                    'Warmup failed. This could be caused by setting both `max_prefill_tokens` and '
-                    '`max_input_length` to very large values, or setting insufficient `npu_mem`. Reducing either '
-                    '`max_prefill_tokens` or `max_input_length` may resolve this issue. If `npu_mem` is -1, try '
-                    'to increase the environment value `NPU_MEMORY_FRACTION`. '
-                    f'Required block number: {num_required_block}. '
-                    f'Left block number: {total_blocks * self.scp_size}.'
-                )
-                logger.error(message)
-                raise RuntimeError(message)
+            warm_up_params = (max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+            prefill_reqs, block_tables, _ = self.__get_warm_up_reqs(total_blocks, warm_up_params, is_prefill)
         except Exception as e:
             print_log(self.rank, logger.error, f'Error: {e}')
             raise e
 
-        npu_mem = gb(npu_mem)
-        message = (
-            f'Allocated {npu_mem} (GiB) NPU memory for KVcache. '
-            f'Model role: {self.pd_config.model_role}'
+        dp_group_size = self.dp_size if not self.distributed_enable else 1
+
+        input_metadata = InputMetadata.from_requests(
+            prefill_reqs[:self.max_batch_size * dp_group_size],
+            block_tables[:self.max_batch_size * dp_group_size],
+            True,
+            self.block_size
         )
-        print_log(self.rank, logger.info, message)
+
+        if self.pd_config.model_role == DmiModeNodeRole.DECODER or (not is_prefill and self.pd_config.model_role == STANDARD_TAG):
+            input_metadata.max_seq_len = max_seq_len
+            input_metadata.max_batch_size = self.max_batch_size * dp_group_size
+            input_metadata.is_prefill = False
+
+        num_prefill_blocks = 1
+        prefill_npu_mem = calc_npu_mem(num_prefill_blocks, self.model_info,
+                                       self.block_size, self.num_speculative_tokens)
+        prefill_npu_mem_gb = prefill_npu_mem / 1024 / 1024 / 1024
+        print_log(self.rank, logger.info,
+                  f'`{self.pd_config.model_role} blocks` during warmup needs npu memory(GB): {prefill_npu_mem_gb}')
+        kvcache_settings = self.__update_kvcache_settings(prefill_npu_mem_gb)
+
+        self.__execute_warm_up(kvcache_settings, input_metadata, dummy=True)
+        total_mem, peak_mem = self.watcher.watch_npu_mem(self.rank, 
+            f'After {"prefill" if is_prefill else "Decode"} warmup', self.is_multimodal, self.max_input_len)
+        total_blocks = int(total_mem * ENV.memory_fraction - peak_mem) // block_mem_size + num_prefill_blocks
+
+        try:
+            warm_up_params = (max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
+            prefill_reqs, block_tables, _ = self.__get_warm_up_reqs(total_blocks, warm_up_params, is_prefill)
+        except Exception as e:
+            print_log(self.rank, logger.error, f'Error: {e}')
+            raise e
+        _ = InputMetadata.from_requests(prefill_reqs, block_tables, True, self.block_size)
+        _, _ = self.watcher.watch_npu_mem(self.rank, 'After check warmup', self.is_multimodal, self.max_input_len)
+
+        npu_mem = calc_npu_mem(total_blocks, self.model_info, self.block_size) / 1024 / 1024 / 1024
+        if self.soc_version is not None and self.soc_version == 240:
+            npu_mem = 5
+
+        print_log(self.rank, logger.info,
+                  f'`Total blocks` needs npu memory(GB): {npu_mem}')
         return npu_mem
-    
-    def _filter_end_reqs(
-        self,
-        requests: list[Request],
-        generation_output: GenerationOutput
-    ) -> tuple[list[Request], list[int]]:
-        unfinished_requests = []
-        out_token_num = []
-        for i, req in enumerate(requests):
-            finish_reason = generation_output.finish_reason[i]
-            if finish_reason.item() == ResponseConfig.CONTINUE:
-                unfinished_requests.append(req)
-                out_token_num.append(generation_output.num_new_tokens[i].item())
-        return unfinished_requests, out_token_num
-    
-    def _get_request_lengths_by_dp(
-        self,
-        max_len: int,
-        do_prefix_cache_warmup: bool = False,
-        do_dap_warmup: bool = False
-    ) -> list[int]:
-        """Calculate request lengths for data parallel groups"""
-
-        def align_for_context_parallel(length: int) -> int:
-            """Align length for context parallel"""
-            if self.cp_size <= 1:
-                return length
-            alignment = self.cp_size * 2
-            return ((length + alignment - 1) // alignment) * alignment
-
-        if self.pd_config.model_role == DmiModeNodeRole.PREFILL:
-            max_batch_size_per_dp = self.max_prefill_batch_size
-        else:
-            max_batch_size_per_dp = self.max_batch_size
-
-        # Max prefill tokens has been aligned in llm_manager for context parallel.
-        aligned_prefill_tokens = (
-            math.ceil(self.max_prefill_tokens / 2)
-            if do_dap_warmup
-            else self.max_prefill_tokens
-        )
-
-        result: list[int] = []
-
-        # Case 1: Can fit all requests with max_len
-        if max_len * max_batch_size_per_dp <= aligned_prefill_tokens:
-            aligned_len = align_for_context_parallel(max_len) if self.cp_size > 1 else max_len
-            full_count = aligned_prefill_tokens // aligned_len
-            remainder = aligned_prefill_tokens % aligned_len
-            result = [aligned_len] * full_count + ([remainder] if remainder > 0 else [])
-        else:
-            # Case 2: Need to distribute tokens among requests
-            base_len = aligned_prefill_tokens // max_batch_size_per_dp
-            aligned_base_len = align_for_context_parallel(base_len) if self.cp_size > 1 else base_len
-
-            full_count = aligned_prefill_tokens // aligned_base_len
-            remainder = aligned_prefill_tokens % aligned_base_len
-            batch_size = full_count + (1 if remainder > 0 else 0)
-
-            if batch_size <= max_batch_size_per_dp:
-                result = [aligned_base_len] * full_count + ([remainder] if remainder > 0 else [])
-            else:
-                # Case 3: Need to distribute remainder among all requests
-                request_lens = [aligned_base_len] * max_batch_size_per_dp
-                remaining_tokens = aligned_prefill_tokens - max_batch_size_per_dp * aligned_base_len
-
-                # Distribute remaining tokens round-robin
-                alignment_size = self.cp_size * 2 if self.cp_size > 1 else 1
-                idx = 0
-                while remaining_tokens > 0:
-                    add_amount = min(alignment_size if self.cp_size > 1 else 1, remaining_tokens)
-                    request_lens[idx] += add_amount
-                    remaining_tokens -= add_amount
-                    idx = (idx + 1) % max_batch_size_per_dp
-                result = request_lens
-
-        if do_prefix_cache_warmup:
-            result[0] = min(result[0] + self.block_size, max_len)
-        return result[:max_batch_size_per_dp]
-
-    def _update_request_for_prefix_cache(self, prefill_reqs: list[Request]):
-        if len(prefill_reqs) % self.dp_size != 0:
-            raise ValueError(
-                f"Request count ({len(prefill_reqs)}) must be divisible by dp_size ({self.dp_size})"
-            )
-
-        request_num_per_dp = len(prefill_reqs) // self.dp_size
-        
-        if self.scp_size > 1:
-            warmup_blocks = [0] * self.scp_size
-            warmup_blocks[0] = 1
-            warmup_order = [0]
-        else:
-            warmup_blocks = 1
-            warmup_order = []
-
-        for dp_rank in range(self.dp_size):
-            req = prefill_reqs[dp_rank * request_num_per_dp]
-            req.computed_blocks = warmup_blocks
-            req.remote_computed_blocks = warmup_blocks
-            req.computed_block_order = warmup_order

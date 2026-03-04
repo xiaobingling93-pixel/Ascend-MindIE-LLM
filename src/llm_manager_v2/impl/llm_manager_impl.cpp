@@ -562,44 +562,21 @@ static bool CheckEngineConfig(EngineConfig &engineConfig)
 
 static void UpdateEngineConfig(EngineConfig &engineConfig)
 {
-    auto &deployParam = engineConfig.modelDeployParam[0];
-
+    auto it = engineConfig.modelDeployParam[0].modelConfig.find("cp");
+    uint32_t maxSeqLen = engineConfig.modelDeployParam[0].maxSeqLen;
     uint32_t cpSize = 1;
-    const auto it = deployParam.modelConfig.find("cp");
-    if (it != deployParam.modelConfig.end()) {
-        // cpSize has been checked in model_deploy_config.cpp. It can be safely assigned here.
+    if (it != engineConfig.modelDeployParam[0].modelConfig.end()) {
+        // cpSize has been checked in model_deploy_config.cpp.
+        // It can be safely assigned here.
         cpSize = static_cast<uint32_t>(std::stoi(it->second));
     }
-    
-    const bool isCpEnabled = (cpSize > 1);
-    const uint32_t loadBalanceCpSize = cpSize * 2;
-
-    uint32_t maxSeqLen = deployParam.maxSeqLen;
-    if (isCpEnabled && (maxSeqLen % loadBalanceCpSize != 0)) {
-        const uint32_t base = maxSeqLen / loadBalanceCpSize;
-        maxSeqLen = (base + 1) * loadBalanceCpSize;
-        MINDIE_LLM_LOG_INFO("CP enabled: maxSeqLen increased to multiple of 2 * cpsize. " <<
-                            "New value: " << maxSeqLen);
+    uint32_t loadBalanceCpSize = cpSize * 2;
+    if (cpSize > 1 && (maxSeqLen % loadBalanceCpSize != 0)) {
+        uint32_t base = maxSeqLen / loadBalanceCpSize;
+        engineConfig.modelDeployParam[0].maxSeqLen = (base + 1) * loadBalanceCpSize;
+        MINDIE_LLM_LOG_INFO("CP is enabled, maxSeqLen has been increased to the multiple of 4." <<
+            " maxSeqLen after cp pad: " << engineConfig.modelDeployParam[0].maxSeqLen);
     }
-    
-    const uint32_t maxLen = std::min(maxSeqLen, deployParam.maxInputTokenLen + engineConfig.maxIterTimes);
-    uint32_t maxPrefillTokens = engineConfig.maxPrefillTokens;
-    
-    if ((maxPrefillTokens < maxLen) && !engineConfig.enableSplit) {
-        maxPrefillTokens = maxLen;
-        MINDIE_LLM_LOG_INFO("maxPrefillTokens is smaller than maxLen. It will be replaced by maxLen. " <<
-                            "maxLen = min(maxSeqLen, maxInputTokenLen + maxIterTimes)");
-    }
-
-    if (isCpEnabled && (maxPrefillTokens % loadBalanceCpSize != 0)) {
-        const uint32_t base = maxPrefillTokens / loadBalanceCpSize;
-        maxPrefillTokens = (base + 1) * loadBalanceCpSize;
-        MINDIE_LLM_LOG_INFO("CP enabled: maxPrefillTokens increased to multiple of 2 * cpsize. " <<
-                            "New value: " << maxPrefillTokens);
-    }
-    
-    engineConfig.maxPrefillTokens = maxPrefillTokens;
-    deployParam.maxSeqLen = maxSeqLen;
 }
 
 static void InitScheduleConfig(EngineConfig &engineConfig, const ScheduleConfig &scheduleConfig, bool enableSplit,
@@ -924,7 +901,6 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
 {
     LLMSetModelParam(modelConfig, modelParam);
     modelConfig["max_prefill_tokens"] = std::to_string(engineConfig.maxPrefillTokens);
-    modelConfig["max_prefill_batch_size"] = std::to_string(engineConfig.maxPrefillBatchSize);
     modelConfig["deploy_type"] = engineConfig.deployType;
     modelConfig["executor_type"] = engineConfig.executorType;
     modelConfig["max_iter_times"] = std::to_string(engineConfig.maxIterTimes);
@@ -951,7 +927,9 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
     LLMSetMultiNodeConfig(modelConfig, engineConfig);
     std::string slaveIPs;
     if (!engineConfig.slaveIPs.empty()) {
-        for (auto &ip : engineConfig.slaveIPs) { slaveIPs += ip + ","; }
+        for (auto &ip : engineConfig.slaveIPs) {
+            slaveIPs += ip + ",";
+        }
         slaveIPs.pop_back();
     }
     modelConfig["slaveIPs"] = slaveIPs;

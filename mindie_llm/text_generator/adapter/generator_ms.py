@@ -115,3 +115,25 @@ class GeneratorMS(GeneratorBackend):
 
     def swap_cache(self, swap_decision):
         self.model_wrapper.swap_cache(swap_decision)
+
+    def _warm_up(self, model_inputs, **kwargs):
+        # warm up prefill
+        _ = self.forward(model_inputs)
+        ms.hal.synchronize()
+        is_speculative_decoding = self.plugin_type in {"memory_decoding", "prefix_cache", "la"}
+        model_inputs = ModelInput(input_ids=np.array([[1]], np.int64),
+                                  position_ids=np.array([1]) if is_speculative_decoding else None,
+                                  block_tables=np.array([[0]], np.int32),
+                                  slots=np.array([0], np.int32),
+                                  context_length=[1],
+                                  cached_context_length=[1],
+                                  max_seq_len=0,
+                                  prefill_head_indices=None,
+                                  is_prefill=False)
+        kwargs = {
+            'q_lens': 1,
+            'spec_mask': np.zeros((1, 1 if self.plugin_type == 'la' else 2049))
+        } if is_speculative_decoding is True else {}
+        # warm up decode
+        _ = self.forward(model_inputs, **kwargs)
+        ms.hal.synchronize()

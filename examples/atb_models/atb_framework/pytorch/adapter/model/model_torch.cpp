@@ -319,7 +319,6 @@ int64_t ModelTorch::UpdateWeightsPtr(std::vector<torch::Tensor> atWeightTensors,
 void ModelTorch::ClearInternalTensors() const
 {
     atInternalTensors_.clear();
-    model_->ClearInternalTensors();
 }
 
 

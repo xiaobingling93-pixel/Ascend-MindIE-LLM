@@ -7,34 +7,15 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
-
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-
+from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
-from mindie_llm.modeling.backend_type import BackendType
-from mindie_llm.utils.log import ErrorCode, logger
-
-
-if TYPE_CHECKING:
-    from mindie_llm.text_generator.plugins.plugin_utils import InferenceMode
-
-
-SAMPLING_PARAMS_DTYPE = "f4"
-SAMPLING_DTYPE = [
-    ("repetition_penalty", SAMPLING_PARAMS_DTYPE),
-    ("frequency_penalty", SAMPLING_PARAMS_DTYPE),
-    ("presence_penalty", SAMPLING_PARAMS_DTYPE),
-    ("temperature", SAMPLING_PARAMS_DTYPE),
-    ("top_k", SAMPLING_PARAMS_DTYPE),
-    ("top_p", SAMPLING_PARAMS_DTYPE),
-    ("do_sample", SAMPLING_PARAMS_DTYPE),
-    ("top_logprobs", SAMPLING_PARAMS_DTYPE),
-]
+from ..plugins import InferenceMode
+from ...modeling.backend_type import BackendType
+from ...utils.log.error_code import ErrorCode
+from ...utils.log.logging import logger
 
 DEFAULT_SAMPLING_PARAMS = {
     "repetition_penalty": 1.0,
@@ -331,7 +312,6 @@ class CacheConfig:
 
 
 class ResponseConfig(int, Enum):
-    CONTINUE = 0
     EOS = 1
     STOP_STRINGS = 2
     STOP_TOKEN_IDS = 3

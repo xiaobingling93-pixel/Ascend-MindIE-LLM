@@ -7,10 +7,13 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
+import numpy as np
 
 from ...utils.model_input import ModelInput
 from ...utils.input_metadata import InputMetadata
+from ...utils.sampling_metadata import SamplingMetadata
 from ....utils.decorators.time_decorator import timer
+from ....utils.log.logging import logger
 from ....utils.env import ENV
 from ....modeling.backend_type import BackendType
 
@@ -28,13 +31,7 @@ class SplitFusePreprocess:
             self.is_300i = self.model_wrapper.model_runner.soc_info.is_300i()
         self.async_inference = self.infer_context.context_params.async_infer
 
-    def make_attention_mask(
-        self,
-        model_inputs: ModelInput,
-        input_metadata: InputMetadata,
-        q_lens,
-        hit_mask=None
-    ):
+    def make_attention_mask(self, model_inputs, input_metadata, q_lens, hit_mask=None):
         req_mask = None
         if ENV.framework_backend == BackendType.MS:
             return req_mask
@@ -44,7 +41,7 @@ class SplitFusePreprocess:
                 batch_size = len(q_lens)
                 kv_dtype = self.kvcache_settings.dtype
                 atten_mask = self.model_wrapper.model_runner.attn_mask.get_attn_mask(model_inputs.max_seq_len,
-                                                                                     kv_dtype, kv_device)
+                                                                                    kv_dtype, kv_device)
                 if model_inputs.max_seq_len > 1 and atten_mask[0][1] > 0:
                     atten_mask = atten_mask * -10000.0
                 req_mask_list = []
@@ -65,12 +62,12 @@ class SplitFusePreprocess:
         return req_mask
 
     @timer.track_time('preprocess')
-    def splitfuse_preprocess(self, input_metadata: InputMetadata, warmup=False, hit_mask=None):
+    def splitfuse_preprocess(self, input_metadata, hit_mask=None):
 
         cache_ids = self.infer_context.get_batch_context_handles(input_metadata)
 
         model_inputs, sampling_metadata, q_len, trace_ids = \
-            self.infer_context.splitfuse_concatenate(input_metadata, cache_ids, warmup=warmup, hit_mask=hit_mask)
+            self.infer_context.splitfuse_concatenate(input_metadata, cache_ids, hit_mask=hit_mask)
         attention_mask = self.make_attention_mask(model_inputs, input_metadata, q_len, hit_mask=hit_mask)
         res = (model_inputs, cache_ids, sampling_metadata, q_len, attention_mask, trace_ids)
         return res

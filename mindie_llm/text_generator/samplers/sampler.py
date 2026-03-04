@@ -12,8 +12,7 @@ from typing import Any, List
 
 import numpy as np
 
-from .logits_handlers import get_handler_registry
-from .logits_handlers.logits_handler import LogitsHandlerList
+from .logits_handlers import LogitsHandlerList, get_handler_registry
 from .sampler_params import HandlerParams, SelectorParams
 from .token_selectors import get_selector_registry
 from ..utils.config import SamplerConfig, HandlingBackend
