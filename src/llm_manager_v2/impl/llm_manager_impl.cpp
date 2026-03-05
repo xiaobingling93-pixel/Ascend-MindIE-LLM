@@ -1101,8 +1101,16 @@ static void InitLayerwiseDisaggregated(SchedulerConfig &schedulerConfig)
     }
 }
 
+static void InitThinkingConfig(SchedulerConfig &schedulerConfig, ThinkingConfig &thinkingConfig)
+{
+    schedulerConfig.earlyStoppingIds = thinkingConfig.earlyStoppingIds;
+    schedulerConfig.startThinkingId = thinkingConfig.startThinkingId;
+    schedulerConfig.stopThinkingId = thinkingConfig.stopThinkingId;
+}
+
 static void LLMInitSchedulerConfig(SchedulerConfig &schedulerConfig, BlockNum blockNum,
-                                   const EngineConfig &engineConfig, const std::map<std::string, std::string> &ipInfo)
+                                   const EngineConfig &engineConfig,
+                                   const std::map<std::string, std::string> &ipInfo, ThinkingConfig &thinkingConfig)
 {
     InitDeviceAndInstanceConfig(schedulerConfig, engineConfig, ipInfo);
     InitPolicyConfig(schedulerConfig, engineConfig);
@@ -1115,6 +1123,7 @@ static void LLMInitSchedulerConfig(SchedulerConfig &schedulerConfig, BlockNum bl
     InitBufferResponseConfig(schedulerConfig, engineConfig);
     InitLayerwiseDisaggregated(schedulerConfig);
     InitKvPoolConfig(schedulerConfig, engineConfig);
+    InitThinkingConfig(schedulerConfig, thinkingConfig);
 }
 
 static void LlmSetLoraConfig(const std::map<std::string, std::string> &loraModules,
@@ -1187,6 +1196,11 @@ BlockNum LlmManagerImpl::GetMinBlockNumFromExecutors()
     return blockNum;
 }
 
+ThinkingConfig LlmManagerImpl::GetThinkingConfigFromExecutors()
+{
+    return iExecutorSPtrs_.front()->GetThinkingConfig();
+}
+
 Status LlmManagerImpl::LaunchLlmEngine(Role pdRole)
 {
     if (iExecutorSPtrs_.size() == 0) {
@@ -1201,9 +1215,9 @@ Status LlmManagerImpl::LaunchLlmEngine(Role pdRole)
     }
 
     BlockNum blockNum = GetMinBlockNumFromExecutors();
-
+    ThinkingConfig thinkingConfig = GetThinkingConfigFromExecutors();
     SchedulerConfig schedulerConfig;
-    LLMInitSchedulerConfig(schedulerConfig, blockNum, engineConfig_, ipInfo_);
+    LLMInitSchedulerConfig(schedulerConfig, blockNum, engineConfig_, ipInfo_, thinkingConfig);
     if (schedulerConfig.layerwiseDisaggregated && schedulerConfig.cpSize * schedulerConfig.spSize > 1) {
         schedulerConfig.lwdCloudNpuBlockNum = iExecutorSPtrs_.front()->GetLwdCloudNpuBlockNum();
     }

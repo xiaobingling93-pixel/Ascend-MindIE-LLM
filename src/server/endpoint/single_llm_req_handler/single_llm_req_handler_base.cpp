@@ -29,7 +29,7 @@ void SingleLLMReqHandlerBase::SetConstructOneResponseCallBack(
 
 void SingleLLMReqHandlerBase::SetDMIReComputeBuildCallBack(const DMIReComputeBuildMethod &reComputeBuildMethod)
 {
-    this->dmiReCompBuildMeothd_ = reComputeBuildMethod;
+    this->dmiReCompBuildMethod_ = reComputeBuildMethod;
 }
 
 void SingleLLMReqHandlerBase::SetStreamMode(bool streamMode) { streamMode_ = streamMode; }
@@ -147,11 +147,7 @@ bool SingleLLMReqHandlerBase::ParseOutLogprobFromResponse(const ResponseSPtr &re
                                                           std::vector<BestNTokens> &postToken) const
 {
     for (size_t i = 0; i < response->responseContents.size(); i++) {
-        // i think there was a bug in the old design, where only 1 outLogProb was picked from InferTensor
-        // while outLogProbs actually has a dimension of (seqCount, tokenNum)
-        // we decide to temporarily retain such design and fix it later.
-        // otherwise it would require significant efforts due to its impact on subsequent modules like xxx_infer
-        postToken.at(i).logprob = response->responseContents[i].outLogProbs.at(0);
+        postToken.at(i).logprob = response->responseContents[i].outLogProbs;
     }
     return true;
 }
@@ -164,16 +160,18 @@ bool SingleLLMReqHandlerBase::ParseTopLogProbsFromResponse(const ResponseSPtr &r
         const ResponseContent &content = response->responseContents[i];
 
         // Sanity check for consistent vector sizes
-        if (content.topLogProbTokenIds.size() != topLogprobs) {
+        if (content.topLogProbTokenIds.size() != topLogprobs * content.speculativeTokenNum) {
             std::stringstream ss;
             ss << "content.topLogProbTokenIds.size()=" << content.topLogProbTokenIds.size()
-               << " does not match topLogprobs=" << topLogprobs;
+               << " does not match topLogprobs * content.speculativeTokenNum ="
+               << topLogprobs * content.speculativeTokenNum;
             throw std::logic_error(ss.str());
         }
-        if (content.topLogProbs.size() != topLogprobs) {
+        if (content.topLogProbs.size() != topLogprobs * content.speculativeTokenNum) {
             std::stringstream ss;
             ss << "content.topLogProbs.size()=" << content.topLogProbs.size()
-               << " does not match topLogprobs=" << topLogprobs;
+               << " does not match topLogprobs * content.speculativeTokenNum ="
+               << topLogprobs * content.speculativeTokenNum;
             throw std::logic_error(ss.str());
         }
 
@@ -375,6 +373,8 @@ void SingleLLMReqHandlerBase::DumpInferParam(const RequestSPtr request)
     setParam("temperature", request->temperature);
     setParam("top_k", request->topK);
     setParam("top_p", request->topP);
+    setParam("enable_thinking", request->enableThinking);
+    setParam("thinking_budget", request->thinkingBudget);
     setParam("typical_p", request->typicalP);
     setParam("do_sample", request->doSample);
     setParam("seed", request->seed);

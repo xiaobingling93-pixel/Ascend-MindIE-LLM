@@ -134,7 +134,7 @@ class TestRouterImpl(unittest.TestCase):
         mock_config.tp_size = 2
         mock_config.dp_size = 2
         mock_config.cache_block_size = 64
-        mock_config.model_weight_path = "/mock/path/weights"
+        mock_config.model_weight_path = None
         mock_config.model_config = {
             "model_weight_path": "/mock/path/weights",
             "other_param": "test_value"
@@ -173,7 +173,7 @@ class TestRouterImpl(unittest.TestCase):
             self.router.initialize(mock_config)
             self.assertGreater(len(log.output), 0)
             self.assertIn("WARN:llm:[MIE04E13030A]", log.output[0])
-            self.assertIn("from model(/mock/path/weights)", log.output[0])
+            self.assertIn("from model(None)", log.output[0])
 
         # Test DP scenario
         mock_mapping.has_dp = Mock(return_value=True)
@@ -552,7 +552,7 @@ class TestRouterImpl(unittest.TestCase):
             mock_config.model_config = {"model_weight_path": "/test"}
             mock_config.local_rank = 0
             mock_config.npu_device_id = 0
-
+            mock_config.model_weight_path = None
             mock_generator = mock_generator_cls.return_value
             mock_generator.is_mix_model = False
             mock_generator.max_position_embeddings = 2048

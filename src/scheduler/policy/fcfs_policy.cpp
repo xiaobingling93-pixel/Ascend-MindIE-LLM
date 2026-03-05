@@ -340,6 +340,24 @@ void FcfsPolicy::ScheduleRunningSeqGroup(const SequenceGroupSPtr &seqGroup, size
     budget.AddNumSeqs(seqGroup->requestId, seqGroup->GetMaxNumRunningSeqs());
 }
 
+void FcfsPolicy::UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup)
+{
+    std::vector<TokenId> &earlyStoppingIds = schedulerConfig_->earlyStoppingIds;
+    std::vector<SequenceSPtr> runningSeqs = seqGroup->GetSequences(SequenceStatus::RUNNING);
+    for (auto &seq : runningSeqs) {
+        std::vector<TokenId> &outputTokenIds = seq->data_.outputTokenIds;
+        auto it = std::find_if(outputTokenIds.rbegin(), outputTokenIds.rend(),
+            [](int val) { return val != PLACEHOLDER_TOKEN; });
+        outputTokenIds.erase(it.base(), outputTokenIds.end());
+        outputTokenIds.insert(outputTokenIds.end(), earlyStoppingIds.begin(), earlyStoppingIds.end());
+    }
+    seqGroup->exceededThinkingbudget_ = false;
+    seqGroup->isThinking_ = false;
+    seqGroup->thinkingTokens = 0;
+
+    PreemptByRecompute(seqGroup);
+}
+
 RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const bool enableChunking)
 {
     RunningOutputs runningOutput;
@@ -386,6 +404,11 @@ RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const b
 
         // 4. append slot and update budget
         if (canAppend) {
+            if (seqGroup->enableThinking_ && seqGroup->thinkingBudget_ > 0 && seqGroup->exceededThinkingbudget_) {
+                UpdateStatusForRecompute(seqGroup);
+                runningOutput.preempted_.emplace_back(seqGroup);
+                continue;
+            }
             ScheduleRunningSeqGroup(seqGroup, numUncachedNewTokens, enableChunking, runningOutput, budget);
         }
     }

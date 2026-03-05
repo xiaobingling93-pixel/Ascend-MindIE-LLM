@@ -12,8 +12,10 @@ import math
 import os
 import threading
 import copy
+import json
 import numpy as np
 
+from transformers import AutoTokenizer
 from mindie_llm.connector.common import send_model_execute_response, send_transfer_response, send_command_response
 from mindie_llm.connector.common.response_builder import ExecuteResponseBuilder
 from mindie_llm.connector.common.input_metadata_builder import (
@@ -39,6 +41,7 @@ from mindie_llm.model_wrapper.utils.config import DmiConfig
 from mindie_llm.model_wrapper.utils.error import ModelWrapperErrorCode
 from mindie_llm.model_wrapper.utils.metrics import FileMetrics
 from mindie_llm.model_wrapper.utils.npu_compile import set_npu_compile_mode
+from mindie_llm.runtime.utils.helpers.safety.hf import safe_get_config_dict
 from mindie_llm.text_generator.generator import Generator
 from mindie_llm.utils.status import MindieLlmStatusCode
 
@@ -54,6 +57,7 @@ SRC_BLOCK_TABLE_KEY = "src_block_tables"
 DST_BLOCK_TABLE_KEY = "dst_block_tables"
 REQ_INDEX = "request_index"
 MAX_SEQUENCE_IDS_FOR_CPP = 120  # 超过此数量使用C++构建响应
+MAX_EARLY_STOP_TEXT_LEN = 1024
 
 
 def _print_component_error_log(e: BaseException):
@@ -124,6 +128,23 @@ class RouterImpl:
         self.layerwise_disaggregated = False
 
     @staticmethod
+    def parse_early_stopping_text(model_config):
+        early_stopping_text = ''
+        if not hasattr(model_config, "model_weight_path") or model_config.model_weight_path is None:
+            return early_stopping_text
+        model_config_dict = {**model_config.model_config}
+        config_dict = safe_get_config_dict(model_config.model_weight_path)
+        model_type = config_dict['model_type'].lower()
+        if 'models' in model_config_dict:
+            json_obj = json.loads(model_config_dict['models'])
+            if model_type in json_obj and 'early_stopping_text' in json_obj[model_type]:
+                early_stopping_text = json_obj[model_type]['early_stopping_text']
+        if len(early_stopping_text) > MAX_EARLY_STOP_TEXT_LEN or len(early_stopping_text) == 0:
+            logger.warning("The length range of early_stopping_text is [1, 1024]")
+            return ''
+        return early_stopping_text
+
+    @staticmethod
     def check_output(generate_output):
         if generate_output.token_ids is None or generate_output.eos_info is None:
             logger.error("[MIE04E13030A] Token_ids or eos_info is none")
@@ -168,7 +189,7 @@ class RouterImpl:
             id_to_block_table_map[inst_id][REQ_INDEX].append(index)
             start_src += segment_len
             start_dst += valid_block_num
-
+        
     def initialize(self, model_config: DmiConfig) -> dict:
         self.config = model_config
         self.max_seq_len = model_config.max_seq_len
@@ -213,6 +234,16 @@ class RouterImpl:
             "maxPositionEmbeddings": str(self.generator.max_position_embeddings),
         }
         initialize_result["memPoolId"] = "-1"
+        early_stopping_text = RouterImpl.parse_early_stopping_text(model_config)
+        if len(early_stopping_text) > 0:
+            tokenizer = AutoTokenizer.from_pretrained(model_config.model_weight_path, local_files_only=True,
+                                                    trust_remote_code=model_config.trust_remote_code)
+            early_stopping_ids = tokenizer(early_stopping_text, return_attention_mask=False).input_ids
+            start_thinking_id = tokenizer.convert_tokens_to_ids("<think>")
+            stop_thinking_id = tokenizer.convert_tokens_to_ids("</think>")
+            initialize_result["startThinkingId"] = str(start_thinking_id)
+            initialize_result["stopThinkingId"] = str(stop_thinking_id)
+            initialize_result["earlyStoppingIds"] = str(early_stopping_ids)[1:-1]
 
         logger.info("model init success, parent pid=%s, pid=%s, device_id=%s, global_rank_id=%s, local_rank_id=%s",
                     os.getppid(), os.getpid(), self.config.npu_device_id, self.rank, self.config.local_rank)

@@ -435,7 +435,7 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
         params.add_blocktable(block);
     }
     PROF(prof.NumArrayAttr("blocktable", blockTable.begin(), blockTable.end()));
-
+    params.mutable_samplingparams()->mutable_isthinking()->set_value(response->responseContents[0].isThinking);
     std::vector<uint64_t> dpInstanceIds = {
         static_cast<unsigned int>(response->responseContents[0].singleLLMPrefillReqHandlerId)};
     for (uint64_t dpId : dpInstanceIds) {
@@ -540,6 +540,9 @@ void SingleLLMPrefillReqHandler::BuildSamplingParametersNext(DecodeParameters& p
     }
     if (inferParam_->enableThinking.has_value()) {
         params.mutable_samplingparams()->mutable_enablethinking()->set_value(inferParam_->enableThinking.value());
+    }
+    if (request_->thinkingBudget.has_value()) {
+        params.mutable_samplingparams()->mutable_thinkingbudget()->set_value(request_->thinkingBudget.value());
     }
 }
 

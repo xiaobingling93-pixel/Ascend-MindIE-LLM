@@ -148,6 +148,13 @@ void SingleLLMDecodeReqHandler::GetContextSamplingParamsNext(InferParamSPtr inpu
     }
     if (samplingParams.enablethinking().has_value()) {
         inputParam->enableThinking = samplingParams.enablethinking().value();
+        request->enableThinking = samplingParams.enablethinking().value();
+    }
+    if (samplingParams.thinkingbudget().has_value()) {
+        request->thinkingBudget = samplingParams.thinkingbudget().value();
+    }
+    if (samplingParams.isthinking().has_value()) {
+        request->isThinking = samplingParams.isthinking().value();
     }
 }
 
@@ -320,7 +327,7 @@ void SingleLLMDecodeReqHandler::SetBackManagerCallBack(RequestSPtr request)
         // 场景2 重计算场景
         if (response->transferStatusFlag == TransferStatusType::RECOMPUTED_TRIGGERED) {
             ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Do recompute. requestId: " << self->reqId_);
-            if (!self->dmiReCompBuildMeothd_) {
+            if (!self->dmiReCompBuildMethod_) {
                 ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
                     CHECK_ERROR), "Recompute is not supported. requestId: " << self->reqId_);
                 self->SendDError("Try to do recompute but it is not supported.");
@@ -328,7 +335,7 @@ void SingleLLMDecodeReqHandler::SetBackManagerCallBack(RequestSPtr request)
                 self->constructOneResponseCallBack_ = nullptr;
                 return;
             }
-            std::string reCompBody = self->dmiReCompBuildMeothd_(self->respTokens_);
+            std::string reCompBody = self->dmiReCompBuildMethod_(self->respTokens_);
             self->ResponseReCompute(reCompBody);
             self->isFinish_.store(true);
             self->constructOneResponseCallBack_ = nullptr;

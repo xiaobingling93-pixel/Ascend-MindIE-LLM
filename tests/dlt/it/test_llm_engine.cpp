@@ -103,6 +103,11 @@ public:
     {
         return true;
     }
+    ThinkingConfig GetThinkingConfig() const override
+    {
+        ThinkingConfig conf;
+        return conf;
+    }
     bool AsyncExecuteModel(ExecuteModelRequestPtr &modelExecRequest,
                            std::function<void(ModelBatchResultSPtr)> callback = nullptr) override
     {
@@ -124,6 +129,7 @@ public:
     {
         return true;
     }
+
     bool ExecutorInstanceFinalize() override { return true; }
     uint32_t GetCpuBlockNum() const override { return 1; }
     uint32_t GetNpuBlockNum() const override { return 1; }
