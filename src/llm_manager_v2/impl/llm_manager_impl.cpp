@@ -246,7 +246,7 @@ bool AddFailedLinkToReq(RequestSPtr &runtimeRequest, const PDLinkResponse &respo
 namespace mindie_llm {
 uint32_t g_vocabSizeConfig = 0;
 int32_t g_maxTopKConfig = 0;
-bool g_truncation = false;
+int32_t g_truncation = 0;
 uint32_t g_maxPositionEmbeddings = 1;
 uint32_t g_maxSeqLen = 1;
 uint32_t g_maxInputTokenLen = 1;
@@ -426,7 +426,7 @@ static void SetModelParams(ModelDeployConfig &modelDeployParam)
     g_modelParams["worldSize"] = std::to_string(modelDeployParam.worldSize);
     g_modelParams["modelWeightPath"] = modelDeployParam.modelWeightPath;
     g_modelParams["modelInstanceType"] = modelDeployParam.modelInstanceType;
-    if (g_truncation) {
+    if (g_truncation != 0) {
         g_truncLen = std::min(modelDeployParam.maxInputTokenLen, modelDeployParam.maxSeqLen - 1);
     }
     MINDIE_LLM_LOG_INFO("InitModelConfig: maxSeqLen=" << modelDeployParam.maxSeqLen
@@ -1515,7 +1515,7 @@ Status LlmManagerImpl::ProccessReqInputIds(RequestSPtr &request) const
         return ret;
     }
 
-    if (g_truncation && request->input_ids.size() > g_truncLen) {
+    if (g_truncation != 0 && request->input_ids.size() > g_truncLen) {
         request->input_ids.resize(g_truncLen);
     }
 
@@ -1527,7 +1527,7 @@ Status LlmManagerImpl::ProccessReqInputIds(RequestSPtr &request) const
         maxInputTokenSize = g_maxInputTokenLen < g_maxSeqLen ? g_maxInputTokenLen : g_maxSeqLen - 1;
     }
 
-    if (!g_truncation) {
+    if (g_truncation == 0) {
         ret = VerifyInputTokenSize(inputTokenSize, maxInputTokenSize);
         if (!ret.IsOk()) {
             return ret;

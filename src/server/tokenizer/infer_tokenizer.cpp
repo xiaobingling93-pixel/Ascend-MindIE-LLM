@@ -88,8 +88,17 @@ void InferTokenizer::EncodeToken(std::string &prompt, std::vector<int64_t> &toke
         if (inputText.length() < prompt.length()) {
             // ULOG has been disabled in subprocess
         }
+        auto modelDeployParam = GetModelDeployConfig();
+        if (modelDeployParam.empty()) {
+            ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, INIT_ERROR),
+                       "modelDeployParam is empty, please provide model deployment parameter in conf/config.json");
+            return;
+        }
+        pybind11::dict kwargs;
 
-        pybind11::list originalTokenIds = autoTokenizer->attr("encode")(inputText);
+        kwargs["truncation"] = modelDeployParam[0].truncation;
+        kwargs["max_length"] = std::min(modelDeployParam[0].maxInputTokenLen, modelDeployParam[0].maxSeqLen - 1);
+        pybind11::list originalTokenIds = autoTokenizer->attr("encode")(inputText, kwargs);
         ProcessTokenIds(originalTokenIds, tokenIds);
     } catch (const std::exception &e) {
         // ULOG has been disabled in subprocess
@@ -106,12 +115,19 @@ void InferTokenizer::EncodeChatToken(std::string &prompt, std::optional<bool> en
         if (inputText.length() < prompt.length()) {
             // ULOG has been disabled in subprocess
         }
-
+        
+        auto modelDeployParam = GetModelDeployConfig();
+        if (modelDeployParam.empty()) {
+            ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, INIT_ERROR),
+                       "modelDeployParam is empty, please provide model deployment parameter in conf/config.json");
+            return;
+        }
         pybind11::dict kwargs;
+        kwargs["truncation"] = modelDeployParam[0].truncation;
+        kwargs["max_length"] = std::min(modelDeployParam[0].maxInputTokenLen, modelDeployParam[0].maxSeqLen - 1);
         if (enableThinking.has_value()) {
             kwargs["enable_thinking"] = enableThinking.value();
         }
-
         pybind11::list originalTokenIds = autoTokenizer->attr("encode_chat")(inputText, kwargs);
         ProcessTokenIds(originalTokenIds, tokenIds);
     } catch (const std::exception &e) {
@@ -386,7 +402,6 @@ bool TokenizerProcessPool::InitTokenizerPool()
 bool TokenizerProcessPool::InitProcesses()
 {
     std::vector<pid_t> pids;
-
     if (!CreateChildProcesses(pids)) {
         return false;
     }
@@ -1202,7 +1217,6 @@ bool TokenizerProcessPool::ProcessWorker(std::shared_ptr<ShareTokenMemory> shm)
 
     header->sems.step = detail::E_SEM_STEP_START_SUCC;
     sem_post(&header->sems.subInitialized);
-
     while (header->magic == MAGIC_HEAD_BEGIN) {
         header->sems.step = detail::E_SEM_STEP_RUN;
         sem_wait(&header->sems.consume);
@@ -1222,6 +1236,7 @@ bool TokenizerProcessPool::ProcessWorker(std::shared_ptr<ShareTokenMemory> shm)
         header->sems.state = detail::E_SEM_STATE_PRE_FREE;
         sem_post(&header->sems.produce);
     }
+    
     killpg(getpgrp(), SIGTERM);
 
     return true;
