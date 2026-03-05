@@ -70,7 +70,11 @@ MindIE\_LLM相关环境变量请参考**表3**。
 |LOCAL_RANK|指示Device的本地ID。|[0, ${WORLD_SIZE} - 1]|0|
 |MIES_USE_MB_SWAPPER|高性能Swap开关。|0：不开启<br>1：开启|0|
 |MINDIE_CHECK_INPUTFILES_PERMISSION|是否需要检验外部文件的权限信息，包括文件所有者和其他人对文件的写权限。|0：不需要检验外部文件的权限信息<br>其他值或None：需要检验外部文件的权限信息。|None|
+<<<<<<< HEAD
+|MINDIE_LLM_BENCHMARK_ENABLE|是否开启MindIE LLM模块的Benchmark功能，开启后将会输出性能数据到指定文件路径。|0：不开启<br>1：开启|0|
+=======
 |MINDIE_LLM_BENCHMARK_ENABLE|是否开启MindIE LLM模块的Benchmark功能，开启后将会输出性能数据到请求响应体(指定路径时，还输出到指定文件路径)。|1：开启同步模式<br>2：开启异步模式<br>其他值或None：不开启|None|
+>>>>>>> upstream/dev
 |MINDIE_LLM_BENCHMARK_FILEPATH|指定MindIE LLM模块的Benchmark功能输出的性能数据文件路径。|N/A|"{MINDIE_LLM_HOME_PATH}/logs/benchmark.jsonl"|
 |MINDIE_LLM_BENCHMARK_RESERVING_RATIO|当性能数据文件超过最大文件大小限制时，旧数据会被新数据覆盖。此环境变量指定保留旧数据的比例，默认为0.1。|[0.0, 1.0]|0.1|
 |MINDIE_LLM_FRAMEWORK_BACKEND|MindIE LLM框架后端类型，当前可选值为"atb"（ATB，默认值）和"ms"（MindSpore）。|ATB<br>MS（不区分大小写）|ATB|

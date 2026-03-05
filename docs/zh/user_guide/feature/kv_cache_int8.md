@@ -44,7 +44,7 @@ KV Cache int8搭配W8A8量化后权重目录结构：
 和W8A8量化权重相比，新增kv\_cache\_type描述字段，新增kv linear激活值量化缩放因子权重文件kv\_cache\_scale和kv linear激活值量化偏移值权重文件kv\_cache\_offset。推理时会基于这两个权重，推导出k\_quant\_scale，k\_dequant\_scale，v\_quant\_scale，v\_dequant\_scale，k\_quant\_offset，k\_dequant\_offset，v\_quant\_offset和v\_dequant\_offset。其中quant\_scale和quant\_offset用于将k和v特征量化为int8类型，dequant\_scale和dequant\_offset用于将Paged attention的输出反量化为浮点类型。
 
 **图 1**  量化权重推理时流程<a name="fig792521919554"></a>  
-![](../../figures/kv_cache_int8.png "量化权重推理时流程-4")
+![](./figures/kv_cache_int8.png "量化权重推理时流程-4")
 
 **表 1**  float16权重量化后dtype及shape信息（假设原始权重的shape为\[n, k\]）
 

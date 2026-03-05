@@ -6,8 +6,8 @@ SplitFuse特性的目的是将长prompt request分解成更小的块，并在多
 
 当该次处理的feedforward大于splitchunk tokens时，SplitFuse会对其进行切分，解释如下所示：
 
--   每一推理轮次中：![](../../figures/formula_1_splirfuse.png)，其中：  ![](../../figures/formula_2_splirfuse.png)
--   Prefill阶段的tokens为输入token数量，Decode阶段每个请求为1token：![](../../figures/formula_3_splirfuse.png)
+-   每一推理轮次中：![](./figures/formula_1_splirfuse.png)，其中：  ![](./figures/formula_2_splirfuse.png)
+-   Prefill阶段的tokens为输入token数量，Decode阶段每个请求为1token：![](./figures/formula_3_splirfuse.png)
 
 两个关键行为：
 

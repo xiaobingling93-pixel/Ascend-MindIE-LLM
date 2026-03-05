@@ -39,7 +39,7 @@ function fn_build()
         rm -rf "$CODE_ROOT/llm_debug_symbols"
     fi
 
-    mkdir -p $OUTPUT_DIR $CACHE_DIR $BUILD_DIR
+    mkdir -p $OUTPUT_DIR $CACHE_DIR $BUILD_DIR $MINDIE_LLM_LIB_DIR
 
     if [ "$CMAKE_CXX_COMPILER_LAUNCHER" == "" ] && command -v ccache &> /dev/null;then
         COMPILE_OPTIONS="${COMPILE_OPTIONS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
@@ -54,6 +54,7 @@ function fn_build()
     fn_build_version_info
     fn_build_third_party
     fn_build_src
+    cp $OUTPUT_DIR/lib/libfoundation.so $MINDIE_LLM_LIB_DIR/foundation.so
     if [ "$build_type" = "release" ]; then
         fn_extract_debug_symbols $OUTPUT_DIR "$CODE_ROOT/llm_debug_symbols"
     fi

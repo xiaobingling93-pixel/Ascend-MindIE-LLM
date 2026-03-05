@@ -1,4 +1,5 @@
 add_subdirectory(utils)
+add_subdirectory(py_interface)
 add_subdirectory(config_manager)
 add_subdirectory(block_manager)
 add_subdirectory(engine)

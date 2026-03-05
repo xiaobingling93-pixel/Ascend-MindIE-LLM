@@ -59,7 +59,7 @@ FA3量化搭配W8A8量化后权重目录结构：
 
 **图 1**  FA3量化权重推理时流程  
 
-![](../../figures/fa3_quantization.png)
+![](./figures/fa3_quantization.png)
 
 **表 1**  float16权重量化后dtype及shape信息（假设原始权重的shape为\[n, k\]）
 

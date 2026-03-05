@@ -86,7 +86,7 @@
 压缩后的MatMul权重相比量化新增了index，压缩信息用于复原权重。
 
 **图 1**  量化权重推理时流程<a name="fig13717203714549"></a>  
-![](../../figures/w8a8sc.png "量化权重推理时流程-2")
+![](./figures/w8a8sc.png "量化权重推理时流程-2")
 
 **表 1**  float16权重量化后dtype及shape信息（假设原始权重的shape为\[n, k\]）
 

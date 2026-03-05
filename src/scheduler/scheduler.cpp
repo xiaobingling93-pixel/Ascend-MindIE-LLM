@@ -571,10 +571,8 @@ ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForPolicy(PDPriorityType pdPrio
             Dequeue(swapped_, seqGrpCollection->swapped_, maxNumForCurIter - queuedNum);
         } else if (pdPriorityType == PDPriorityType::MIX) {
             // chunked prefill需要从三个队列取数据
-            size_t queuedWaitNum = Dequeue(waiting_, seqGrpCollection->waiting_, maxNumForCurIter);
-            Assert(maxNumForCurIter >= queuedWaitNum);
-            size_t queuedRunNum = Dequeue(running_, seqGrpCollection->running_, maxNumForCurIter - queuedWaitNum);
-            Assert(maxNumForCurIter >= (queuedWaitNum + queuedRunNum));
+            size_t queuedRunNum = Dequeue(running_, seqGrpCollection->running_, maxNumForCurIter);
+            size_t queuedWaitNum = Dequeue(waiting_, seqGrpCollection->waiting_, maxNumForCurIter - queuedRunNum);
             Dequeue(swapped_, seqGrpCollection->swapped_, maxNumForCurIter - queuedWaitNum - queuedRunNum);
         }
     } else if (role_ == Role::P) {
@@ -792,6 +790,7 @@ void Scheduler::ReplacePlaceHolderWithToken(SequenceGroupSPtr seqGrpSPtr)
             seq->data_.outputTokenIds.insert(seq->data_.outputTokenIds.end(), generatedTokens.begin(),
                                              generatedTokens.end());
             predictedTokensBySeqId_.erase(seq->seqId_);
+            UpdatePromptAndOutputTokenIds(seq);
             continue;
         }
         UpdatePromptAndOutputTokenIds(seq);

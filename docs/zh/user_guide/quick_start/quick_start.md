@@ -16,7 +16,7 @@
 
     **图 1**  回显信息  <a id="figure1"></a>
     
-    ![](../figures/command_output.png "回显信息")
+    ![](./figures/command_output.png "回显信息")
 
     **表 1** Atlas A2 推理系列产品 <a id="table1"></a>
     
@@ -25,7 +25,7 @@
     |Atlas 800I A2|《Atlas A2 中心推理和训练硬件 24.1.0 NPU驱动和固件安装指南》中的“物理机安装与卸载”章节|
 
 
--   执行以下命令查看Docker是否已安装并启动。
+-   执行以下命令查看Docker是否已安装并启动。Docker的安装可参见[安装Docker](../install/source/docker_installation.md)。
 
     ```
     docker ps
@@ -80,7 +80,7 @@
            -v /usr/local/dcmi:/usr/local/dcmi:ro \
            -v /usr/local/bin/npu-smi:/usr/local/bin/npu-smi:ro \
            -v /usr/local/sbin/:/usr/local/sbin:ro \
-           -v /path-to-weights:/path-to-weights:ro \
+           -v /home/weight:/home/weight:ro \
            mindie:2.2.RC1-800I-A2-py311-openeuler24.03-lts bash
     ```
 
@@ -94,11 +94,11 @@
 
     |参数|参数说明|
     |--|--|
-    |--name|设置容器名称。|
+    |--name|表示给容器指定一个名称。<container-name>是容器的标识符，可以自行设置，且在当前系统中具有唯一性。如果不设置，Docker会自动分配一个随机名称。|
     |--device|表示映射的设备，可以挂载一个或者多个设备。需要挂载的设备如下：/dev/davinci*X*：NPU设备，X是ID号，如：davinci0。/dev/davinci_manager：davinci相关的管理设备。/dev/hisi_hdc：hdc相关管理设备。/dev/devmm_svm：内存管理相关设备。可根据以下命令查询device个数及名称方式，根据需要绑定设备，修改上面命令中的"--device=****"。ll /dev/ | grep davinci|
     |-v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro|将宿主机目录“/usr/local/Ascend/driver”挂载到容器，请根据驱动所在实际路径修改。|
     |-v /usr/local/sbin:/usr/local/sbin:ro|将宿主机工具“/usr/local/sbin/”以只读模式挂载到容器中，请根据实际情况修改。|
-    |-v /path-to-weights:/path-to-weights:ro|设定权重挂载的路径，需要根据用户的情况修改。请将权重文件和数据集文件同时放置于该路径下。|
+    |-v /home/weight:/home/weight:ro|设定权重挂载的路径，需要根据用户的情况修改。请将权重文件和数据集文件同时放置于该路径下。|
 
 
 2. 执行以下命令进入容器。
@@ -112,16 +112,29 @@
 
 ## 模型推理
 
-1. 若安装路径为默认路径，执行如下命令，进入MindIE安装目录。
+1. 执行如下命令，查询安装路径<site-packages>。
 
     ```bash
-    cd /usr/local/Ascend/mindie/latest
+    pip show mindie_llm | grep location
     ```
 
-2. 确认目录文件权限是否如下所示，若存在不匹配项，则参考以下命令修改权限。
+   若python版本是3.11，则查询到的默认安装路径为：`/usr/local/lib/python3.11/site-packages`。
+
+2. 执行如下命令，进入安装路径。
+   
+   ```
+   cd <site-packages>
+   ```
+ 
+3. 确认配置文件有640权限。
 
     ```bash
-    chmod 750 mindie-service
+    chmod 640 <site-packages>/mindie_llm/conf/config.json
+    ```
+
+    > [!NOTE]说明
+    > 若文件权限不符合要求将会导致服务启动失败。
+<!--  chmod 750 mindie-service
     chmod -R 550 mindie-service/bin
     chmod 550 mindie-service/lib
     chmod 440 mindie-service/lib/*
@@ -133,66 +146,51 @@
     chmod 750 mindie-service/conf
     chmod 640 mindie-service/conf/config.json
     chmod 700 mindie-service/security
-    chmod -R 700 mindie-service/security/*
-    ```
+    chmod -R 700 mindie-service/security/* -->
 
-    > [!NOTE]说明
-    > 若文件权限不符合要求将会导致服务启动失败。
-
-3. 设置环境变量。 <a id="step3"></a>
-
-    运行以下命令初始化各组件环境变量，并开启日志打印。
+4. 设置环境变量，开启日志打印。 <a id="step3"></a>
 
     ```
-    # 配置CANN环境，默认安装在/usr/local目录下
-    source /usr/local/Ascend/cann/set_env.sh
-    # 配置加速库环境
-    source /usr/local/Ascend/nnal/atb/set_env.sh
-    # 配置模型仓环境变量
-    source /usr/local/Ascend/atb-models/set_env.sh
-    # MindIE
-    source /usr/local/Ascend/mindie/latest/mindie-llm/set_env.sh
-    source /usr/local/Ascend/mindie/latest/mindie-service/set_env.sh
-    # 开启MindIE日志打印
-    export MINDIE_LOG_TO_STDOUT="true"
+    export MINDIE_LOG_TO_STDOUT=1
     ```
 
-4. 配置服务化参数。
+5. 配置服务化参数。
+   
     a. 进入conf目录，打开“config.json“文件。
 
-        ```
-        cd mindie-service/conf
-        vim config.json
-        ```
+    ```
+    cd mindie_llm/conf
+    vim config.json
+    ```
 
     b. 按“i”进入编辑模式，根据实际情况修改“config.json“中的配置参数。（以下已Qwen2-7B为例，需要修改的配置参数已加粗）
 
-        ```json
-        {
-            "ServerConfig" : 
-             {
-                "httpsEnabled" : false,
-              },
-            "BackendConfig" : 
+    ``` json
+
+    {
+        "ServerConfig" : 
             {
-                 "npuDeviceIds" : [[0,1,2,3]],
-                 "ModelDeployConfig" :
-                {
-                     "ModelConfig" : [
-                        {
-                          "modelName" : "qwen2-7b",
-                           "modelWeightPath" : "权重路径",
-                           "worldSize" : 4,
-                           "trustRemoteCode": false
+            "httpsEnabled" : false
+            },
+        "BackendConfig" : 
+        {
+                "npuDeviceIds" : [[0,1,2,3]],
+                "ModelDeployConfig" :
+            {
+                    "ModelConfig" : [
+                    {
+                        "modelName" : "qwen2-7b",
+                        "modelWeightPath" : "/home/weight",  
+                        "worldSize" : 4,
+                        "trustRemoteCode": false
                     }
-                    ]
-                },
-                }
+                ]
+            },
         }
+    }
+    ```
 
-        ```
-
-    如上的参数说明如下，更多“config.json“的参数说明请参考[配置参数说明（服务化）](../user_guide/user_manual/service_parameter_configuration.md)。
+    如上的参数说明如下，更多“config.json“的参数说明请参考[配置参数说明（服务化）](../user_manual/service_parameter_configuration.md)。
 
     |配置项|取值类型|取值范围|配置说明|
     |--|--|--|--|
@@ -207,48 +205,30 @@
     c. 按“Esc”，输入`:wq!`，按“Enter”保存并退出编辑。
 
 
-5.  启动服务。
+6.  启动服务。
+   
+    a. 执行如下命令，启动服务。
 
-    a.  执行如下命令，进入安装目录。
+    ```
+    mindie_llm_server
+    ```
+    b. 回显如下则说明启动成功。
 
-        ```
-        cd /usr/local/Ascend/mindie/latest/mindie-service
-        ```
+    ```
+    Daemon start success!
+    ```
 
-    b.  两种启动服务方法如下所示。
-        -   方式一（推荐）：使用后台进程方式启动服务。后台进程方式启动服务后，关闭窗口时进程也会保留。
-
-            ```
-            nohup ./bin/mindieservice_daemon > output.log 2>&1 &
-            ```
-
-            在标准输出流捕获到的文件中，打印如下信息说明启动成功。
-
-            ```
-            Daemon start success!
-            ```
-
-        -   方式二：直接启动服务。
-
-            ```
-            ./bin/mindieservice_daemon
-            ```
-
-            回显如下则说明启动成功。
-
-            ```
-            Daemon start success!
-            ```
-
+    
     > [!CAUTION]注意 
-    >-  bin目录按照安全要求，目录权限为550，没有写权限，但执行推理过程中，算子会在当前目录生成kernel\_meta文件夹，需要写权限，因此不能直接在bin启动mindieservice\_daemon。
-    >-  Ascend-cann-toolkit工具会在执行服务启动的目录下生成kernel\_meta\_temp\_xxxx目录，该目录为算子的cce文件保存目录。因此需要在当前用户拥有写权限目录下（例如Ascend-mindie-server\__\{version\}_\_linux-_\{arch\}_目录，或者用户在Ascend-mindie-server\__\{version\}_\_linux-_\{arch\}_目录下自行创建临时目录）启动推理服务。
-    >-  如需切换用户，请在切换用户后执行**rm -f /dev/shm/\***命令，删除由之前用户运行创建的共享文件。避免切换用户后，该用户没有之前用户创建的共享文件的读写权限，造成推理失败。
-    >-  标准输出流捕获到的文件output.log支持用户自定义文件和路径。
+    >- 如果安装过老版本的MindIE（默认安装路径为`/usr/local/Ascend/mindie`）,为避免搜索到老版本的库，请执行命令`mv /usr/local/Ascend/mindie /usr/local/Ascend/mindie-bak`，移除老版本安装路径下的文件。
+    >- bin目录按照安全要求，目录权限为550，没有写权限，但执行推理过程中，算子会在当前目录生成kernel\_meta文件夹，需要写权限，因此不能直接在bin启动mindieservice\_daemon。
+    >- Ascend-cann-toolkit工具会在执行服务启动的目录下生成kernel\_meta\_temp\_xxxx目录，该目录为算子的cce文件保存目录。因此需要在当前用户拥有写权限目录下（例如Ascend-mindie-server\__\{version\}_\_linux-_\{arch\}_目录，或者用户在Ascend-mindie-server\__\{version\}_\_linux-_\{arch\}_目录下自行创建临时目录）启动推理服务。
+    >- 如需切换用户，请在切换用户后执行**rm -f /dev/shm/\***命令，删除由之前用户运行创建的共享文件。避免切换用户后，该用户没有之前用户创建的共享文件的读写权限，造成推理失败。
+    >- 标准输出流捕获到的文件output.log支持用户自定义文件和路径。
 
-6.  发送请求。
+7.  发送请求。
 
-    服务化API接口请参考《MindIE Motor开发指南》中的[服务化接口](https://gitcode.com/Ascend/MindIE-Motor/blob/master/docs/zh/User_Guide/SERVICE_ORIENTED_INTERFACE/optical_user_to_network_interface.md)章节。
+    服务化API接口请参考《MindIE LLM开发指南》中的**RESTFUL API参考**章节。
 
     用户可使用HTTPS客户端（Linux curl命令，Postman工具等）发送HTTPS请求，此处以Linux curl命令为例进行说明。
 
@@ -403,17 +383,20 @@
     回显如下所示则表示执行成功：
 
     ```
-    ╒════════════╤════╤════════╤═══════╤══════╤═══════╤══════╤═══════╤═══════╤════╤═══════╤═══╤════╤═══════╤═══╤════╤═══════╤═══╤════╤═══════╤═══╤
+
     │ Performance Parameters │ Stage  │ Average        │ Min          │ Max        │ Median       │ P75        │ P90          │ P99          │ N │ 
     │ E2EL                   │total   │ 2048.2945  ms  │ 1729.7498 ms │ 3450.96 ms │ 2491.8789 ms │ 2750.85 ms │ 3184.9186 ms │ 3424.4354 ms │ 8 │
-    │ TTFT                   │total   │ 50.332 ms      │ 50.6244 ms   │ 52.0585 ms │ 50.3237 ms   │ 50.5872 ms │ 50.7566 ms   │ 50 .0551 ms  │ 8 │
+    │ TTFT                   │total   │ 50.332 ms      │ 50.6244 ms   │ 52.0585 ms │ 50.3237 ms   │ 50.5872 ms │ 50.7566 ms   │ 50.0551 ms   │ 8 │
     │ TPOT                   │total   │ 10.6965 ms     │ 10.061 ms    │ 10.8805 ms │ 10.7495 ms   │ 10.7818 ms │ 10.808 ms    │ 10.8582 ms   │ 8 │ 
     │ ITL                    │total   │ 10.6965 ms     │ 7.3583 ms    │ 13.7707 ms │ 10.7513 ms   │ 10.8009 ms │ 10.8358 ms   │ 10.9322 ms   │ 8 │ 
     │ InputTokens            │total   │ 1512.5         │ 1481.0       │ 1566.0     │ 1511.5       │ 1520.25    │ 1536.6       │ 1563.06      │ 8 │ 
     │ OutputTokens           │total   │ 287.375        │ 200.0        │ 407.0      │ 280.0        │ 322.75     │ 374.8        │ 403.78       │ 8 │ 
     │ OutputTokenThroughput  │total   │ 115.9216       │ 107.6555     │ 116.5352   │ 117.6448     │ 118.2426   │ 118.3765     │ 118.6388     │ 8 │
-    ╘════════════╧════╧════════╧═══════╧══════╧═══════╧══════╧═══════╧═══════╧═══╧═══════╧═══════╧═══╧═══════╧═══════╧═══╧═══════╧═══════╧═══╧═══╧
-    ╒═════════════╤═════╤══════════╤═════╤══════════╤═════╤════╕
+    
+    ```
+
+    ```
+    
     │ Common Metric            │ Stage    │ Value              │ 
     │ Benchmark Duration       │ total    │ 19897.8505 ms      │ 
     │ Total Requests           │ total    │ 8                  │ 
@@ -428,7 +411,8 @@
     │ Input Token Throughput   │ total    │ 608.7438 token/s   │ 
     │ Output Token Throughput  │ total    │ 115.7835 token/s   │ 
     │ Total Token Throughput   │ total    │ 723.5273 token/s   │ 
-    ╘═════════════╧═════╧══════════╧══════════╧══════════╧═════╛
+    
+    
     ```
 
     性能测试结果主要关注TTFT、TPOT、Request Throughput和Output Token Throughput输出参数，参数详情信息请参见《MindIE Motor开发指南》中的“配套工具 \> 性能/精度测试工具”章节的“表2 性能测试结果指标对比”。

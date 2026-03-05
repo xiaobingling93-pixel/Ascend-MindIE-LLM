@@ -27,23 +27,28 @@
 
 #include "string_utils.h"
 #include "safe_envvar.h"
+#include "safe_io.h"
 
 namespace mindie_llm {
-// AUDIT: mindie_llm::LogLine mandatory logging.
-enum class LogSeverity: uint8_t { AUDIT = 0, DEBUG, INFO, WARN, ERROR, CRITICAL, __COUNT__ };
-// Logs of each type go into separate files.
-enum class LogType: uint8_t { GENERAL = 0, REQUEST, TOKEN, __COUNT__ };
-
 static const std::string ALL_COMPONENT = "__all__";
+
+// AUDIT: mindie_llm::LogLine mandatory logging.
+enum class LogSeverity: uint8_t { DEBUG, INFO, WARN, ERROR, CRITICAL, AUDIT, __COUNT__ };
+const std::array<std::string, static_cast<uint8_t>(LogSeverity::__COUNT__) - 1>& GetLogSeverityNameArray();
+const std::unordered_set<std::string>& GetAllLogSeverity();
+bool String2LogSeverity(const std::string& level, LogSeverity& out);
+
+// Logs of each type go into separate files.
+enum class LogType: uint8_t { GENERAL = 0, REQUEST, TOKEN, TOKENIZER, __COUNT__ };
+const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)>& GetLogTypeNameArray();
+bool String2LogType(const std::string& s, LogType& out);
+
 // Component enumeration object supporting independent control, with all component logs falling into same file by PID
 enum class LogComponent: uint8_t { LLM = 0, LLMMODELS, SERVER, __COUNT__ };
-inline const std::string& ComponentToString(LogComponent c)
-{
-    static const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)> compNames = {
-        "llm", "llmmodels", "server"
-    };
-    return compNames[static_cast<uint8_t>(c)];
-}
+const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)>& GetComponentNameArray();
+const std::string& Component2String(LogComponent c);
+bool String2Component(const std::string& s, LogComponent& out);
+
 // Buffer-pushing struct for async writer thread consumption
 struct MsgPkg {
     LogComponent component;
@@ -64,8 +69,6 @@ struct LogSink {
     std::ofstream ofs;
     size_t curSize;
 };
-
-bool String2LogLevel(const std::string& level, LogSeverity& out);
 
 // ================= LogManager =================
 
@@ -97,7 +100,7 @@ public:
         auto kv = ParseKeyValueString(val, validValues, ALL_COMPONENT, ';', ':');
         for (size_t i = 0; i < componentCfgs_.size(); ++i) {
             auto& cfg = componentCfgs_[i];
-            const std::string& componentName = ComponentToString(static_cast<LogComponent>(i));
+            const std::string& componentName = Component2String(static_cast<LogComponent>(i));
             if (kv.count(ALL_COMPONENT)) {
                 const T value = parser(kv.at(ALL_COMPONENT));
                 setter(cfg, value);
@@ -119,10 +122,12 @@ private:
     void GetLogRotate();
     void GetLogDirs();
     void OpenLogFiles();
-    void RenewLogFilePath(LogType type);
+    void CreateLogFilePath(LogType type);
 
     void Writer();
     void FlushLoop();
+    uint32_t GetLogFileSizeCutOff(LogType type) const;
+    uint32_t GetLogFileNumCutOff(LogType type) const;
     void RotateLogs(LogType type);
     void Stop();
 
@@ -155,7 +160,7 @@ public:
         return *this;
     }
 
-    void AssembleAndPush(LogType type, const char* file, size_t line);
+    void AssembleAndPush(LogType type, const char* file, size_t line, std::string& stack);
     void Reset();
 
 private:
@@ -192,23 +197,90 @@ public:
     }
 
 private:
+    std::string BuildStackTrace();
+
+private:
     Logger& logger_;
     bool enabled_{false};
     LogType type_{LogType::GENERAL};
     const char* file_;
     size_t line_;
+    std::string stack_;
 };
 
 // ================= GetThreadLogger =================
 
 Logger& GetThreadLogger(LogComponent comp, LogSeverity level);
 
+// ================= DynamicLogManager =================
+
+struct DynamicLogConfig {
+    std::string logSeverity;
+    int validHours{2};
+    std::string validTimeStamp;
+};
+
+struct DynamicLogDiff {
+    bool logSeverityChanged{false};
+    bool validHoursChanged{false};
+    bool validTimeStampChanged{false};
+};
+
+class DynamicLogManager {
+public:
+    static DynamicLogManager& GetInstance();
+
+private:
+    DynamicLogManager();
+    ~DynamicLogManager();
+
+    void Init();
+    void Stop();
+    void GetDefaultLogSeverity();
+    void Monitor();
+    void GetAndSetLogConfig();
+    std::string GetConfigPath() const;
+    DynamicLogConfig LoadLogConfig(const std::string& configPath);
+    std::string GetLogSeverity(const Json& logConfig) const;
+    int GetTimeInterval(const Json& logConfig, int lastHours) const;
+    std::string GetTimeStamp(const Json& logConfig, const std::string& lastTs) const;
+    bool IsValidTimeFormat(const std::string& timeStr) const;
+    bool ParseTime(const std::string& s, std::time_t& out) const;
+    bool IsGreaterThanNow(const std::string& timeStr) const;
+
+    DynamicLogDiff DiffConfig(const DynamicLogConfig& current, const DynamicLogConfig& last);
+    void ResetToDefaultLogSeverity();
+    void ApplyLogSeverity(const std::string& severity);
+    void UpdateValidTimeStamp(DynamicLogConfig& cfg);
+    bool IsWithinValidRange(const DynamicLogConfig& cfg) const;
+
+private:
+    const std::string keyLogConfig = "LogConfig";
+    const std::string keyLogSeverity = "dynamicLogLevel";
+    const std::string keyTimeInterval = "dynamicLogLevelValidHours";
+    const std::string keyTimeStamp = "dynamicLogLevelValidTime";
+
+private:
+    std::atomic<bool> isRunning_{false};
+    std::thread monitorThread_;
+    std::mutex mtx_;
+    static constexpr uint8_t monitorInterval_{5};
+    static constexpr int defaultHours_{2};
+
+    std::string defaultLogSeverity_{"info"};
+    std::string lastLogSeverity_;
+    int lastValidHours_{defaultHours_};
+    std::string lastValidTimeStamp_;
+};
+
+// ================= InitSystemLog =================
+
+void InitSystemLog();
+
 } // namespace mindie_llm
 
 // ================= Macro =================
 // llm log interface
-#define LOG_AUDIT_LLM \
-    mindie_llm::LogLine(mindie_llm::LogComponent::LLM, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 #define LOG_DEBUG_LLM \
     mindie_llm::LogLine(mindie_llm::LogComponent::LLM, mindie_llm::LogSeverity::DEBUG, __FILE__, __LINE__)
 #define LOG_INFO_LLM \
@@ -219,9 +291,9 @@ Logger& GetThreadLogger(LogComponent comp, LogSeverity level);
     mindie_llm::LogLine(mindie_llm::LogComponent::LLM, mindie_llm::LogSeverity::ERROR, __FILE__, __LINE__)
 #define LOG_CRITICAL_LLM \
     mindie_llm::LogLine(mindie_llm::LogComponent::LLM, mindie_llm::LogSeverity::CRITICAL, __FILE__, __LINE__)
+#define LOG_AUDIT_LLM \
+    mindie_llm::LogLine(mindie_llm::LogComponent::LLM, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 // model log interface
-#define LOG_AUDIT_MODEL \
-    mindie_llm::LogLine(mindie_llm::LogComponent::LLMMODELS, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 #define LOG_DEBUG_MODEL \
     mindie_llm::LogLine(mindie_llm::LogComponent::LLMMODELS, mindie_llm::LogSeverity::DEBUG, __FILE__, __LINE__)
 #define LOG_INFO_MODEL \
@@ -232,9 +304,9 @@ Logger& GetThreadLogger(LogComponent comp, LogSeverity level);
     mindie_llm::LogLine(mindie_llm::LogComponent::LLMMODELS, mindie_llm::LogSeverity::ERROR, __FILE__, __LINE__)
 #define LOG_CRITICAL_MODEL \
     mindie_llm::LogLine(mindie_llm::LogComponent::LLMMODELS, mindie_llm::LogSeverity::CRITICAL, __FILE__, __LINE__)
+#define LOG_AUDIT_MODEL \
+    mindie_llm::LogLine(mindie_llm::LogComponent::LLMMODELS, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 // server log interface
-#define LOG_AUDIT_SERVER \
-    mindie_llm::LogLine(mindie_llm::LogComponent::SERVER, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 #define LOG_DEBUG_SERVER \
     mindie_llm::LogLine(mindie_llm::LogComponent::SERVER, mindie_llm::LogSeverity::DEBUG, __FILE__, __LINE__)
 #define LOG_INFO_SERVER \
@@ -245,5 +317,7 @@ Logger& GetThreadLogger(LogComponent comp, LogSeverity level);
     mindie_llm::LogLine(mindie_llm::LogComponent::SERVER, mindie_llm::LogSeverity::ERROR, __FILE__, __LINE__)
 #define LOG_CRITICAL_SERVER \
     mindie_llm::LogLine(mindie_llm::LogComponent::SERVER, mindie_llm::LogSeverity::CRITICAL, __FILE__, __LINE__)
+#define LOG_AUDIT_SERVER \
+    mindie_llm::LogLine(mindie_llm::LogComponent::SERVER, mindie_llm::LogSeverity::AUDIT, __FILE__, __LINE__)
 
 #endif

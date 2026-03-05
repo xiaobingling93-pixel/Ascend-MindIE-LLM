@@ -42,10 +42,26 @@ void LiveInferContext::Add(SequenceGroupSPtr &seqGroup)
 {
     SpinLockGuard lockGuard(spinlock_);
 
-    if (reqId2SeqGroupMap_.find(seqGroup->requestId) != reqId2SeqGroupMap_.end() ||
-        seqId2SeqGroupMap_.find(seqGroup->firstSeq->seqId_) != seqId2SeqGroupMap_.end()) {
+    bool reqIdExists = reqId2SeqGroupMap_.find(seqGroup->requestId) != reqId2SeqGroupMap_.end();
+    bool seqIdExists = seqId2SeqGroupMap_.find(seqGroup->firstSeq->seqId_) != seqId2SeqGroupMap_.end();
+
+    if (reqIdExists) {
         MINDIE_LLM_LOG_WARN("The sequence group(requestId=" << seqGroup->requestId << ", seqId="
-                                                            << seqGroup->firstSeq->seqId_ << ") is already exist");
+                            << seqGroup->firstSeq->seqId_ << ") requestId already exist");
+        return;
+    }
+
+    if (seqIdExists && seqGroup->firstSeq->seqId_ == SIMULATE_SEQUENCE_ID) {
+        reqId2SeqGroupMap_.insert({seqGroup->requestId, seqGroup});
+        MINDIE_LLM_LOG_DEBUG("[VirtualInference] Simulate seqId=" << seqGroup->firstSeq->seqId_
+                            << " already in seqId2SeqGroupMap_, keep first entry. requestId="
+                            << seqGroup->requestId << " registered in reqId2SeqGroupMap_ only.");
+        return;
+    }
+
+    if (seqIdExists) {
+        MINDIE_LLM_LOG_WARN("The sequence group(requestId=" << seqGroup->requestId << ", seqId="
+                            << seqGroup->firstSeq->seqId_ << ") seqId already exist");
         return;
     }
 
@@ -92,9 +108,14 @@ void LiveInferContext::Remove(RequestId reqId)
     }
 
     SequenceId seqId = it->second->firstSeq->seqId_;
+    SequenceGroupSPtr seqGroup = it->second;
     reqId2SeqGroupMap_.erase(reqId);
     reqId2UsedInstanceRoleMap_.erase(reqId);
-    seqId2SeqGroupMap_.erase(seqId);
+
+    auto seqIt = seqId2SeqGroupMap_.find(seqId);
+    if (seqIt != seqId2SeqGroupMap_.end() && seqIt->second == seqGroup) {
+        seqId2SeqGroupMap_.erase(seqId);
+    }
 }
 
 void LiveInferContext::RemoveFromSeqRootMap(SequenceId seqId)

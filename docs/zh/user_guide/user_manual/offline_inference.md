@@ -20,7 +20,7 @@
 当前ATB Models包含三类Readme文档指导您执行推理流程，了解模型支持特性以及提供基础的调测和问题定位手段。
 
 **图 1** ATB Models  Readme文档关系示意图<a name="fig89051134504"></a>  
-![](../../figures/atb_models_readme.png "ATB-Models-Readme文档关系示意图")
+![](./figures/atb_models_readme.png "ATB-Models-Readme文档关系示意图")
 
 **表 1**  Readme文档介绍
 
@@ -203,7 +203,7 @@
 
 2.  启动服务化并发送请求。
 
-    MindIE服务化使用方法请参考《MindIE Motor开发指南》中的“快速入门 \> [启动服务](https://gitcode.com/Ascend/MindIE-Motor/blob/master/docs/zh/User_Guide/quick_start.md)”章节。服务化参数配置请参考[配置参数说明（服务化）](service_parameter_configuration.md)。
+    MindIE服务化使用方法请参考《MindIE Motor开发指南》中的“快速入门 \> [启动服务](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/quick_start.md)”章节。服务化参数配置请参考[配置参数说明（服务化）](service_parameter_configuration.md)。
 
     服务化配置中默认使用ATB Models作为模型后端。
 
@@ -300,7 +300,7 @@ model_config.save_pretrained(save_directory="./json/qwen2_5_72b/", save_json=Tru
 
 2.  启动服务化并发送请求。
 
-    MindIE服务化使用方法请参考《MindIE Motor开发指南》中的“快速入门 \> [启动服务](https://gitcode.com/Ascend/MindIE-Motor/blob/master/docs/zh/User_Guide/quick_start.md)”章节，服务化参数配置请参考[配置参数说明（服务化）](service_parameter_configuration.md)。
+    MindIE服务化使用方法请参考《MindIE Motor开发指南》中的“快速入门 \> [启动服务](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/quick_start.md)”章节，服务化参数配置请参考[配置参数说明（服务化）](service_parameter_configuration.md)。
 
     若要启用MindSpore Models作为模型后端，服务化配置中需将ModelDeployConfig.ModelConfig.backendType字段设置为"ms"。
 
@@ -310,7 +310,7 @@ model_config.save_pretrained(save_directory="./json/qwen2_5_72b/", save_json=Tru
     "backendType": "ms"
     ```
 
-    服务化API接口请参考《MindIE Motor开发指南》中的[服务化接口](https://gitcode.com/Ascend/MindIE-Motor/blob/master/docs/zh/User_Guide/SERVICE_ORIENTED_INTERFACE/optical_user_to_network_interface.md)章节。
+    服务化API接口请参考《MindIE LLM开发指南》中的**服务化接口**章节。
 
     用户可使用HTTPS客户端（Linux curl命令，Postman工具等）发送HTTPS请求，此处以Linux curl命令为例进行说明。重开一个窗口，使用以下命令发送请求。
 

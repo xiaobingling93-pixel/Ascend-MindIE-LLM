@@ -306,11 +306,11 @@
 
 - 若使用容器化部署启动，要求共享内存设置不小于1GB。
 
-- 若开启HTTPS双向认证或多机通信认证，需要提前准备好服务证书、服务器私钥、验签证书等，详情请参见《MindIE Motor开发指南》中的“集群服务部署 > 单机（非分布式）服务部署 > 安装部署 > 使用Deployer部署服务示例 > 部署Deployer服务端 > [准备TLS证书](https://gitcode.com/Ascend/MindIE-Motor/blob/br_develop_mindie/docs/zh/User_Guide/SERVICE_DEPLOYMENT/single_machine_service_deployment.md)”章节。
+- 若开启HTTPS双向认证或多机通信认证，需要提前准备好服务证书、服务器私钥、验签证书等，详情请参见《MindIE Motor开发指南》中的“集群服务部署 > 单机（非分布式）服务部署 > 安装部署 > 使用Deployer部署服务示例 > 部署Deployer服务端 > [准备TLS证书](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/service_deployment/single_machine_service_deployment.md)”章节。
 
 ### 使用限制
 
-- 仅支持Atlas 800I A2 推理服务器环境，最大支持4机32卡的多机推理，多机推理支持的模型请参见[模型列表](https://gitcode.com/Ascend/MindIE-LLM/blob/br_develop_mindie/docs/zh/user_guide/model_support_list.md)；不支持Atlas 300I Duo 推理卡环境。
+- 仅支持Atlas 800I A2 推理服务器环境，最大支持4机32卡的多机推理，多机推理支持的模型请参见[模型列表](../model_support_list.md)；不支持Atlas 300I Duo 推理卡环境。
 - “maxLinkNum”默认值为1000，推荐设置为300。1000并发能力受模型性能影响受限支持，一般较小模型、较低序列长度下才可以使用1000并发。
 - 不同节点的权重的默认采样参数需要配置一致，否则在没有配置采样参数的情况下，推理服务可能卡死。
 
@@ -479,7 +479,7 @@ ranktable.json文件权限需要设置为640，详细内容请根据以下样例
 
 5. （可选）若开启了GRPC双向认证（即“interNodeTLSEnabled”=true时）。
 
-  	 a. 使用证书管理工具导入证书，证书管理工具的使用请参见《MindIE Motor开发指南》中的“配套工具 > MindIE Service Tools > [CertTools](https://gitcode.com/Ascend/MindIE-Motor/blob/br_develop_mindie/docs/zh/User_Guide/SERVICE_DEPLOYMENT/single_machine_service_deployment.md)”章节。各证书文件信息如表2所示。
+  	 a. 使用证书管理工具导入证书，证书管理工具的使用请参见《MindIE Motor开发指南》中的“配套工具 > MindIE Service Tools > [CertTools](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/service_deployment/single_machine_service_deployment.md)”章节。各证书文件信息如表2所示。
      
   	> [!NOTE]说明
     > - HTTPS使用三面隔离时，HTTPS的业务面和管理面不建议使用同一套安全证书，使用同一套安全证书会存在较高的网络安全风险。
@@ -556,7 +556,7 @@ ranktable.json文件权限需要设置为640，详细内容请根据以下样例
    source mindie-service/set_env.sh
    ```
 
-10. 配置环境变量“RANK_TABLE_FILE”和“MIES_CONTAINER_IP”（以[ranktable文件样例](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/User_Guide/SERVICE_DEPLOYMENT/pd_separation_service_deployment.md)中的ranktable为例，具体参见表4）。
+10. 配置环境变量“RANK_TABLE_FILE”和“MIES_CONTAINER_IP”（以[ranktable文件样例](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/service_deployment/pd_separation_service_deployment.md)中的ranktable为例，具体参见表4）。
 
     - Master节点容器中
 

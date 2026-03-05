@@ -52,10 +52,10 @@ class TestGenerationOutput(unittest.TestCase):
     def test_concatenate_normal_no_overlap(self):
 
         self.base_new_output = GenerationOutput(
-            sequence_ids=np.array([3, 4, 5]),  # 与原始无重叠（正常场景）
+            sequence_ids=np.array([3, 4, 5]),
             parent_sequence_ids=np.array([3, 3, 3]),
-            group_indices=[(0, 1), (1, 2), (2, 3)],  # 3个分组
-            token_ids=np.array([[200], [201], [202]]),  # shape: (3, 1)
+            group_indices=[(0, 1), (1, 2), (2, 3)],
+            token_ids=np.array([[200], [201], [202]]),
             logprobs=np.array([[-0.4], [-0.5], [-0.6]]),
             top_token_ids=np.array([[[200]], [[201]], [[202]]]),
             top_logprobs=np.array([[[-0.4]], [[-0.5]], [[-0.6]]]),
@@ -67,9 +67,9 @@ class TestGenerationOutput(unittest.TestCase):
             current_token_indices=[2, 2, 2],
             trace_ids=np.array([3, 4, 5])
         )
-        
-        max_generated_tokens = 2  
-        new_output = self.base_new_output  
+
+        max_generated_tokens = 2
+        new_output = self.base_new_output
 
         self.generation_output.concatenate_output(new_output, max_generated_tokens)
 
@@ -78,6 +78,21 @@ class TestGenerationOutput(unittest.TestCase):
 
         expected_group_indices = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)]
         self.assertEqual(self.generation_output.group_indices, expected_group_indices)
+
+    def test_make_empty(self):
+        empty_output = GenerationOutput.make_empty()
+        self.assertEqual(empty_output.sequence_ids.shape, (0,))
+        self.assertEqual(empty_output.group_indices, [])
+        self.assertEqual(empty_output.token_ids.shape, (0, 0))
+        self.assertEqual(empty_output.eos_info.shape, (0,))
+
+    def test_remove(self):
+        self.generation_output.collate()
+        self.generation_output.remove(np.array([1]))
+        np.testing.assert_array_equal(self.generation_output.sequence_ids, np.array([0, 2]))
+        self.assertEqual(self.generation_output.group_indices, [(0, 1), (1, 2)])
+        self.assertEqual(self.generation_output.token_ids.shape[0], 2)
+        self.assertEqual(self.generation_output.eos_info.shape[0], 2)
 
 
 if __name__ == '__main__':

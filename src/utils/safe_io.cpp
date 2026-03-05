@@ -12,9 +12,9 @@
 #include "safe_io.h"
 
 #include <fstream>
+#include <iostream>
 
 #include "safe_path.h"
-#include "log.h"
 
 namespace mindie_llm {
 
@@ -68,23 +68,21 @@ bool CheckJsonDepthCallbackNoLogger(int depth, Json::parse_event_t ev, Json& obj
 bool CheckJsonDepthCallback(int depth, Json::parse_event_t ev, Json& obj)
 {
     return CheckJsonDepthWithLogger(depth, ev, [depth, &obj]() {
-        MINDIE_LLM_LOG_ERROR("Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj));
+        std::cerr << "Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj);
     });
 }
 
 bool CheckJsonDepthCallbackUlog(int depth, Json::parse_event_t ev, Json& obj)
 {
     return CheckJsonDepthWithLogger(depth, ev, [depth, &obj]() {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj));
+        std::cerr << "Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj);
     });
 }
 
 bool CheckOrderedJsonDepthCallback(int depth, OrderedJson::parse_event_t ev, OrderedJson& obj)
 {
     return CheckJsonDepthWithLogger(depth, ev, [depth, &obj]() {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj));
+        std::cerr << "Failed to parse json: depth is " << depth <<  ", object is " << sizeof(obj);
     });
 }
 

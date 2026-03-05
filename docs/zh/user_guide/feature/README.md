@@ -88,7 +88,7 @@ MindIE LLM 支持的特性包括基础特性、量化特性、长序列特性、
         <td>Prefix Cache</td><td>复用跨请求的重复 Block 对应的 KV Cache，从而减少 Prefill 的时间。详见 <a href="./prefix_cache.md">Prefix Cache</a>。</td><td>降低首 token 时延</td>
     </tr>
     <tr>
-        <td>KV Cache 池化</td><td>将 DRAM 甚至 SSD 等更大容量的存储介质纳入前缀缓存池，从而突破显存的容量限制。详见 <a href="./kv_cache_pooling.md">KV Cache 池化</a>。</td><td>提高 Prefix Cache 命中率</td>
+        <td>KV Cache 池化</td><td>将 DRAM 甚至 SSD 等更大容量的存储介质纳入前缀缓存池，从而突破显存的容量限制。详见 <a href="./kv_cache_pool.md">KV Cache 池化</a>。</td><td>提高 Prefix Cache 命中率</td>
     </tr>
     <tr>
         <td rowspan="2">交互特性</td><td>Function Call</td><td>支持 Function Call 函数调用，使大模型具备使用工具能力。详见 <a href="./function_call.md">Function Call</a>。</td><td>能够借助外部工具来扩展应用范围</td>

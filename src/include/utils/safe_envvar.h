@@ -34,6 +34,7 @@ const std::string DEFAULT_MINDIE_LOG_VERBOSE = "1";
 const std::string DEFAULT_MINDIE_LOG_ROTATE = "-fs 20 -r 10";      // Rotating log files, 20 MB each, keep 10 files.
 const std::string DEFAULT_CHECK_PERM = "";
 
+const std::string& GetDefaultMindIELLMHomePath();
 
 class EnvVar {
 public:

@@ -5,7 +5,7 @@
 以下统一使用“工具调用”（tool use）来介绍function call特性。
 
 **图 1**  大模型工具调用的流程图<a name="fig11208183710820"></a>  
-![](../../figures/function_call_flowchart.png "大模型工具调用的流程图")
+![](./figures/function_call_flowchart.png "大模型工具调用的流程图")
 
 ## 流程步骤
 

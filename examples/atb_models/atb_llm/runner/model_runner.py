@@ -156,9 +156,11 @@ class ModelRunner:
             try:
                 bind_cpus(self.npu_id, ratio=1.0)
             except ValueError as e:
-                error_msg = "CPU binding failed; please check configuration."
-                logger.error(error_msg)
-                raise ValueError(error_msg) from e
+                # ValueError indicates a likely configuration issue;
+                # use a stronger message to alert the user.
+                logger.warning("CPU binding failed, "
+                               "please check configuration. "
+                               "Reluctantly skip binding cpu.")
             except Exception as _:
                 logger.warning("Skip binding cpu.")
 

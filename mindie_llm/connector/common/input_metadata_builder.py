@@ -797,7 +797,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
         # 解析每条request已计算的block数量，解析成一维list，如不存在将值置为None
         # 虚推请求不使用 prefix cache，填充 0 值以确保维度对齐
         if seq_ids[0] == SIMULATE_SEQUENCE_ID:
-            if scp_size > 1:
+            if scp_size >= 1:
                 computed.extend([0] * scp_size)
                 remote_computed.extend([0] * scp_size)
                 computed_block_order.append([])

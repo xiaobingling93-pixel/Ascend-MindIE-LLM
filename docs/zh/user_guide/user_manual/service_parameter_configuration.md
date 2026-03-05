@@ -128,7 +128,7 @@
 |backendType|std::string|<ul><li>"atb"</li><li>"ms"</li></ul>|必填，默认值："atb"。<br>对接的后端类型。<ul><li>atb：推理引擎后端为加速库。</li><li>ms：推理引擎后端为MindSpore。</li></ul>**说明**工<br>如果选择"ms"作为对接的推理引擎后端，需要提前安装MindSpore和MindFormers，以及修改MindIE启动配置信息，详情请参见[链接](https://gitee.com/mindspore/docs/blob/master/docs/mindformers/docs/source_zh_cn/guide/deployment.md)。|
 |trustRemoteCode|bool|<ul><li>true</li><li>false</li></ul>|选填，默认值：false。<br>是否信任远程代码。<ul><li>false：不信任远程代码。</li><li>true：信任远程代码。</li></ul>**说明**<br>如果设置为true，会存在信任远程代码行为，可能会导致恶意代码注入风险，请自行保障代码注入安全风险。|
 |async_scheduler_wait_time|int32_t|整型数字，取值范围：[1, 3600]|选填，默认值：120，单位：秒。<br>异步调度的等待时间，在开启异步调度功能时可配置。|
-|kv_trans_timeout|int32_t|上限根据显存和用户需求来决定。当取值小于或等于0时，会自动修改为1。|PD分离场景中，D节点从P节点拉取KV Cache的超时时间，只需要在D节点进行设置。默认值：10，单位：秒。<ul><li>仅用于PD分离场景，非PD分离场景下该值不生效。</li><li>建议值：大于网络包重传次数*每次重传的超时时间</li><li>配置该参数时，需要同步关注“HCCL_RDMA_RETRY_CNT”和“HCCL_RDMA_TIMEOUT”两个环境变量。详细请参见《MindIE Motor开发指南》中的[使用kubectl部署单机PD分离服务示例](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/User_Guide/%E5%8D%95%E6%9C%BAPD%E5%88%86%E7%A6%BB%E7%A4%BA%E4%BE%8B.md)章节。</li></ul>|
+|kv_trans_timeout|int32_t|上限根据显存和用户需求来决定。当取值小于或等于0时，会自动修改为1。|PD分离场景中，D节点从P节点拉取KV Cache的超时时间，只需要在D节点进行设置。默认值：10，单位：秒。<ul><li>仅用于PD分离场景，非PD分离场景下该值不生效。</li><li>建议值：大于网络包重传次数*每次重传的超时时间</li><li>配置该参数时，需要同步关注“HCCL_RDMA_RETRY_CNT”和“HCCL_RDMA_TIMEOUT”两个环境变量。详细请参见《MindIE Motor开发指南》中的[使用kubectl部署单机PD分离服务示例](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/%E5%8D%95%E6%9C%BAPD%E5%88%86%E7%A6%BB%E7%A4%BA%E4%BE%8B.md)章节。</li></ul>|
 |kv_link_timeout|int32_t|上限根据显存和用户需求来决定。当取值小于或等于0时，会自动修改为默认值1080。|PD分离场景中，用于建立KV Cache传输的通信域的超时时间。超时时间内，通信域如果创建失败会自动进行重试，直至通信域创建成功或者超时退出。默认值为：1080，建议值：1080，单位：秒。<ul><li>仅用于PD分离场景，非PD分离场景下该值不生效。</li><li>若无网络问题，默认值无需修改；若集群规模较小，且出现网络故障导致通信域持续建立失败，可以适当降低超时时间，进行快速调试。</li></ul>|
 
 
@@ -166,7 +166,7 @@
 
 
 **图 1**  调度策略和执行先后顺序流程图    <a id="figure1"></a>
-![](../../figures/scheduling_strategy_and_execution_flowchart.png "调度策略和执行先后顺序流程图")
+![](./figures/scheduling_strategy_and_execution_flowchart.png "调度策略和执行先后顺序流程图")
 
 **图 2**  Prefill和Decode阶段的调度策略流程图  <a id="figure2"></a>
-![](../../figures/scheduling_flowchart_for_PD.png "Prefill和Decode阶段的调度策略流程图")
+![](./figures/scheduling_flowchart_for_PD.png "Prefill和Decode阶段的调度策略流程图")

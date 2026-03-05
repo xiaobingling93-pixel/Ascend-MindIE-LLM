@@ -296,7 +296,7 @@ bool AssignStopStringList(const OrderedJson &stopStrings, RequestSPtr tmpReq, st
         totalLength += stopStrLen;
         tmpReq->stopStrList.value().emplace_back(stopStrings[i]);
     }
-    if (!validFlag || totalLength > maxLength ||
+    if (!validFlag || totalLength > MAX_TOTAL_STOP ||
         (isNumStopStrLimited && stopStrings.size() > MAX_STOP_STRING_NUM)) {
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
             GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),

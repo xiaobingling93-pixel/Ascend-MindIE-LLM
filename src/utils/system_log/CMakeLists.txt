@@ -1,10 +1,7 @@
-cmake_minimum_required(VERSION 3.19.0)
-project("system_log")
-set(CMAKE_CXX_STANDARD 17)
-
 file(GLOB SOURCE_FILES 
     "${CMAKE_CURRENT_LIST_DIR}/system_log.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../safe_path.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../safe_io.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../safe_envvar.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../safe_result.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../string_utils.cpp"

@@ -110,14 +110,13 @@ class GenerationOutput:
         else:
             new_sequence_ids_group = []
 
-        num_new_sequences = len(new_sequence_ids)
-
         for sequence_group in new_sequence_ids_group:
             current_seq_length = self.sequence_ids.size
             self.group_indices.append((current_seq_length, current_seq_length + sequence_group.size))
             self.sequence_ids = np.hstack((self.sequence_ids, sequence_group))
             self.parent_sequence_ids = np.hstack((self.parent_sequence_ids, sequence_group))
 
+        num_new_sequences = sum(len(sg) for sg in new_sequence_ids_group)
         num_padded_tokens = max_generated_tokens - self.token_ids.shape[1]
         pad_width_2d = ((0, num_new_sequences), (0, num_padded_tokens))
         self.token_ids = np.pad(self.token_ids, pad_width_2d, constant_values=-1)

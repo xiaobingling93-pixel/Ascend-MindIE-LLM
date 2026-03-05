@@ -724,7 +724,7 @@ class FlashInternvlForCausalLM(FlashForCausalLM):
 
 2. tokenize\(\) 函数实现
 
-    ![](../../figures/tokenize_function.png)
+    ![](./figures/tokenize_function.png)
 
     如上图所示，为输入的Prompt信息和多媒体信息在tokenizer\(\)函数中转换为Input Id的过程。
 
@@ -874,7 +874,7 @@ class FlashInternvlForCausalLM(FlashForCausalLM):
 
     以Qwen-VL为例 ，下面是QwenVlInputBuilder的类图。完成该类重写后，需要在模型的Router的get\_input\_builder\(\)中完成示例化。对应文件路径位于“/usr/local/Ascend/atb-models/atb\_llm/models/qwen/router\_qwen.py”
 
-    ![](../../figures/inputbuilder_class.png)
+    ![](./figures/inputbuilder_class.png)
 
 2.  make\_context\(\) 函数输入
 

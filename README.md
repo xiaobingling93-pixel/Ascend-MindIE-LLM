@@ -23,9 +23,18 @@
 
 MindIE LLM 安装前的相关软硬件环境准备，以及安装步骤，请参见[安装指南](./docs/zh/user_guide/installation_guide.md)。
 
-
 ## ⚡️ 快速入门
 
+快速体验使用MindIE进行大模型推理的全流程，请参见[快速入门](./docs/zh/user_guide/quick_start.md)。
+
+## 📝 学习文档
+
+- 模型支持列表
+  - [代码仓模型支持列表](./docs/zh/user_guide/model_support_list.md)：优先使用，提供当前版本经过测试充分验证支持和仅功能支持的模型全集。
+  - [昇腾社区模型支持列表](https://www.hiascend.com/software/mindie/modellist)：提供当前版本经过测试充分验证支持的模型。
+- [特性介绍](./docs/zh/user_guide/feature/README.md)：MindIE LLM 支持的推理特性。
+- [LLM 使用指南](./docs/zh/user_guide/user_manual/README.md)：MindIE LLM 使用指南，包括推理参数配置、在线和离线推理、参数调优等。
+  
 ## 📝贡献声明
 
 1. 提交错误报告：如果您在MindIE LLM中发现了一个不存在安全问题的漏洞，请在MindIE LLm仓库中的Issues搜索，以防该漏洞被重复提交，如果找不到漏洞可以创建一个新的Issues。如果发现了一个安全问题请不要将其公开，请参阅安全问题处理方式。提交错误报告时应包含完整信息。
@@ -43,21 +52,10 @@ MindIE LLM 安装前的相关软硬件环境准备，以及安装步骤，请参
     <br>h. 当您的PR获取足够数量的检视者批准后，Committer会进行最终审核。
     <br>i. 审核和测试通过后，CI会将您的PR合并入到项目的主干分支。
 
-更多贡献相关文档请参见[共享指南](contributing.md)。
+更多贡献相关文档请参见[贡献指南](contributing.md)。
 
 
-
-## 📝 学习文档
-
-- [LLM 使用指南](./docs/zh/user_guide/user_manual/README.md)：MindIE LLM 使用指南，包括推理参数配置、在线和离线推理、参数调优等。
-- [特性介绍](./docs/zh/user_guide/feature/README.md)：MindIE LLM 支持的推理特性。
-- [模型支持列表](./docs/zh/user_guide/model_support_list.md)：MindIE LLM 支持的模型。
-
-
-## 🚀 贡献声明
-
-
-## 💖 免责声明
+## 📝免责声明
 
 版权所有© 2025-2026 MindIE Project.
 

@@ -48,7 +48,7 @@
 量化后的MatMul权重新增weight\_scale、weight\_scale\_second和scale\_bias，用于对MatMul的计算结果进行反量化。
 
 **图 1**  量化权重推理时流程<a name="fig132131518185315"></a>  
-![](../../figures/w4a8_mixed_precision_quantization.png "量化权重推理时流程-0")
+![](./figures/w4a8_mixed_precision_quantization.png "量化权重推理时流程-0")
 
 此量化方式支持量化float16或bfloat16类型的原始权重。
 

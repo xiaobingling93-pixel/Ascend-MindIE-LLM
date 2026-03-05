@@ -50,7 +50,7 @@
 在PDMIX场景（P阶段使用Per-token量化）下，离群值抑制的bias对量化精度的影响通常较小。为提升性能，可考虑在保证等价性的前提下，在Norm层和Linear层同时移除Bias，从而节省一次Add计算开销。
 
 **图 1**  量化权重推理时流程
-![](../../figures/anti_outlier_quantization.png "量化权重推理时流程-5")
+![](./figures/anti_outlier_quantization.png "量化权重推理时流程-5")
 
 **表 1**  权重量化后部分层的dtype及shape信息（假设原始权重的shape为 `[n]`）
 

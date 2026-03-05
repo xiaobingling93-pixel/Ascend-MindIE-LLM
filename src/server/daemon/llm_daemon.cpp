@@ -30,6 +30,7 @@
 #include "config_manager.h"
 #include "endpoint.h"
 #include "msServiceProfiler/Tracer.h"
+#include "system_log.h"
 
 using namespace mindie_llm;
 static std::mutex g_exitMtx;
@@ -315,9 +316,7 @@ void RegisterSignal(void)
 
 void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap)
 {
-    Py_Initialize();
     PyEval_SaveThread();
-
     pthread_setname_np(pthread_self(), "RunEP");
     std::string fileNamePrefix = "mindie-server";
     EndPoint ep;
@@ -390,6 +389,8 @@ bool ParseCommandLineArgs(int &argc, char **argv, std::unordered_map<std::string
 
 int main(int argc, char *argv[])
 {
+    Py_Initialize();
+    InitSystemLog();
     static_assert(std::atomic<bool>::is_always_lock_free, "Bool type should be lock-free.");
     g_mainPid = getpid();
     std::cerr << "g_mainPid = " << g_mainPid << std::endl;

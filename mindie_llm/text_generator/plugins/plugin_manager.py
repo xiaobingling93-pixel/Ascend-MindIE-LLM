@@ -89,6 +89,17 @@ class PluginManager:
         sampling_output.top_logprobs = np.expand_dims(sampling_output.top_logprobs, 1)
 
     @staticmethod
+    def filter_splitfuse_token_ids(input_metadata: InputMetadata, sampling_output: SamplingOutput):
+        # splitfuse非最后一块prefill的token_ids都需要置为-1
+        if input_metadata.batch_is_prefill is not None and input_metadata.batch_last_prompt is not None:
+            batch_is_prefill = input_metadata.batch_is_prefill
+            batch_last_prompt = input_metadata.batch_last_prompt
+            if sampling_output.repeating_indices is not None:
+                batch_is_prefill = batch_is_prefill[sampling_output.repeating_indices]
+                batch_last_prompt = batch_last_prompt[sampling_output.repeating_indices]
+            sampling_output.token_ids[batch_is_prefill & ~batch_last_prompt] = -1
+
+    @staticmethod
     def _to_host(data_instance: Any):
         if data_instance is None:
             return None
@@ -413,6 +424,8 @@ class PluginManager:
         else:
             sequence_ids = input_metadata.all_sequence_ids
             parent_sequence_ids = input_metadata.all_sequence_ids
+
+        self.filter_splitfuse_token_ids(input_metadata, sampling_output)
 
         generation_output = GenerationOutput(
             sequence_ids=sequence_ids,

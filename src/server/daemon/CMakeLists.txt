@@ -32,6 +32,7 @@ target_link_libraries(${TARGET_NAME}
         mindieservice_endpoint
         config_manager
         mindie_llm_utils
+        system_log
         pybind11::embed
 )
 

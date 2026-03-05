@@ -11,7 +11,48 @@
  */
 #include "safe_envvar.h"
 
+#include <mutex>
+
+#include <Python.h>
+
 namespace mindie_llm {
+
+static std::string GetSitePackagesPath()
+{
+    PyGILState_STATE gil = PyGILState_Ensure();
+    std::string result;
+    PyObject* site_module = PyImport_ImportModule("site");
+    if (!site_module) {
+        PyErr_Print();
+        PyGILState_Release(gil);
+        return "";
+    }
+    PyObject* func = PyObject_GetAttrString(site_module, "getsitepackages");
+    if (func && PyCallable_Check(func)) {
+        PyObject* list = PyObject_CallObject(func, nullptr);
+        if (list && PyList_Size(list) > 0) {
+            PyObject* item = PyList_GetItem(list, 0);
+            if (PyUnicode_Check(item)) {
+                result = PyUnicode_AsUTF8(item);
+            }
+        }
+        Py_XDECREF(list);
+    }
+    Py_XDECREF(func);
+    Py_DECREF(site_module);
+    PyGILState_Release(gil);
+    return result;
+}
+
+const std::string& GetDefaultMindIELLMHomePath()
+{
+    static std::string path;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        path = GetSitePackagesPath() + "/mindie_llm/";
+    });
+    return path;
+}
 
 EnvVar& EnvVar::GetInstance()
 {

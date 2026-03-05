@@ -57,7 +57,7 @@ SLO（Service Level Objective，服务级别目标）指在设定时间段内为
     ./bin/mindieservice_daemon
     ```
 
-4. 以AISBench工具、gsm8k数据集和并发500为例展示调优方式。AISBench工具配置如下，详情请参见《MindIE Motor开发指南》中的“快速入门 > [性能测试](https://gitcode.com/Ascend/MindIE-Motor/blob/master/docs/zh/User_Guide/quick_start.md)”章节。
+4. 以AISBench工具、gsm8k数据集和并发500为例展示调优方式。AISBench工具配置如下，详情请参见《MindIE Motor开发指南》中的“快速入门 > [性能测试](https://gitcode.com/Ascend/MindIE-Motor/blob/dev/docs/zh/user_guide/quick_start.md)”章节。
 
     ```
     models = [
