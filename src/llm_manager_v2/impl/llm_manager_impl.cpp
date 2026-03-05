@@ -1572,7 +1572,8 @@ void LlmManagerImpl::SendRuntimeStatus()
         return;
     }
 
-    EngineMetric engineMetric = llmEnginePtr_->CollectEngineMetric();
+    // 收集所有 DP Rank 的聚合指标
+    EngineMetric engineMetric = llmEnginePtr_->CollectAllDpEngineMetric();
     SendJsonData(engineMetric);
 }
 
