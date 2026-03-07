@@ -106,7 +106,7 @@ LoRA权重中需包含"adapter\_config.json"和"adapter\_model.safetensors"文�
                 {
                     "maxSeqLen" : 2560,
                     "maxInputTokenLen" : 2048,
-                    "truncation" : 0,
+                    "truncation" : false,
                     "ModelConfig" : [
                         {
                             "modelInstanceType": "Standard",

@@ -59,7 +59,7 @@
             {
                 "maxSeqLen" : 20000,
                 "maxInputTokenLen" : 4096,
-                "truncation" : 0,
+                "truncation" : false,
                 "ModelConfig" : [
                     {
                         "modelInstanceType" : "Standard",

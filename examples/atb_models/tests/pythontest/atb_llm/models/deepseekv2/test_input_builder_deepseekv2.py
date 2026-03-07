@@ -11,7 +11,6 @@ import unittest
 from ddt import ddt
 from atb_llm.models.deepseekv2.config_deepseekv2 import DeepseekV2Config
 from atb_llm.models.deepseekv2.input_builder_deepseekv2 import Deepseekv2InputBuilder
-from atb_llm.models import TruncationSide  # 导入截断枚举
 
 ROLE = "role"
 CONTENT = "content"
@@ -28,18 +27,13 @@ FAKE_CONFIG_DICT = {
 
 
 class MockTokenizer:
-    def __init__(self, use_fast=False, thinking=None):
+    def __init__(self, use_fast=False):
         self.use_fast = use_fast
-        self.init_kwargs = {"thinking": thinking}
+        self.init_kwargs = {}
         self.chat_template = "test"
 
-    def apply_chat_template(self, conversation, thinking=False, tools=None, **kwargs):
-        if tools:
-            return [i for i in range(500)]
-        max_length = kwargs.get("max_length", 100)
-        if kwargs.get("truncation"):
-            return [i for i in range(min(200, max_length))]
-        return [i for i in range(200)]
+    def apply_chat_template(self, conversation, thinking=False, **kwargs):
+        return f"test string. Thinking: {thinking}"
 
     @classmethod
     def encode(cls, prompt, add_special_tokens):
@@ -63,33 +57,29 @@ class TestDeepseekInputBuilder(unittest.TestCase):
         self.deepseek_config = DeepseekV2Config(**FAKE_CONFIG_DICT)
         self.tokenizer = MockTokenizer()
         self.input_builder = Deepseekv2InputBuilder(self.tokenizer)
-        self.input_builder.chat_template_kwargs = "chat_template_kwargs"
-        self.input_builder.truncation = "truncation"
 
     def test_apply_chat_template_default(self):
+
         user_conversation = [{ROLE: "user", CONTENT: INPUT_STR}]
-        chat_template_kwargs_think = {"enable_thinking": "true", "truncation": "1"}
-        chat_template_kwargs_nothink = {"enable_thinking": "false", "truncation": "0"}
-        kwargs_think = {self.input_builder.chat_template_kwargs: chat_template_kwargs_think}
-        kwargs_nothink = {self.input_builder.chat_template_kwargs: chat_template_kwargs_nothink}
-        
+        chat_template_kwargs_think = {"enable_thinking": "true"}
+        chat_template_kwargs_nothink = {"enable_thinking": "false"}
         user_prompt_think = self.input_builder._apply_chat_template(
-            user_conversation,** kwargs_think
+            user_conversation, chat_template_kwargs=chat_template_kwargs_think
         )
         user_prompt_nothink = self.input_builder._apply_chat_template(
-            user_conversation, **kwargs_nothink
+            user_conversation, chat_template_kwargs=chat_template_kwargs_nothink
         )
         self.assertIsNotNone(user_prompt_think)
-        self.assertIsInstance(user_prompt_think, list)
+        self.assertIsInstance(user_prompt_think, str)
+        self.assertEqual(user_prompt_think, "test string. Thinking: true")
         self.assertIsNotNone(user_prompt_nothink)
-        self.assertIsInstance(user_prompt_nothink, list)
+        self.assertIsInstance(user_prompt_nothink, str)
+        self.assertEqual(user_prompt_nothink, "test string. Thinking: false")
 
     def test_apply_chat_template_raise(self):
         # no apply_chat_template
         tokenizer = MockTokenizerNoChatTemplate()
         input_builder = Deepseekv2InputBuilder(tokenizer)
-        input_builder.chat_template_kwargs = "chat_template_kwargs"
-        input_builder.truncation = "truncation"
 
         user_conversation = [{ROLE: "user", CONTENT: INPUT_STR}]
         with self.assertRaises(RuntimeError) as cm:
@@ -100,76 +90,11 @@ class TestDeepseekInputBuilder(unittest.TestCase):
         tokenizer = MockTokenizer()
         tokenizer.chat_template = ""
         input_builder = Deepseekv2InputBuilder(tokenizer)
-        input_builder.chat_template_kwargs = "chat_template_kwargs"
-        input_builder.truncation = "truncation"
         user_conversation = [{ROLE: "user", CONTENT: INPUT_STR}]
         with self.assertRaises(RuntimeError) as cm:
             input_builder._apply_chat_template(user_conversation)
         self.assertIn("it is not configured with a `chat_template`", str(cm.exception))
 
-    def test_apply_chat_template_truncation_right(self):
-        user_conversation = [{ROLE: "user", CONTENT: INPUT_STR * 10}]
-        chat_template_kwargs = {
-            "enable_thinking": False,
-            "truncation": TruncationSide.RIGHT,
-            "max_length": 50
-        }
-        kwargs = {self.input_builder.chat_template_kwargs: chat_template_kwargs}
-        
-        input_ids = self.input_builder._apply_chat_template(user_conversation,** kwargs)
-        self.assertEqual(len(input_ids), 50)
-        self.assertEqual(input_ids, [i for i in range(50)])
-
-    def test_apply_chat_template_truncation_left(self):
-        user_conversation = [{ROLE: "user", CONTENT: INPUT_STR * 10}]
-        chat_template_kwargs = {
-            "enable_thinking": False,
-            "truncation": TruncationSide.LEFT,
-            "max_length": 50
-        }
-        kwargs = {self.input_builder.chat_template_kwargs: chat_template_kwargs}
-        
-        input_ids = self.input_builder._apply_chat_template(user_conversation, **kwargs)
-        self.assertEqual(len(input_ids), 50)
-        self.assertEqual(input_ids, [i for i in range(150, 200)])
-
-    def test_apply_chat_template_with_tools(self):
-        user_conversation = [{ROLE: "user", CONTENT: INPUT_STR}]
-        tools_msg = {
-            "tools": [{"name": "code_interpreter", "description": "Execute code"}],
-            "tool_choice": "code_interpreter"
-        }
-        chat_template_kwargs = {
-            "enable_thinking": True,
-            "truncation": TruncationSide.RIGHT,
-            "max_length": 100
-        }
-        kwargs = {self.input_builder.chat_template_kwargs: chat_template_kwargs}
-        
-        input_ids = self.input_builder._apply_chat_template(
-            user_conversation, tools_msg=tools_msg,** kwargs
-        )
-        self.assertEqual(len(input_ids), 500)
-
-    def test_apply_chat_template_tools_truncation_left(self):
-        user_conversation = [{ROLE: "user", CONTENT: INPUT_STR * 10}]
-        tools_msg = {
-            "tools": [{"name": "code_interpreter", "description": "Execute code"}],
-            "tool_choice": "code_interpreter"
-        }
-        chat_template_kwargs = {
-            "enable_thinking": False,
-            "truncation": TruncationSide.LEFT,
-            "max_length": 100
-        }
-        kwargs = {self.input_builder.chat_template_kwargs: chat_template_kwargs}
-        
-        input_ids = self.input_builder._apply_chat_template(
-            user_conversation, tools_msg=tools_msg, **kwargs
-        )
-        self.assertEqual(len(input_ids), 100)
-        self.assertEqual(input_ids, [i for i in range(400, 500)])
-
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    unittest.main()

@@ -43,7 +43,7 @@ Micro Batch即在批处理过程中，将数据切分为更小粒度的多个bat
     {
        "maxSeqLen" : 2560,
        "maxInputTokenLen" : 2048,
-       "truncation" : 0,
+       "truncation" : false,
        "ModelConfig" : [
          {
              "modelInstanceType" : "Standard",

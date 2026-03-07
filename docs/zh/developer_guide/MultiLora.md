@@ -108,7 +108,7 @@ vi conf/config.json
         "ModelDeployConfig": {
             "maxSeqLen": 2560,
             "maxInputTokenLen": 2048,
-            "truncation": 0,
+            "truncation": false,
             "ModelConfig": [
                 {
                     "modelInstanceType": "Standard",

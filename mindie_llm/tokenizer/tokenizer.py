@@ -325,7 +325,7 @@ class IbisTokenizer:
             self.delete_multimodal_cache(timestamp, self.cache_prefix)
             raise e
 
-    def encode(self, prompt, chat_template_kwargs: dict):
+    def encode(self, prompt):
         try:
             if self.is_mm(prompt):
                 mm_inputs = self.process_mm_inputs(prompt)
@@ -336,8 +336,7 @@ class IbisTokenizer:
                 else:
                     token_list = token_list.numpy().tolist()
             else:
-                chat_template_kwargs["return_tensors"] = "np"
-                token_list = self.wrapper_encode([prompt], **chat_template_kwargs)
+                token_list = self.wrapper_encode([prompt], return_tensors="np")
 
             for elem in token_list:
                 if isinstance(elem, list):
