@@ -9,7 +9,7 @@
 # See the Mulan PSL v2 for more details.
 import math
 import acl
-from ...utils.log.logging import logger
+from ...utils.log.logging import logger, print_log
 from ...utils.tensor import npu
 
 INT8_BYTES_SIZE = 1
@@ -71,7 +71,7 @@ class NpuMemoryWatcher:
             free_mem, total_mem, _ = acl.rt.get_mem_info(1)
             peak_mem = total_mem - free_mem
 
-            if is_multimodal and total_mem >= TOTAL_MEMORY:
+            if is_multimodal and "310P" not in acl.get_soc_name().upper() and total_mem >= TOTAL_MEMORY:
                 memory_threshold = (
                     MM_LONG_SEQ_MEMORY
                     if max_input_len > MM_LONG_SEQ_TOKENLEN
