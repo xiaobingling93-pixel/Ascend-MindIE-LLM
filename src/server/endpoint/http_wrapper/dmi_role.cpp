@@ -434,7 +434,6 @@ bool DmiRole::UpdatePDNotSwitchInfoV2(const std::string &roleName, const ordered
                 for (const auto &dpGroupInfo : nodeInfo["dp_inst_list"]) {
                     std::vector<DeviceInfo> linkDeviceIp;
                     auto dpInstanceId = dpGroupInfo["dp_inst_id"];
-                    globalIpInfo.hostIpInfo[dpInstanceId] = {nodeInfo["host_ip"]};
                     if (nodeInfo.contains("super_pod_id")) {
                         superPodId = nodeInfo["super_pod_id"];
                         globalIpInfo.superPodIdInfo[dpInstanceId] = superPodId;

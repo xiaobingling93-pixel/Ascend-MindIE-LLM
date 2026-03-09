@@ -959,7 +959,31 @@ def get_attribute_info(link_request: PDLinkRequest):
         device_num = len(pd_link_info.link_info[0].device_info)
     else:
         device_num = len(pd_link_info.unlink_info[0].device_info)
-    if pd_link_info.super_id_num > 0:
+
+    # 检查是否有超节点信息（A3场景），不仅依赖super_id_num，还要检查实际的超节点字段
+    has_super_info = pd_link_info.super_id_num > 0
+
+    def _has_super_info_in_remote_infos(remote_infos):
+        """检查RemoteInfo列表中是否包含超节点信息"""
+        for remote_info in remote_infos:
+            # 检查host_info中的super_pod_id
+            for host_info in remote_info.host_info:
+                if host_info.HasField("super_pod_id"):
+                    return True
+            # 检查device_info中的super_device_id
+            for device_info in remote_info.device_info:
+                if device_info.HasField("super_device_id"):
+                    return True
+        return False
+
+    if not has_super_info:
+        # 检查link_info中的超节点信息，如果没有，检查unlink_info中的超节点信息
+        has_super_info = (
+            _has_super_info_in_remote_infos(pd_link_info.link_info) or
+            _has_super_info_in_remote_infos(pd_link_info.unlink_info)
+        )
+
+    if has_super_info:
         device_info_num = 10  # A3 场景
     else:
         device_info_num = 9  # A2 场景
@@ -979,13 +1003,17 @@ def get_attribute_info(link_request: PDLinkRequest):
             host_info_list = host_ip_list + [int(host_info.cluster_id)]
             if host_info.HasField("super_pod_id"):
                 host_info_list.append(host_info.super_pod_id)
-            device_data[i, j, :] = host_info_list
+            device_data[i, j, :] = np.pad(
+                host_info_list, (0, device_info_num - len(host_info_list)), constant_values=-1
+            )
         for j, device_info in enumerate(_link_info.device_info):
             device_ip_list = ip_string_to_list(device_info.device_ip)
             device_info_list = device_ip_list + [device_info.physical_id]
             if device_info.HasField("super_device_id"):
                 device_info_list.append(device_info.super_device_id)
-            device_data[i, j + host_ip_num_per_dp, :] = device_info_list
+            device_data[i, j + host_ip_num_per_dp, :] = np.pad(
+                device_info_list, (0, device_info_num - len(device_info_list)), constant_values=-1
+            )
     # 处理unlink_info
     for i, _link_info in enumerate(pd_link_info.unlink_info):
         for j, host_info in enumerate(_link_info.host_info):
@@ -993,13 +1021,17 @@ def get_attribute_info(link_request: PDLinkRequest):
             host_info_list = host_ip_list + [int(host_info.cluster_id)]
             if host_info.HasField("super_pod_id"):
                 host_info_list.append(host_info.super_pod_id)
-            device_data[len(pd_link_info.link_info) + i, j, :] = host_info_list
+            device_data[len(pd_link_info.link_info) + i, j, :] = np.pad(
+                host_info_list, (0, device_info_num - len(host_info_list)), constant_values=-1
+            )
         for j, device_info in enumerate(_link_info.device_info):
             device_ip_list = ip_string_to_list(device_info.device_ip)
             device_info_list = device_ip_list + [device_info.physical_id]
             if device_info.HasField("super_device_id"):
                 device_info_list.append(device_info.super_device_id)
-            device_data[len(pd_link_info.link_info) + i, j + host_ip_num_per_dp, :] = device_info_list
+            device_data[len(pd_link_info.link_info) + i, j + host_ip_num_per_dp, :] = np.pad(
+                device_info_list, (0, device_info_num - len(device_info_list)), constant_values=-1
+            )
     # handle policy
     instance_ids = list(pd_link_info.instance2sp.keys())
     sp_sizes = [pd_link_info.instance2sp[instance_id] for instance_id in instance_ids]
