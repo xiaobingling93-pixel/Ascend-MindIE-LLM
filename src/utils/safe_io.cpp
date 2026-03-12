@@ -15,10 +15,21 @@
 #include <iostream>
 
 #include "safe_path.h"
+#include "config_info.h"
 
 namespace mindie_llm {
 
-static constexpr int JSON_STR_DEP_MAX = 10; // 限制嵌套层次10层
+static int g_jsonDepthLimit = JSON_DEPTH_LIMIT_MIN; // 限制嵌套层次
+
+void SetJsonDepthLimit(int depth)
+{
+    g_jsonDepthLimit = depth;
+}
+
+int GetJsonDepthLimit()
+{
+    return g_jsonDepthLimit;
+}
 
 Result LoadJson(const std::string& path, Json& json)
 {
@@ -41,7 +52,7 @@ bool CheckJsonDepth(int depth, Json::parse_event_t ev)
     switch (ev) {
         case Json::parse_event_t::object_start:
         case Json::parse_event_t::array_start:
-            return depth <= JSON_STR_DEP_MAX;
+            return depth <= g_jsonDepthLimit;
         default:
             return true;
     }

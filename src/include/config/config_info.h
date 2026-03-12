@@ -26,6 +26,9 @@ namespace mindie_llm {
 const std::string INFER_MODE_STANDARD = "standard";
 const std::string INFER_MODE_DMI = "dmi";
 
+constexpr uint32_t JSON_DEPTH_LIMIT_MIN = 10U;
+constexpr uint32_t JSON_DEPTH_LIMIT_MAX = 100U;
+
 enum class WorkFlowType : uint32_t {
     STANDARD_INFERENCE = 0,
     SPECULATIVE_INFERENCE = 1,
@@ -81,6 +84,7 @@ struct ServerConfig {
     std::string metricsTlsPk;
     bool openAiSupportedvLLM{true};
     bool distDPServerEnabled{false};
+    uint32_t maxJsonDepth = JSON_DEPTH_LIMIT_MIN;
 
     bool layerwiseDisaggregated{false};
     std::string layerwiseDisaggregatedRoleType;

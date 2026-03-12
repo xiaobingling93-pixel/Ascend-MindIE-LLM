@@ -16,6 +16,7 @@
 #include "log.h"
 #include "base_config_manager.h"
 #include "check_utils.h"
+#include "safe_io.h"
 
 using Json = nlohmann::json;
 using namespace nlohmann::literals;
@@ -55,6 +56,7 @@ static std::vector<ParamSpec> g_serverParamsConstraint = {
     {"e2eTimeout", "int32_t", true},
     {"maxRequestLength", "uint32_t", false},
     {"distDPServerEnabled", "bool", false},
+    {"maxJsonDepth", "uint32_t", false},
     {"layerwiseDisaggregated", "bool", false},
     {"layerwiseDisaggregatedRoleType", "string", false},
     {"layerwiseDisaggregatedMasterIpAddress", "string", false},
@@ -323,12 +325,17 @@ void ServerConfigManager::LoadOptionalParameters(Json& serverParamsJsonData)
         CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxRequestLength, 100U,
                                                                                   1U, "serverConfig.maxRequestLength"));
     }
+    if (serverParamsJsonData.contains("maxJsonDepth")) {
+        serverConfig_.maxJsonDepth = serverParamsJsonData["maxJsonDepth"];
+        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxJsonDepth,
+            JSON_DEPTH_LIMIT_MAX, JSON_DEPTH_LIMIT_MIN, "serverConfig.maxJsonDepth"));
+        SetJsonDepthLimit(static_cast<int>(serverConfig_.maxJsonDepth));
+    }
     if (serverParamsJsonData.contains("HealthCheckConfig") &&
         serverParamsJsonData["HealthCheckConfig"].contains("npuUsageThreshold")) {
         serverConfig_.npuUsageThreshold = serverParamsJsonData["HealthCheckConfig"]["npuUsageThreshold"];
-        CHECK_CONFIG_VALIDATION(initFlag,
-            ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.npuUsageThreshold, 100U,
-            0U, "serverConfig.HealthCheckConfig.npuUsageThreshold"));
+        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.npuUsageThreshold,
+            100U, 0U, "serverConfig.HealthCheckConfig.npuUsageThreshold"));
     }
     if (serverParamsJsonData.contains("inferMode")) {
         serverConfig_.inferMode = serverParamsJsonData["inferMode"];
@@ -359,12 +366,8 @@ void ServerConfigManager::LoadOptionalParameters(Json& serverParamsJsonData)
             return;
         }
     }
-    if (serverParamsJsonData.contains("openAiSupport") &&
-        std::string(serverParamsJsonData["openAiSupport"]) != "vllm") {
-        serverConfig_.openAiSupportedvLLM = false;
-    } else {
-        serverConfig_.openAiSupportedvLLM = true;
-    }
+    serverConfig_.openAiSupportedvLLM = !(serverParamsJsonData.contains("openAiSupport") &&
+        std::string(serverParamsJsonData["openAiSupport"]) != "vllm");
 }
 
 bool ServerConfigManager::CheckParam()

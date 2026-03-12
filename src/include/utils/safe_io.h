@@ -25,6 +25,9 @@ using OrderedJson = nlohmann::ordered_json;
 
 Result LoadJson(const std::string& path, Json& json);
 
+void SetJsonDepthLimit(int depth);
+int GetJsonDepthLimit();
+
 bool CheckJsonDepth(int depth, Json::parse_event_t ev);
 bool CheckJsonDepthWithLogger(int depth, Json::parse_event_t ev, std::function<void(void)> logger);
 bool CheckJsonDepthCallbackNoLogger(int depth, Json::parse_event_t ev, Json& obj);
