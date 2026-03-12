@@ -182,6 +182,10 @@ class SamplerConfig:
 
     handling_policy: Dict[str, HandlingBackend] = field(default_factory=dict)
     selection_policy: Dict[str, HandlingBackend] = field(default_factory=dict)
+    
+    # 约束解码配置 (response_format / guided decoding)
+    enable_guided_decoding: bool = True  # 是否启用约束解码
+    guided_decoding_backend: str = "xgrammar"  # 约束解码后端: "xgrammar"
 
     def __post_init__(self):
         if self.backend_type == BackendType.MS:
@@ -192,6 +196,7 @@ class SamplerConfig:
                 "temperature": HandlingBackend.MS,
                 "top_k": HandlingBackend.MS,
                 "top_p": HandlingBackend.MS,
+                "guided_decoding": HandlingBackend.MS,
             }
             self.selection_policy = {
                 "greedy_search": HandlingBackend.MS,
@@ -207,6 +212,7 @@ class SamplerConfig:
                 "temperature": HandlingBackend.PTA,
                 "top_k": HandlingBackend.PTA,
                 "top_p": HandlingBackend.PTA,
+                "guided_decoding": HandlingBackend.PTA,
             }
             self.selection_policy = {
                 "greedy_search": HandlingBackend.PTA,

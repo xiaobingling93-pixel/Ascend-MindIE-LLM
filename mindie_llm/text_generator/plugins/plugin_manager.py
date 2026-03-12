@@ -12,7 +12,7 @@ import importlib
 import queue
 import threading
 import copy
-from typing import Iterable, Optional, Any
+from typing import Iterable, Optional, Any, TYPE_CHECKING, List
 from dataclasses import fields
 import torch
 import numpy as np
@@ -80,6 +80,9 @@ class PluginManager:
         self.previous_batch_is_prefill = False
         self.is_inference_pause = False
         self.mem_det_trigger_counter = 0
+        # 结构化输出管理器 (延迟初始化)
+        self._structured_output_manager: Optional[Any] = None
+        self._structured_output_enabled = kwargs.get('enable_structured_output', True)
 
     @staticmethod
     def unsqueeze_sampling_output(sampling_output: SamplingOutput):
@@ -165,6 +168,9 @@ class PluginManager:
                 **self.kwargs,
             )
             setattr(self, plugin, plugin_tmp)
+        
+        # 初始化结构化输出管理器
+        self._init_structured_output_manager()
 
     def mem_det_trigger_counter_acc(self):
         if self.mem_det_trigger_counter < MEM_DETECT_INTERVAL:
@@ -370,6 +376,22 @@ class PluginManager:
         else:
             model_inputs, sampling_metadata, trace_ids = \
                 self.infer_context.compose_model_inputs(input_metadata, cache_ids, warmup=False, hit_mask=hit_mask)
+        
+        # 生成结构化输出 bitmask (直接调用 StructuredOutputManager)
+        if self._structured_output_manager is not None and sampling_metadata is not None:
+            response_format_array = input_metadata.batch_response_format
+            all_sequence_ids = sampling_metadata.all_sequence_ids
+            
+            if response_format_array is not None and all_sequence_ids is not None:
+                num_with_constraint = sum(1 for rf in response_format_array if rf is not None)
+                if num_with_constraint > 0:
+                    bitmask = self._structured_output_manager.process_batch_for_generation(
+                        sequence_ids=list(all_sequence_ids),
+                        response_format_array=response_format_array,
+                    )
+                    if bitmask is not None:
+                        sampling_metadata.guided_bitmask = bitmask
+        
         res = (cache_ids, model_inputs, sampling_metadata, trace_ids)
         return res
 
@@ -390,6 +412,16 @@ class PluginManager:
         # md need cache_ids and  model_inputs
         if not self.async_inference:
             self.plugin_verify_manager(sampling_output, cache_ids, result)
+        
+        # 更新结构化输出 FSM 状态（直接调用 StructuredOutputManager）
+        if self._structured_output_manager is not None and sampling_metadata is not None:
+            all_sequence_ids = sampling_metadata.all_sequence_ids
+            token_ids = sampling_output.token_ids
+            if all_sequence_ids is not None and token_ids is not None:
+                self._structured_output_manager.update_states_after_sampling(
+                    sequence_ids=list(all_sequence_ids),
+                    token_ids=token_ids,
+                )
 
         finish_reason, filtered_indices, truncation_indices = (
             self.output_filter.filter_finished_sequences(cache_ids, input_metadata, sampling_output))
@@ -414,6 +446,9 @@ class PluginManager:
             sequence_ids_to_clear = self.infer_context.clear_finished_context(finished_sequence_ids, finished_cache_ids)
             if has_sampling and finished_sequence_ids.size != 0:
                 self.sampler.clear_cache(finished_sequence_ids)
+                # 清理结构化输出 FSM 状态（直接调用 StructuredOutputManager）
+                if self._structured_output_manager is not None:
+                    self._structured_output_manager.clear_finished_requests(finished_sequence_ids)
             self.plugin_cache_clear_manager(cache_ids, finish_reason)
         self.infer_context.clear_aborted_context()
         token_indices = self.infer_context.get_output_len_count(cache_ids)
@@ -603,6 +638,52 @@ class PluginManager:
                 execution_done.record(torch.npu.current_stream())
                 model_output_wrapper.execution_done = execution_done
             self.output_queue.put(model_output_wrapper)
+
+    def _init_structured_output_manager(self) -> None:
+        if not self._structured_output_enabled:
+            return
+        
+        try:
+            from .structured_output import (
+                StructuredOutputManager,
+                StructuredOutputConfig,
+                GuidedDecodingBackendType,
+            )
+            
+            # 获取 tokenizer 和 vocab_size
+            tokenizer = self.generator_backend.tokenizer
+            vocab_size = None
+            
+            if tokenizer is not None:
+                if hasattr(tokenizer, '__len__'):
+                    vocab_size = len(tokenizer)
+                elif hasattr(tokenizer, 'vocab_size'):
+                    vocab_size = tokenizer.vocab_size
+            
+            if tokenizer is None or vocab_size is None:
+                logger.warning("Cannot initialize structured output manager: tokenizer or vocab_size not available")
+                self._structured_output_enabled = False
+                return
+            
+            # 配置
+            backend_type = self.kwargs.get('guided_decoding_backend', 'xgrammar')
+            config = StructuredOutputConfig(
+                backend=GuidedDecodingBackendType(backend_type),
+            )
+            
+            # 创建管理器
+            self._structured_output_manager = StructuredOutputManager(
+                tokenizer=tokenizer,
+                vocab_size=vocab_size,
+                config=config,
+            )
+            
+        except ImportError as e:
+            logger.warning(f"Failed to import structured output module: {e}")
+            self._structured_output_enabled = False
+        except Exception as e:
+            logger.warning(f"Failed to initialize structured output manager: {e}")
+            self._structured_output_enabled = False
 
     def _prepare_masks_for_filling(self, model_inputs, current_dp_sequence_ids, input_metadata):
         if input_metadata.batch_is_prefill is None and input_metadata.is_prefill:

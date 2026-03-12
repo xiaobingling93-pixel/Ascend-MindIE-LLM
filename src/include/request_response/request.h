@@ -64,6 +64,7 @@ struct Request {
     std::optional<bool> useBeamSearch;
     std::optional<uint32_t> topLogprobs;
     std::optional<bool> logprobs;
+    std::optional<std::string> responseFormat; // JSON structured output format
     uint64_t priority = 5; // PRIORITY_DFT
     std::string loraId = "None";
 

@@ -82,6 +82,7 @@ SamplingParamsSPtr SeqGroupBuilderFromInferReq::GetSampleParamFromInferRequest(R
     sampleParamSptr->useBeamsearch = request->useBeamSearch.value_or(false);
     sampleParamSptr->logprobs = request->logprobs;
     sampleParamSptr->topLogprobs = request->topLogprobs;
+    sampleParamSptr->responseFormat = request->responseFormat;
 
     return sampleParamSptr;
 }

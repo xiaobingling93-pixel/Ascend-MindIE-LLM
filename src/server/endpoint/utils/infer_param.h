@@ -179,6 +179,7 @@ bool AssignOpenAILogprobs(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::s
 bool AssignStream(const OrderedJson &jsonObj, InferParamSPtr inferParam, std::string &error) noexcept;
 bool CheckMultimodalUrlFromJson(const OrderedJson &jsonObj, std::string &error) noexcept;
 bool AssignLoraId(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &modelName, std::string &error);
+bool AssignResponseFormat(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &error) noexcept;
 } // namespace mindie_llm
 
 #endif // ENDPOINT_INFER_PARAM_H

@@ -93,6 +93,72 @@ TEST_F(VllmOpenAiInferTest, TestSetupInferParams)
     EXPECT_EQ(inferInterface->SetupInferParams(request, errorMsg), false);
 }
 
+TEST_F(VllmOpenAiInferTest, TestSetupInferParamsWithResponseFormat)
+{
+    std::vector<ModelDeployConfig> mockDeployConfig{ModelDeployConfig{.modelName = "mockModel"}};
+    MOCKER_CPP(&ConfigManager::GetModelDeployConfig, const std::vector<ModelDeployConfig> &(*)())
+        .stubs()
+        .will(returnValue(mockDeployConfig));
+    std::string errorMsg;
+
+    // valid response_format with json_object
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "model": "llama_65b",
+        "response_format": {"type": "json_object"}
+    })");
+    EXPECT_TRUE(inferInterface->SetupInferParams(request, errorMsg));
+    EXPECT_TRUE(request->responseFormat.has_value());
+    EXPECT_EQ(request->responseFormat.value(), R"({"type":"json_object"})");
+
+    // valid response_format with json_schema
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "model": "llama_65b",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "my_schema",
+                "schema": {"type": "object"}
+            }
+        }
+    })");
+    EXPECT_TRUE(inferInterface->SetupInferParams(request, errorMsg));
+    EXPECT_TRUE(request->responseFormat.has_value());
+
+    // invalid response_format - type is invalid
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "model": "llama_65b",
+        "response_format": {"type": "invalid_type"}
+    })");
+    EXPECT_FALSE(inferInterface->SetupInferParams(request, errorMsg));
+
+    // invalid response_format - json_schema.name is missing
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "model": "llama_65b",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"schema": {"type": "object"}}
+        }
+    })");
+    EXPECT_FALSE(inferInterface->SetupInferParams(request, errorMsg));
+
+    // invalid response_format - json_schema.name contains invalid characters
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "model": "llama_65b",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "invalid name",
+                "schema": {"type": "object"}
+            }
+        }
+    })");
+    EXPECT_FALSE(inferInterface->SetupInferParams(request, errorMsg));
+}
+
 TEST_F(VllmOpenAiInferTest, TestParseModelName)
 {
     OrderedJson body;

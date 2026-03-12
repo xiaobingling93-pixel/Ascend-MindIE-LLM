@@ -8,6 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 import unittest
+from unittest.mock import patch, MagicMock
 
 import mindspore as ms
 import numpy as np
@@ -129,6 +130,74 @@ class TestMsHandlers(unittest.TestCase):
             [-0.3 / 0.5, -0.2 / 0.5, -0.1 / 0.5, 0.01 / 0.5]
         ]
         self.assert_almost_equal_2d(self.res_logits.asnumpy().tolist(), expected_logits)
+
+    def test_guided_decoding_bitmask_none(self):
+        test_logits = ms.Tensor(
+            [[0.1, 0.2, 0.3, 0.4],
+             [-0.1, 0.01, 0.2, 0.02],
+             [-0.3, -0.2, -0.1, 0.01]]
+        )
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        self.metadata.guided_bitmask = None
+        self.res_logits = guided_decoding_lh(test_logits, self.metadata)
+        self.assertTrue(np.array_equal(self.res_logits.asnumpy(), test_logits.asnumpy()))
+
+    def test_guided_decoding_import_success(self):
+        test_logits = ms.Tensor(
+            [[0.1, 0.2, 0.3, 0.4],
+             [-0.1, 0.01, 0.2, 0.02],
+             [-0.3, -0.2, -0.1, 0.01]]
+        )
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        bitmask = np.array([[1, 0], [1, 1], [0, 1]], dtype=np.int32)
+        self.metadata.guided_bitmask = bitmask
+        mock_apply = MagicMock()
+        guided_decoding_lh._apply_token_bitmask_inplace = mock_apply
+        guided_decoding_lh._import_attempted = True
+        self.res_logits = guided_decoding_lh(test_logits, self.metadata)
+        mock_apply.assert_called_once()
+
+    def test_guided_decoding_import_failure(self):
+        test_logits = ms.Tensor(
+            [[0.1, 0.2, 0.3, 0.4],
+             [-0.1, 0.01, 0.2, 0.02],
+             [-0.3, -0.2, -0.1, 0.01]]
+        )
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        bitmask = np.array([[1, 0], [1, 1], [0, 1]], dtype=np.int32)
+        self.metadata.guided_bitmask = bitmask
+        guided_decoding_lh._import_attempted = True
+        guided_decoding_lh._apply_token_bitmask_inplace = None
+        self.res_logits = guided_decoding_lh(test_logits, self.metadata)
+        self.assertTrue(np.array_equal(self.res_logits.asnumpy(), test_logits.asnumpy()))
+
+    def test_guided_decoding_apply_exception(self):
+        test_logits = ms.Tensor(
+            [[0.1, 0.2, 0.3, 0.4],
+             [-0.1, 0.01, 0.2, 0.02],
+             [-0.3, -0.2, -0.1, 0.01]]
+        )
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        bitmask = np.array([[1, 0], [1, 1], [0, 1]], dtype=np.int32)
+        self.metadata.guided_bitmask = bitmask
+        guided_decoding_lh._apply_token_bitmask_inplace = MagicMock(side_effect=RuntimeError("test error"))
+        guided_decoding_lh._import_attempted = True
+        self.res_logits = guided_decoding_lh(test_logits, self.metadata)
+        self.assertTrue(np.array_equal(self.res_logits.asnumpy(), test_logits.asnumpy()))
+
+    def test_guided_decoding_lazy_import_first_attempt(self):
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        mock_func = MagicMock()
+        with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': MagicMock(apply_token_bitmask_inplace=mock_func)}):
+            result = guided_decoding_lh._lazy_import()
+            self.assertTrue(guided_decoding_lh._import_attempted)
+
+    def test_guided_decoding_lazy_import_already_attempted(self):
+        guided_decoding_lh = MS_HANDLER_REGISTRY['guided_decoding'](self.params)
+        guided_decoding_lh._import_attempted = True
+        guided_decoding_lh._apply_token_bitmask_inplace = MagicMock()
+        result = guided_decoding_lh._lazy_import()
+        self.assertTrue(result)
 
 
 if __name__ == '__main__':

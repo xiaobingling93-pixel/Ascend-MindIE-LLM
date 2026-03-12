@@ -26,3 +26,4 @@ class GenerationParams:
     stop_strings: Optional[List[str]] = None
     stop_token_ids: Optional[List[Union[int, List[int]]]] = None
     use_beam_search: Optional[bool] = None
+    response_format: Optional[str] = None  # JSON 结构化输出约束 (response_format JSON 字符串)

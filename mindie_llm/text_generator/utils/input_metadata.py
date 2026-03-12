@@ -104,6 +104,8 @@ class InputMetadata:
     total_seq_num: Optional[int] = None
     trace_ids: Optional[List[Any]] = None
     simulator_ids: Optional[List[Any]] = None
+    # JSON 结构化输出约束 (response_format)
+    batch_response_format: Optional[List[Optional[str]]] = None
     batch_tools: Optional[List[Any]] = None
     batch_tool_choice: Optional[List[Any]] = None
 
@@ -219,6 +221,7 @@ class InputMetadata:
         batch_dp_rank_ids = None
         batch_sampling_params = None
         batch_seq_len = None
+        batch_response_format = None
         has_sampling = any(req.has_sampling for req in llm_requests)
         input_ids_list = []
         total_seq_num = 0
@@ -241,6 +244,7 @@ class InputMetadata:
             batch_seeds = []
             adapter_ids = []
             batch_dp_rank_ids = []
+            batch_response_format = []
             for llm_request in llm_requests:
                 input_ids_list.extend(llm_request.input_ids)
                 seq_num = llm_request.input_ids.shape[0]
@@ -260,6 +264,7 @@ class InputMetadata:
                 batch_stop_token_ids.append(llm_request.stop_token_ids)
                 adapter_ids.append(llm_request.adapter_id)
                 batch_dp_rank_ids.append(llm_request.dp_rank_id)
+                batch_response_format.append(llm_request.response_format)
                 if llm_request.sp_tokens is not None:
                     batch_sp_tokens.append(llm_request.sp_tokens)
                     batch_sp_rank_ids.append(llm_request.sp_rank_id)
@@ -278,8 +283,12 @@ class InputMetadata:
                 total_seq_num = sum(batch_seq_len)
         else:
             batch_max_output_lens = []
+            batch_response_format = []
             for llm_request in llm_requests:
-                batch_max_output_lens.extend([llm_request.max_new_tokens] * len(llm_request.sequences.keys()))
+                num_sequences = len(llm_request.sequences.keys())
+                batch_max_output_lens.extend([llm_request.max_new_tokens] * num_sequences)
+                # 收集 response_format（每个 sequence 都需要相同的 response_format）
+                batch_response_format.extend([llm_request.response_format] * num_sequences)
 
         batch_max_output_lens = np.array(batch_max_output_lens, dtype=np.int64)
         return cls(
@@ -315,5 +324,6 @@ class InputMetadata:
             split_start_position=split_start_pos,
             split_end_position=split_end_pos,
             batch_last_prompt=batch_last_prompt,
+            batch_response_format=batch_response_format,
             batch_is_prefill=batch_is_prefill
         )

@@ -8,6 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 from functools import wraps
+from typing import Any, Optional
 
 import torch
 
@@ -81,3 +82,37 @@ class TemperatureLogitsHandler(LogitsHandler):
             print_log(self.params.rank, logger.error, 'temperature cannot be `0`!')
             raise e
         return logits
+
+
+@register_class('guided_decoding')
+class GuidedDecodingLogitsHandler(LogitsHandler):
+    def __init__(self, params):
+        super().__init__(params)
+        self._apply_token_bitmask_inplace: Optional[Any] = None
+        self._import_attempted = False
+    
+    def __call__(self, logits: torch.Tensor, metadata: SamplingMetadata) -> torch.Tensor:
+        bitmask = metadata.guided_bitmask
+        if bitmask is None:
+            return logits
+        _, vocab_size = logits.shape
+        try:
+            import_success = self._lazy_import()
+            if not import_success:
+                return logits
+            self._apply_token_bitmask_inplace(logits, bitmask, vocab_size)
+        except Exception as e:
+            logger.warning(f"Failed to apply grammar bitmask: {e}")
+        return logits
+    
+    def _lazy_import(self) -> bool:
+        if self._import_attempted:
+            return self._apply_token_bitmask_inplace is not None
+        self._import_attempted = True
+        try:
+            from ...plugins.structured_output import apply_token_bitmask_inplace
+            self._apply_token_bitmask_inplace = apply_token_bitmask_inplace
+            return True
+        except ImportError as e:
+            logger.warning(f"Failed to import apply_token_bitmask_inplace: {e}")
+            return False

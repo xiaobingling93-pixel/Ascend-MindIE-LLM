@@ -143,7 +143,8 @@ bool SingleReqVllmOpenAiCompletionsInferInterface::SetupInferParams(RequestSPtr 
           AssignLogprobs(reqJsonBody_, tmpReq, msg) &&
           AssignMaxTokens(reqJsonBody_, inputParam, msg) &&
           AssignStream(reqJsonBody_, inputParam, msg) &&
-          AssignLoraId(reqJsonBody_, tmpReq, this->model, msg))) {
+          AssignLoraId(reqJsonBody_, tmpReq, this->model, msg) &&
+          AssignResponseFormat(reqJsonBody_, tmpReq, msg))) {
         return false;
     }
     if (!SetReturnSeqCount(tmpReq, msg)) {
@@ -747,6 +748,15 @@ std::string SingleReqVllmOpenAiCompletionsInferInterface::BuildReComputeBody(con
     }
     if (request_->skipSpecialTokens.has_value()) {
         newReqJsonObj["skip_special_tokens"] = request_->skipSpecialTokens.value();
+    }
+    if (request_->responseFormat.has_value()) {
+        try {
+            newReqJsonObj["response_format"] = nlohmann::json::parse(request_->responseFormat.value(),
+                CheckJsonDepthCallbackUlog);
+        } catch (...) {
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
+                JSON_PARSE_ERROR), "Failed to parse responseFormat");
+        }
     }
     return newReqJsonObj.dump();
 }

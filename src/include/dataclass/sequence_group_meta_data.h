@@ -97,6 +97,8 @@ struct SequenceGroupMetaData {
     std::vector<size_t> lwdCloudSpRankPromptTokenNum_;
     std::vector<size_t> lwdCloudSpRankBlockNum_;
     std::vector<BlockId> lwdCloudBlockIds_;
+    
+    std::optional<std::string> responseFormat_; // JSON 结构化输出约束
 };
 
 struct SequenceGroupMetaDatas {

@@ -349,6 +349,7 @@ def convert_execute_model_request_to_input_metadata_composite(
     is_req_last_chunk = []
     split_start_pos = []
     split_end_pos = []
+    batch_response_format = None
     
     # prefix cache
     batch_computed_block_order = None
@@ -481,10 +482,18 @@ def convert_execute_model_request_to_input_metadata_composite(
         batch_computed_block_order = prefill_params["batch_computed_block_order"]
         computed_blocks = prefill_params["computed_blocks"]
         remote_computed_blocks = prefill_params["remote_computed_blocks"]
+        batch_response_format = prefill_params["batch_response_format"]
     else:
+        # decode 阶段：收集必要的批次元数据
+        # 注意：在 decode 阶段，每个 seq_group 可能包含多个 sequence
+        # response_format_array 需要与 all_sequence_ids 一一对应（sequence 级别）
+        batch_response_format = []
         for seq_group_metadata in request.seq_group_metadata_list:
+            seq_ids = convert_bytes_to_list(seq_group_metadata.seqIds)
+            num_sequences = len(seq_ids)
+            
             batch_seq_ids.append(
-                np.array(convert_bytes_to_list(seq_group_metadata.seqIds), copy=True, dtype=np.int64)
+                np.array(seq_ids, copy=True, dtype=np.int64)
             )
             reserved_seqs_id_tensor = list(seq_group_metadata.reserved_seq_ids)
             if reserved_seqs_id_tensor is None:
@@ -492,6 +501,13 @@ def convert_execute_model_request_to_input_metadata_composite(
             else:
                 reserved_id = np.array(reserved_seqs_id_tensor, copy=True, dtype=np.int64)
             batch_reserved_seq_ids.append(reserved_id)
+            
+            # 收集 response_format（每个 sequence 都需要相同的 response_format）
+            response_format = None
+            if seq_group_metadata.HasField("response_format"):
+                response_format = seq_group_metadata.response_format
+            # Decode 阶段：按 sequence 数量扩展
+            batch_response_format.extend([response_format] * num_sequences)
     batch_ignore_eos = np.array(batch_ignore_eos)
     batch_skip_special_tokens = np.array(batch_skip_special_tokens)
     batch_include_stop = np.array(batch_include_stop)
@@ -538,7 +554,8 @@ def convert_execute_model_request_to_input_metadata_composite(
         is_append_block=batch_is_append_block,
         prefill_block_rank_id=batch_prefill_block_rank_id,
         block_rank_id=batch_block_rank_id,
-        layerwise_disaggregated_exe_stage=layerwise_disaggregated_exe_stage
+        layerwise_disaggregated_exe_stage=layerwise_disaggregated_exe_stage,
+        batch_response_format=batch_response_format
     )
 
     input_metadata_composite = InputMetadataComposite()
@@ -729,6 +746,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
     batch_logprobs = []
     batch_reserved_seq_ids = []
     batch_use_beam_search = np.array([], dtype=bool)
+    batch_response_format = []
     
     # prefix cache
     computed = []
@@ -773,6 +791,8 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
         batch_include_stop.append(seq_group_metadata.include_stop_str_in_output)
 
         seq_ids = convert_bytes_to_list(seq_group_metadata.seqIds)
+        num_sequences = len(seq_ids)
+        
         batch_seq_ids.append(
             np.array(seq_ids, copy=True, dtype=np.int64)
         )
@@ -793,6 +813,12 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
         batch_use_beam_search = np.append(
             batch_use_beam_search, np.array([sampling_params_detail.use_beam_search], dtype=bool)
         )
+        # 解析 response_format（每个 sequence 都需要相同的 response_format）
+        response_format = None
+        if seq_group_metadata.HasField("response_format"):
+            response_format = seq_group_metadata.response_format
+        # Prefill 阶段通常每个 seq_group 只有 1 个 sequence，但为了一致性也按 sequence 数量扩展
+        batch_response_format.extend([response_format] * num_sequences)
 
         # 解析每条request已计算的block数量，解析成一维list，如不存在将值置为None
         # 虚推请求不使用 prefix cache，填充 0 值以确保维度对齐
@@ -871,6 +897,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
         "batch_computed_block_order": batch_computed_block_order,
         "computed_blocks": computed_blocks,
         "remote_computed_blocks": remote_computed_blocks,
+        "batch_response_format": batch_response_format,
     }
 
 

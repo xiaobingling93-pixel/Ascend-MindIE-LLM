@@ -380,6 +380,10 @@ class SamplingMetadata:
     all_token_ids: Optional[backend.Tensor] = None
     output_token_ids: Optional[backend.Tensor] = None
     is_seq_prefill: Optional[np.ndarray] = None
+    
+    # 预计算的结构化输出 bitmask (由 preprocess 阶段填充)
+    # 形状: [batch_size, vocab_size // 32]，int32 数组
+    guided_bitmask: Optional[np.ndarray] = None
 
     @classmethod
     def from_numpy(

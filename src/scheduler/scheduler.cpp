@@ -1080,6 +1080,8 @@ void Scheduler::SetBasicMetadata(SequenceGroupMetaData &metaData, const Sequence
     if (schedulerConfig_->layerwiseDisaggregated) {
         metaData.requestGap_ = seqGroup->requestGap_;
     }
+    // JSON 结构化输出约束
+    metaData.responseFormat_ = seqGroup->sampling->responseFormat;
 }
 
 SequenceGroupMetaDatas Scheduler::InitSequenceGroupMetaDatas(const SchedulerOutputs &schedulerOut) const

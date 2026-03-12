@@ -55,6 +55,8 @@ struct SamplingParams {
 
     std::optional<uint32_t> topLogprobs;
 
+    std::optional<std::string> responseFormat; // JSON structured output format
+
     uint32_t n = 1;
 
     uint32_t bestOf = 1;

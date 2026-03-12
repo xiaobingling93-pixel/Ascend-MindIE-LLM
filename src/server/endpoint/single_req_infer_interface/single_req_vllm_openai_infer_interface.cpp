@@ -56,7 +56,8 @@ bool SingleReqVllmOpenAiInferInterface::SetupInferParams(RequestSPtr tmpReq, std
           AssignOpenAILogprobs(reqJsonBody_, tmpReq, msg) &&
           AssignMaxTokens(reqJsonBody_, inputParam, msg) &&
           AssignStream(reqJsonBody_, inputParam, msg) &&
-          AssignLoraId(reqJsonBody_, tmpReq, this->model, msg))) {
+          AssignLoraId(reqJsonBody_, tmpReq, this->model, msg) &&
+          AssignResponseFormat(reqJsonBody_, tmpReq, msg))) {
         return false;
     }
 
@@ -1232,15 +1233,12 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamResponse(RespBodyQueue &json
 std::string SingleReqVllmOpenAiInferInterface::BuildVllmOpenAIReComputeBody(const std::vector<BestNTokens>& tokens)
 {
     OrderedJson newReqJsonObj;
-    // Get tokens in non-stream mode
     if (tokens.size() != 0) {
         ConvertTokenToMap(tokens);
     }
     newReqJsonObj["model"] = this->model;
     newReqJsonObj["messages"] = this->BuildReComputeInput();
     newReqJsonObj["stream"] = this->inputParam->streamMode;
-
-    // The number of tokens remaining for inference after re-computation
     if (this->inputParam->maxNewTokens != MAX_NEW_TOKENS_DFT) {
         newReqJsonObj["max_tokens"] = this->inputParam->maxNewTokens;
     }

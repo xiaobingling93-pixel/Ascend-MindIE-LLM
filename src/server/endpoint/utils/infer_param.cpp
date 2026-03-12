@@ -10,6 +10,8 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "infer_param.h"
+#include <algorithm>
+#include <array>
 #include <sstream>
 
 #include "memory_utils.h"
@@ -775,4 +777,139 @@ bool AssignLoraId(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &m
     }
     return true;
 }
+
+bool ValidateJsonSchemaName(const OrderedJson &jsonSchema, std::string &error) noexcept
+{
+    if (!jsonSchema.contains("name") || jsonSchema["name"].is_null()) {
+        error = "Parameter response_format.json_schema.name is required";
+        return false;
+    }
+    if (!jsonSchema["name"].is_string()) {
+        error = "Parameter response_format.json_schema.name must be a string";
+        return false;
+    }
+    std::string schemaName = jsonSchema["name"];
+    constexpr size_t maxNameLength = 64;
+    if (schemaName.empty() || schemaName.length() > maxNameLength) {
+        error = "Parameter response_format.json_schema.name must be 1-64 characters";
+        return false;
+    }
+    // Validate name contains only a-zA-Z0-9, hyphen, and underscore
+    for (char c : schemaName) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '_') {
+            error = "Parameter response_format.json_schema.name must contain only 0-9, a-z, A-Z, -, _";
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool ValidateJsonSchemaTypes(const OrderedJson &schema, const std::string &path, std::string &error) noexcept
+{
+    static const std::array supportedTypes = {"string", "integer", "number", "boolean", "array", "object", "null"};
+    if (schema.contains("type")) {
+        if (!schema["type"].is_string()) {
+            error = "Invalid json_schema: 'type' at '" + path + "' must be a string";
+            return false;
+        }
+        std::string typeName = schema["type"].get<std::string>();
+        if (std::find(supportedTypes.begin(), supportedTypes.end(), typeName) == supportedTypes.end()) {
+            error = "Invalid json_schema: unsupported type '" + typeName + "' at '" + path + "'";
+            return false;
+        }
+    }
+    if (schema.contains("properties")) {
+        if (!schema["properties"].is_object()) {
+            error = "Invalid json_schema: 'properties' at '" + path + "' must be an object";
+            return false;
+        }
+        for (auto it = schema["properties"].begin(); it != schema["properties"].end(); ++it) {
+            if (!it.value().is_object()) {
+                error = "Invalid json_schema: property '" + it.key() + "' at '" + path + " must be an object";
+                return false;
+            }
+            if (!ValidateJsonSchemaTypes(it.value(), path + ".properties." + it.key(), error)) {
+                return false;
+            }
+        }
+    }
+    if (schema.contains("items")) {
+        if (!schema["items"].is_object() || !ValidateJsonSchemaTypes(schema["items"], path + ".items", error)) {
+            if (!schema["items"].is_object()) {
+                error = "Invalid json_schema: 'items' at '" + path + "' must be an object";
+            }
+            return false;
+        }
+    }
+    if (schema.contains("required")) {
+        if (!schema["required"].is_array()) {
+            error = "Invalid json_schema: 'required' at '" + path + "' must be an array";
+            return false;
+        }
+        for (const auto &item : schema["required"]) {
+            if (!item.is_string()) {
+                error = "Invalid json_schema: elements of 'required' at '" + path + "' must be strings";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool AssignResponseFormat(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &error) noexcept
+{
+    const std::string key = "response_format";
+    if (!jsonObj.contains(key) || jsonObj[key].is_null()) {
+        return true;
+    }
+    if (!jsonObj[key].is_object()) {
+        error = "Parameter response_format must be an object";
+        return false;
+    }
+    const auto &responseFormat = jsonObj[key];
+    if (!responseFormat.contains("type") || responseFormat["type"].is_null()) {
+        error = "Parameter response_format must contain 'type' field";
+        return false;
+    }
+    if (!responseFormat["type"].is_string()) {
+        error = "Parameter response_format.type must be a string";
+        return false;
+    }
+    std::string formatType = responseFormat["type"];
+    if (formatType != "json_object" && formatType != "json_schema") {
+        error = "Parameter response_format.type must be 'json_object', or 'json_schema', got '" + formatType + "'";
+        return false;
+    }
+    // For json_schema type, validate json_schema field exists
+    if (formatType == "json_schema") {
+        if (!responseFormat.contains("json_schema") || responseFormat["json_schema"].is_null()) {
+            error = "Parameter response_format.json_schema is required when type is 'json_schema'";
+            return false;
+        }
+        if (!responseFormat["json_schema"].is_object()) {
+            error = "Parameter response_format.json_schema must be an object";
+            return false;
+        }
+        if (!ValidateJsonSchemaName(responseFormat["json_schema"], error)) {
+            return false;
+        }
+        const auto &jsonSchemaObj = responseFormat["json_schema"];
+        if (!jsonSchemaObj.contains("schema") || jsonSchemaObj["schema"].is_null()) {
+            error = "Parameter response_format.json_schema.schema is required when type is 'json_schema'";
+            return false;
+        }
+        if (!jsonSchemaObj["schema"].is_object()) {
+            error = "Parameter response_format.json_schema.schema must be an object";
+            return false;
+        }
+        if (!ValidateJsonSchemaTypes(jsonSchemaObj["schema"], "schema", error)) {
+            return false;
+        }
+    }
+    // Store the entire response_format as JSON string for downstream processing
+    std::string responseFormatStr = responseFormat.dump();
+    tmpReq->responseFormat = responseFormatStr;
+    return true;
+}
+
 } // namespace mindie_llm

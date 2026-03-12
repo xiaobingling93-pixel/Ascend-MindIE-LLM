@@ -503,4 +503,204 @@ TEST_F(InferParamTest, testAssignMaxNewTokens)
     EXPECT_EQ(inferParam->maxNewTokens, MAX_NEW_TOKENS_DFT);
 }
 
+TEST_F(InferParamTest, testAssignResponseFormat)
+{
+    // contents missing
+    //      should return true given "response_format" is missing
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj.clear();
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+
+    // null value
+    //      should return true given "response_format" is null
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = nullptr;
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+
+    // valid values - type "json_object"
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "json_object"}};
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_TRUE(request->responseFormat.has_value());
+    EXPECT_EQ(request->responseFormat.value(), R"({"type":"json_object"})");
+
+    // valid values - type "json_schema" with valid schema and name
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", "test_schema"}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_TRUE(request->responseFormat.has_value());
+
+    // valid values - type "json_schema" with name containing hyphen and underscore
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", "my-test_schema_123"}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_TRUE(request->responseFormat.has_value());
+
+    // invalid values - response_format is not an object
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = "not_an_object";
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format must be an object");
+
+    // invalid values - response_format is an array
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = OrderedJson::array({"text"});
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+
+    // invalid values - type field is missing
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"other_field", "value"}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format must contain 'type' field");
+
+    // invalid values - type field is null
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", nullptr}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format must contain 'type' field");
+
+    // invalid values - type field is not a string
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", 123}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.type must be a string");
+
+    // invalid values - type field has invalid value
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "invalid_type"}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.type must be 'json_object', or 'json_schema', got 'invalid_type'");
+
+    // invalid values - type "text" is not supported
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "text"}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.type must be 'json_object', or 'json_schema', got 'text'");
+
+    // invalid values - json_schema type without json_schema field
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "json_schema"}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema is required when type is 'json_schema'");
+
+    // invalid values - json_schema type with null json_schema field
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "json_schema"}, {"json_schema", nullptr}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema is required when type is 'json_schema'");
+
+    // invalid values - json_schema type with non-object json_schema field
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {{"type", "json_schema"}, {"json_schema", "not_an_object"}};
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema must be an object");
+
+    // invalid values - json_schema.name is missing
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name is required");
+
+    // invalid values - json_schema.name is null
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", nullptr}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name is required");
+
+    // invalid values - json_schema.name is not a string
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", 123}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must be a string");
+
+    // invalid values - json_schema.name is empty
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", ""}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must be 1-64 characters");
+
+    // invalid values - json_schema.name exceeds 64 characters
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", std::string(65, 'a')}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must be 1-64 characters");
+
+    // valid values - json_schema.name with exactly 64 characters
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", std::string(64, 'a')}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_TRUE(request->responseFormat.has_value());
+
+    // invalid values - json_schema.name contains invalid character (space)
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", "invalid name"}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must contain only 0-9, a-z, A-Z, -, _");
+
+    // invalid values - json_schema.name contains invalid character (dot)
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", "invalid.name"}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must contain only 0-9, a-z, A-Z, -, _");
+
+    // invalid values - json_schema.name contains invalid character (special char)
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    jsonObj["response_format"] = {
+        {"type", "json_schema"},
+        {"json_schema", {{"name", "invalid@name"}, {"schema", {{"type", "object"}}}}}
+    };
+    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_FALSE(request->responseFormat.has_value());
+    EXPECT_EQ(error, "Parameter response_format.json_schema.name must contain only 0-9, a-z, A-Z, -, _");
+}
+
 } // namespace mindie_llm

@@ -55,6 +55,7 @@ class Request:
         self.stop_strings = generation_params.stop_strings
         self.stop_token_ids = generation_params.stop_token_ids
         self.use_beam_search = generation_params.use_beam_search
+        self.response_format = generation_params.response_format
 
         self.block_tables = None
         self.has_sampling = has_sampling

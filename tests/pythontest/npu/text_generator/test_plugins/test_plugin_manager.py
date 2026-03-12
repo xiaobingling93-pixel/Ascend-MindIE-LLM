@@ -392,5 +392,270 @@ class TestPlugin(unittest.TestCase):
                 np.ndarray
             )
 
+    def test_init_structured_output_manager_disabled(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            self.model_config['enable_structured_output'] = False
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            self.assertIsNone(plugin_manager._structured_output_manager)
+            self.assertFalse(plugin_manager._structured_output_enabled)
+
+    def test_init_structured_output_manager_no_tokenizer(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            plugin_manager.generator_backend.tokenizer = None
+            plugin_manager._init_structured_output_manager()
+            
+            self.assertIsNone(plugin_manager._structured_output_manager)
+            self.assertFalse(plugin_manager._structured_output_enabled)
+
+    def test_init_structured_output_manager_import_error(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.__len__ = MagicMock(return_value=1000)
+            plugin_manager.generator_backend.tokenizer = mock_tokenizer
+            
+            mock_structured_output = MagicMock()
+            mock_structured_output.StructuredOutputManager = MagicMock(side_effect=ImportError("test"))
+            with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': mock_structured_output}):
+                plugin_manager._init_structured_output_manager()
+            
+            self.assertIsNone(plugin_manager._structured_output_manager)
+            self.assertFalse(plugin_manager._structured_output_enabled)
+
+    def test_init_structured_output_manager_success(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.__len__ = MagicMock(return_value=1000)
+            plugin_manager.generator_backend.tokenizer = mock_tokenizer
+            
+            mock_manager = MagicMock()
+            mock_config = MagicMock()
+            mock_backend_type = MagicMock()
+            
+            mock_structured_output = MagicMock()
+            mock_structured_output.StructuredOutputManager = MagicMock(return_value=mock_manager)
+            mock_structured_output.StructuredOutputConfig = MagicMock(return_value=mock_config)
+            mock_structured_output.GuidedDecodingBackendType = mock_backend_type
+            with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': mock_structured_output}):
+                plugin_manager._init_structured_output_manager()
+
+    def test_init_structured_output_manager_tokenizer_with_vocab_size(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.vocab_size = 1000
+            del mock_tokenizer.__len__
+            plugin_manager.generator_backend.tokenizer = mock_tokenizer
+            
+            mock_manager = MagicMock()
+            mock_config = MagicMock()
+            mock_backend_type = MagicMock()
+            
+            mock_structured_output = MagicMock()
+            mock_structured_output.StructuredOutputManager = MagicMock(return_value=mock_manager)
+            mock_structured_output.StructuredOutputConfig = MagicMock(return_value=mock_config)
+            mock_structured_output.GuidedDecodingBackendType = mock_backend_type
+            with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': mock_structured_output}):
+                plugin_manager._init_structured_output_manager()
+
+    def test_init_structured_output_manager_general_exception(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.__len__ = MagicMock(return_value=1000)
+            plugin_manager.generator_backend.tokenizer = mock_tokenizer
+            
+            mock_structured_output = MagicMock()
+            mock_structured_output.StructuredOutputManager = MagicMock(side_effect=RuntimeError("test error"))
+            with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': mock_structured_output}):
+                plugin_manager._init_structured_output_manager()
+            
+            self.assertIsNone(plugin_manager._structured_output_manager)
+            self.assertFalse(plugin_manager._structured_output_enabled)
+
+    def test_init_structured_output_manager_custom_backend(self):
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_initialize_distributed, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kvcache_settings_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+
+            mock_initialize_distributed.side_effect = side_effect_initialize_distributed
+            mock_kvcache_settings = MagicMock(dtype=None)
+            mock_kvcache_settings_class.return_value = mock_kvcache_settings
+            
+            generator = Generator(self.model_config)
+            plugin_manager = generator.plugin
+            plugin_manager.kwargs['guided_decoding_backend'] = 'outlines'
+            
+            mock_tokenizer = MagicMock()
+            mock_tokenizer.__len__ = MagicMock(return_value=1000)
+            plugin_manager.generator_backend.tokenizer = mock_tokenizer
+            
+            mock_manager = MagicMock()
+            mock_config = MagicMock()
+            mock_backend_type = MagicMock()
+            
+            mock_structured_output = MagicMock()
+            mock_structured_output.StructuredOutputManager = MagicMock(return_value=mock_manager)
+            mock_structured_output.StructuredOutputConfig = MagicMock(return_value=mock_config)
+            mock_structured_output.GuidedDecodingBackendType = mock_backend_type
+            with patch.dict('sys.modules', {'mindie_llm.text_generator.plugins.structured_output': mock_structured_output}):
+                plugin_manager._init_structured_output_manager()
+
+    def _patch_and_get_plugin_manager(self):
+        """在 with 内创建 Generator 并返回 plugin_manager，调用方需在 with 内完成断言。"""
+        def side_effect_initialize_distributed(rank, npu_id, world_size):
+            return FakeGroup(rank, world_size), torch.device("cpu")
+        with patch.object(GeneratorTorch, 'forward') as _, \
+             patch('atb_llm.utils.dist.initialize_distributed') as mock_init_dist, \
+             patch('atb_llm.runner.model_runner.ModelRunner', return_value=FakeModelRunner()) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.NPUSocInfo.support_nz', return_value=True) as _, \
+             patch('mindie_llm.text_generator.utils.kvcache_settings.KVCacheSettings') as mock_kv_class, \
+             patch('torch.npu.synchronize', return_value=None) as _, \
+             patch('mindie_llm.text_generator.adapter.generator_torch.GeneratorTorch._get_obfuscation_func',
+                   return_value=None):
+            mock_init_dist.side_effect = side_effect_initialize_distributed
+            mock_kv_class.return_value = MagicMock(dtype=None)
+            generator = Generator(self.model_config)
+            yield generator.plugin
+
+    def test_fill_in_model_result_fallback_no_hit_mask(self):
+        """无插件且 filling_masks 无 hit_sequence_ids_mask 时安全返回。"""
+        for plugin_manager in self._patch_and_get_plugin_manager():
+            plugin_manager.plugin_list = []
+            input_metadata = MagicMock()
+            model_input_wrapper = MagicMock()
+            model_output_wrapper = MagicMock()
+            filling_masks = {}
+            plugin_manager._fill_in_model_result(
+                input_metadata, model_input_wrapper, model_output_wrapper,
+                filling_masks, []
+            )
+            self.assertIsNotNone(model_input_wrapper.model_inputs)
+
+    def test_get_token_num_per_seq_cache_len_equal_mask(self):
+        """computed_blocks 导致 token_num_per_seq 为 0 时被置为 block_size。"""
+        for plugin_manager in self._patch_and_get_plugin_manager():
+            input_metadata = MagicMock()
+            input_metadata.computed_blocks = np.array([1], dtype=np.int64)
+            input_metadata.batch_seq_len = np.array([128], dtype=np.int64)
+            input_metadata.batch_is_prefill = np.array([True])
+            input_metadata.split_start_position = np.array([0], dtype=np.int64)
+            result = plugin_manager._get_token_num_per_seq(input_metadata)
+            self.assertEqual(result.shape, (1,))
+            self.assertEqual(int(result[0]), 128)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -172,6 +172,10 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
         protoMeta.set_lora_id(metaData.loraId_.value());
     }
 
+    if (metaData.responseFormat_.has_value()) {
+        protoMeta.set_response_format(metaData.responseFormat_.value());
+    }
+
     // 采样参数
     if (metaData.samplingParams_->doSample.has_value()) {
         protoMeta.set_do_sample(metaData.samplingParams_->doSample.value());

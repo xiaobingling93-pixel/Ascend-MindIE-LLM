@@ -8,7 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 from enum import IntEnum
-from typing import Any, List
+from typing import Any, List, Optional
 
 import numpy as np
 
@@ -18,6 +18,7 @@ from .token_selectors import get_selector_registry
 from ..utils.config import SamplerConfig, HandlingBackend
 from ..utils.sampling_output import SamplingOutput
 from ..utils.sampling_metadata import SamplingMetadata
+from ...utils.log.logging import logger
 
 
 class SelectorType(IntEnum):
@@ -57,6 +58,10 @@ class Sampler:
         self.selectors = []
         self.selector = None
         self.fusion_sampling = True
+        
+        # 结构化输出 handler 配置 (response_format / guided decoding)
+        # 注意: bitmask 生成和 FSM 状态管理由 PluginManager 负责
+        self.enable_guided_decoding = sampler_config.enable_guided_decoding
 
     def __call__(
         self,
@@ -264,7 +269,7 @@ class Sampler:
         self.selector_params.device = device
         self.selector_params.eos_token_id = eos_token_id
         self.__initialize_handlers_and_selectors()
-
+    
     def switch_handlers(self, sampling_metadata):
         if sampling_metadata is None:
             self.handlers.clear()
@@ -278,6 +283,8 @@ class Sampler:
                 if not self.fusion_sampling:
                     self.__check_and_append(sampling_metadata.top_k_idx, 'top_k')
                     self.__check_and_append(sampling_metadata.top_p, 'top_p')
+            # 结构化输出 handler (bitmask 由 preprocess 阶段生成)
+            self.__check_and_append(sampling_metadata.guided_bitmask, 'guided_decoding')
 
     def switch_selector(self, sampling_metadata):
         if sampling_metadata is not None:
@@ -361,6 +368,10 @@ class Sampler:
             selection_params.append(fusion_sampling_key)
             self.need_configuring = True
         selection_params.append('beam_search')
+        
+        if self.enable_guided_decoding:
+            handling_params.append('guided_decoding')
+        
         for param_name in handling_params:
             parameter_handler_cls = self.__find_handler(param_name)
             self.handler_mapping[param_name] = parameter_handler_cls(self.handler_params)

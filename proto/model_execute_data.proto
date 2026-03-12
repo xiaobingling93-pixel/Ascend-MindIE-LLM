@@ -165,6 +165,7 @@ message SequenceGroupMetadata {
   int32 append_block_rank_id = 32;
   int32 request_gap = 33; // 边云动态切块新增
   optional LwdCloudMetadata lwd_cloud_metadata = 34; //边云特性spcp云侧block管理
+  optional string response_format = 35; // JSON 结构化输出约束
 }
 
 message IntPair {
