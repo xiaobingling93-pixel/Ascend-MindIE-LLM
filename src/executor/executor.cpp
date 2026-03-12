@@ -272,10 +272,6 @@ bool Executor::MasterSendPDInfoToSlave(const std::map<std::string, std::string> 
 
 bool Executor::SlaveSendInitResponseToMaster()
 {
-    if (modelLaunchConfig_.lwdMultiNodesEnable && modelLaunchConfig_.dp == 1 &&
-        !modelLaunchConfig_.isLwdMultiNodesMaster) {
-        return true;
-    }
     ExecuteResponse response;
     response.set_msg_type(REMOTE_MODEL_INIT);
 
@@ -845,7 +841,8 @@ int Executor::GetRemoteDPRankIdx(ModelLaunchConfig &modelConfig, int rankIdx, bo
 {
     if (modelConfig.layerwiseDisaggregated) {
         int remotedpRankId = 0; // 其实就是所在slaveIp数组的下标, 边云的matser节点中没有意义
-        if (modelConfig.lwdMultiNodesEnable && modelConfig.layerwiseDisaggregatedRoleType == "slave") {
+        if (modelConfig.lwdMultiNodesEnable && modelConfig.layerwiseDisaggregatedRoleType == "slave" &&
+            modelConfig.dp > 1) {
             // 当前这样只能适配双机, 更多机这里适配不了, 要使用别的变量来判断
             remotedpRankId = modelConfig.isLwdMultiNodesMaster ? 0 : 1;
         }

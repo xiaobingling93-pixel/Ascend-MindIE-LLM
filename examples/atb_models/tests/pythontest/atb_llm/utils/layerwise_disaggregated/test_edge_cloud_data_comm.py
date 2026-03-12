@@ -361,6 +361,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
         comm.hccl_comm_warmup(comm.hidden_size)
+        comm.hidden_malloc()
 
         peer_index = 1
         src_rank = comm.cards[SEND_P]
@@ -443,6 +444,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
         comm.hccl_comm_warmup(comm.hidden_size)
+        comm.hidden_malloc()
 
         peer_index = 1
         bc_group = comm.groups_inter_send_recv[self.dp_group][D_INDEX]
@@ -483,6 +485,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         comm.hidden_size = 64
         comm.npu_device_id = 0
         comm.hccl_comm_warmup(comm.hidden_size)
+        comm.hidden_malloc()
 
         peer_index = 0
         bc_group = comm.groups_inter_send_recv[self.dp_group][P_INDEX][0]
@@ -561,6 +564,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         comm.hidden_size = 64
         comm.npu_device_id = 0
         comm.hccl_comm_warmup(comm.hidden_size)
+        comm.hidden_malloc()
 
         peer_index = 0
         bc_group = comm.groups_inter_send_recv[self.dp_group][D_INDEX]
@@ -620,13 +624,28 @@ class TestEdgeCloudDataComm(unittest.TestCase):
     @patch('torch.ones')
     def test_init_hccl(self, mock_init_process_group, *args):
         comm = EdgeCloudDataComm()
-        data_comm_args = {'edge_ip':"127.0.0.1",'edge_port':"9999",'npuEdgeNum':2,'npuCloudNum':8}
 
-        comm.init_hccl(rank=0, role='master', data_comm_args=data_comm_args)
+        comm_args = {
+            'edge_ip_address': "127.0.0.1",
+            'cloud_ip_address': ["127.0.0.1"],
+            'edge_npu_num': 2,
+            'cloud_npu_num': 8,
+            'data_port': 9999,
+            'multi_nodes_ctrl_port': 8888,
+            'multi_nodes_infer_enabled': False,
+            'multi_nodes_is_master': True,
+            'comm_group_size': 1, 'npu_id': 0}
 
-        comm.init_hccl(rank=0,role='slave',data_comm_args=data_comm_args)
-        comm.dp_size = 2
-        comm.init_hccl(rank=0,role='slave',data_comm_args=data_comm_args)
+        comm.lwd_rank_file = "/home"
+        comm.set_comm_args(rank=0, role='master', comm_args=comm_args)
+        comm.init_hccl()
+
+        comm.set_comm_args(rank=0, role='slave', comm_args=comm_args)
+        comm.init_hccl()
+        comm.comm_group_size = 2
+        comm.init_hccl()
+        comm.lwd_rank_file = None
+        comm.init_hccl()
 
     @patch.object(EdgeCloudDataComm, '__new__', return_value=object.__new__(EdgeCloudDataComm))
     @patch('torch.npu.stream', side_effect=MockStreamContext)
@@ -668,6 +687,30 @@ class TestEdgeCloudDataComm(unittest.TestCase):
             comm.warmup_recv(1)
             mock_isend.assert_called_once()
 
+    @patch.object(EdgeCloudDataComm, '__new__', return_value=object.__new__(EdgeCloudDataComm))
+    def test_final_cleanup(self, *args):
+        comm = EdgeCloudDataComm()
+
+        comm.comm_group_size = 1
+        comm.batch_p_num = 1
+        comm.groups_inter_send_recv = [[[[0, 2]], [1, 3]], None]
+        with patch("torch.distributed.destroy_process_group") as mock_destroy_process_group:
+            comm.final_cleanup()
+            assert mock_destroy_process_group.call_count == 2
+
+        comm.comm_group_size = 2
+        comm.batch_p_num = 1
+        comm.groups_inter_send_recv = [[[[0, 2]], [0, 2]], [[[1, 3]], [1, 3]]]
+        with patch("torch.distributed.destroy_process_group") as mock_destroy_process_group:
+            comm.final_cleanup()
+            assert mock_destroy_process_group.call_count == 4
+
+        comm.comm_group_size = 2
+        comm.batch_p_num = 2
+        comm.groups_inter_send_recv = [[[[0, 2], [0, 2]], [0, 2]], [[[1, 3], [1, 3]], [1, 3]]]
+        with patch("torch.distributed.destroy_process_group") as mock_destroy_process_group:
+            comm.final_cleanup()
+            assert mock_destroy_process_group.call_count == 6
 
 if __name__ == '__main__':
     # 设置测试环境

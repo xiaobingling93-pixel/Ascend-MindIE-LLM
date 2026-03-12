@@ -98,6 +98,61 @@ void ExternalCommManager::Init(uint32_t worldSize, uint32_t subCommRankId,
     this->commInfoCache_[commDomain] = commInfo;
 }
 
+void ExternalCommManager::Init(uint32_t worldSize, uint32_t subCommRankId,
+    std::string backend, std::string rankTableFile, uint32_t streamId, std::string lwdGlobalComm)
+{
+    ATB_SPEED_LOG_DEBUG("External Comm Manager: try to create global comm with "
+        << "worldSize " << worldSize << ", subCommRankId " << subCommRankId
+        << ", backend " << backend << ", rankTableFile " << rankTableFile
+    );
+
+    if (this->globalComm_ != nullptr) {
+        ATB_SPEED_LOG_DEBUG("External Comm Manager: A global communication group is already created, "
+            << "so the creation process will be skipped.");
+        return;
+    }
+
+    this->worldSize_ = worldSize;
+    this->rank_ = subCommRankId;
+    this->rankTableFile_ = rankTableFile;
+    this->lwdGlobalComm_ = lwdGlobalComm;
+
+    std::vector<uint32_t> rankIds = {};
+    for (uint32_t id = 0; id < worldSize; id++) {
+        rankIds.push_back(id);
+    }
+    std::shared_ptr<CommInfo> commInfo = std::make_shared<CommInfo>();
+    commInfo->cacheId_ = this->commInfoCache_.size();
+    commInfo->subCommRankId_ = subCommRankId;
+    commInfo->rankIds_ = rankIds;
+    commInfo->backend_ = backend;
+    commInfo->streamId_ = streamId;
+
+    try {
+        this->globalComm_ = (HcclComm)std::stoull(this->lwdGlobalComm_);
+    } catch (const std::invalid_argument &e) {
+        ATB_SPEED_LOG_ERROR("Invalid number string: " << this->lwdGlobalComm_ << ", " << e.what());
+        throw std::runtime_error("External Comm Manager: Failed to obtain layerwise-disaggregated global "
+            "communication");
+    } catch (const std::out_of_range &e) {
+        ATB_SPEED_LOG_ERROR("Number out of range: " << this->lwdGlobalComm_ << ", " << e.what());
+        throw std::runtime_error("External Comm Manager: Failed to obtain layerwise-disaggregated global "
+            "communication");
+    }
+    if (this->globalComm_ == nullptr) {
+        throw std::runtime_error("External Comm Manager: Failed to obtain layerwise-disaggregated global "
+            "communication");
+    }
+
+    commInfo->hcclComm_ = this->globalComm_;
+    char hcclCommName[128] = {};
+    HcclGetCommName(this->globalComm_, hcclCommName);
+
+    std::string commDomain = std::string(hcclCommName);
+    ATB_SPEED_LOG_DEBUG("External Comm Manager: Add [" << commDomain << "] to cache.");
+    this->commInfoCache_[commDomain] = commInfo;
+}
+
 void ExternalCommManager::SetLcclCommDomainRange(int32_t lowerBound, int32_t upperBound)
 {
     this->lcclCommDomainLowerBound_ = lowerBound;
@@ -114,6 +169,7 @@ void ExternalCommManager::Reset()
     this->lcclCommDomainUpperBound_ = 0;
     this->globalComm_ = nullptr;
     this->commInfoCache_.clear();
+    this->lwdGlobalComm_ = "";
 }
 
 std::string ExternalCommManager::GetCommDomain(uint32_t groupId, const std::vector<uint32_t> &rankIds,

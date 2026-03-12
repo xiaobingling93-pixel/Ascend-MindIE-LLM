@@ -276,7 +276,8 @@ class TestEdgeCloudCtrlComm(unittest.TestCase):
                 'is_master': True,
                 'cloud_ctrl_port': "2901",
                 'cloud_ctrl_address': "2900",
-                'dp_size': 2,
+                'comm_group_size': 2,
+                'max_input_len': 1,
             }
         with patch.object(TCPClient, 'connect_to_server_block') as mock_con, \
             patch.object(TCPServer, 'start_server_block') as mock_start:

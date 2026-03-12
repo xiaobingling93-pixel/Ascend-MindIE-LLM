@@ -328,13 +328,17 @@ class PluginManagerLwd(PluginManager):
                     out_sequence_ids_dict = {x: i for i, x in enumerate(generation_output_tmp.sequence_ids)}
                     clean_positions = [out_sequence_ids_dict.get(x, -1) for x in self.clean_sequence_ids]
                     for idx in clean_positions:
-                        if idx != -1 and generation_output_tmp.finish_reason[idx] == 0: # 只有不是eos的, 才清除其token
+                        # After triggering recomputation, calculation will continue using cache_id 0.
+                        # All generated tokens are untrustworthy and need to be discarded.
+                        if idx != -1:
                             logger.info(f"[layerwiseDisaggregated]recompute seq: {self.clean_sequence_ids} idx:{idx} "
                                         f"out_seq_ids {generation_output_tmp.sequence_ids} "
                                         f"clear generation_output token."
                                         )
                             generation_output_tmp.token_ids[idx] = -1
                             generation_output_tmp.top_token_ids[idx] = -1
+                            generation_output_tmp.finish_reason[idx] = 0
+                            
                 if self.return_queue.empty():
                     self.clean_sequence_ids = None
 

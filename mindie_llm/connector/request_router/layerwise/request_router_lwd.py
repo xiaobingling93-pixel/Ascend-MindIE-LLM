@@ -36,6 +36,7 @@ sys.path.append(str(Path(__file__).parent / "sync"))
 MASTER_ID = 0   # 接收通信, 广播决策, 创建共享内存的主rank号
 LONG_SEQ_LEN_MIN = 7500
 MULTI_NODES_LONG_SEQ_LEN_MIN = 150000
+MULTI_NODES_LONG_SEQ_LEN_MIN_INT4 = 15000
 
 
 class LastExecType(IntEnum):
@@ -89,6 +90,7 @@ class RequestRouterLwd(RequestRouter):
         self.prefill_dp_max_seq_len = 0         # 多dp中的最大长度, 如果只有一个dp就是本身的长度
         self.prefill_dp_empty = False           # dp域中本身是否为empty
         self.cp_size = 1
+        self.moe_quantize = None
 
         super().__init__()
 
@@ -117,19 +119,25 @@ class RequestRouterLwd(RequestRouter):
         model_config = self.get_config_dict(request_config)
         config = self.get_model_impl_config(model_config)
         self.enable_dp_distributed = config.distributed_enable
-        initialize_result = self.initialize_impl(config)
-        self.cp_size = config.cp_size
 
         edge_cloud_comm = LwdCommunicationManager()
-        edge_cloud_comm.initialize(config, initialize_result, self.router_impl.generator)
-
-        proto = ExecuteResponseBuilder.build_from_init_result(initialize_result)
-        send_model_execute_response(proto)
+        if edge_cloud_comm.communication_config_verify(config):
+            initialize_result = self.initialize_impl(config)
+            self.cp_size = config.cp_size
+            edge_cloud_comm.initialize(config, initialize_result, self.router_impl.generator)
+            proto = ExecuteResponseBuilder.build_from_init_result(initialize_result)
+            send_model_execute_response(proto)
+        else:
+            initialize_result = {
+                "status": "error"
+            }
+            proto = ExecuteResponseBuilder.build_from_init_result(initialize_result)
+            send_model_execute_response(proto)
+            return
 
         self.rank = config.local_rank
         self.ctrl_comm = edge_cloud_comm.ctrl_comm
         self.data_comm = edge_cloud_comm.data_comm
-        self.prefill_chunk_instance = self.router_impl.generator.model_wrapper.model_runner.chunk_prefill_manager
 
         self.mem_manager = SharedMemoryManager(self.parent_pid)
         logger.info(f"[layerwiseDisaggregated] initliaze share mem ok rank:{self.rank}, parent_pid:{self.parent_pid}")
@@ -142,13 +150,24 @@ class RequestRouterLwd(RequestRouter):
         card_num = len(npu_device_ids)
         self.mem_manager.initialize(is_producer, card_num - 1)
 
+        model_runner_config = self.router_impl.generator.model_wrapper.model_runner.config
+        self.moe_quantize = getattr(model_runner_config, 'moe_quantize', None)
+        self.prefill_chunk_instance = self.router_impl.generator.model_wrapper.model_runner.chunk_prefill_manager
+        self.prefill_chunk_instance.initialize(self.lwd_multi_nodes_enable)
+
         logger.info(f"[layerwiseDisaggregated] mem_manager initliaze ok rank:{self.rank}, is_producer:{is_producer}, "
             f"card_num:{card_num} lwd_multi_nodes_enable:{self.lwd_multi_nodes_enable}")
 
         self.initialize_diff(model_config, models_config_dict)
 
+    def final_cleanup(self):
+        if self.router_impl is not None and self.router_impl.generator is not None:
+            self.router_impl.generator.model_wrapper.model_runner.data_comm.final_cleanup()
+
     def get_long_seq_len_min(self):
         if self.lwd_multi_nodes_enable:
+            if self.moe_quantize == 'w4a8_dynamic':
+                return MULTI_NODES_LONG_SEQ_LEN_MIN_INT4
             return MULTI_NODES_LONG_SEQ_LEN_MIN
 
         return LONG_SEQ_LEN_MIN
@@ -218,7 +237,7 @@ class RequestRouterLwd(RequestRouter):
         self.set_pd_curr_request()
 
     def recv_prefill(self):
-        if self.prefill_comm_finish:
+        if self.prefill_comm_finish:	 
             return
 
         if self.prefill_comm_tcp_finish_count == 0: 

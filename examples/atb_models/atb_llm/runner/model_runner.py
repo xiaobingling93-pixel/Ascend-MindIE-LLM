@@ -285,13 +285,19 @@ class ModelRunner:
                 TLS_CRL_FILES: kwargs.get(TLS_CRL_FILES, ''),
             }
             batch_p_num = kwargs.get('batch_p_num', 1)
+            moe_quantize = getattr(self.config, 'moe_quantize', None)
             self.data_comm = EdgeCloudDataComm(self.dtype, batch_p_num)
             self.ctrl_comm = EdgeCloudCtrlComm(tls_config)
-            self.time_counter = CloudCutPolicy(self.layerwise_disaggregated_role_type, model_name_or_path, batch_p_num)
-            self.chunk_prefill_manager = ChunkPrefilPolicy(model_name_or_path, batch_p_num)
+            self.time_counter = CloudCutPolicy(self.layerwise_disaggregated_role_type, model_name_or_path, batch_p_num,
+                                               moe_quantize)
+            self.chunk_prefill_manager = ChunkPrefilPolicy(model_name_or_path, batch_p_num, moe_quantize)
             self.prefill_input_lengths = None
             self.edge_pre_chunk_length = 0
             self.prefill_total_seq_len = 0
+            lwd_comm_args = kwargs.get('lwd_comm_args', None)
+            lwd_comm_args.update({'npu_id': self.npu_id})
+            self.data_comm.set_comm_args(rank=self.local_rank, role=self.layerwise_disaggregated_role_type,
+                                         comm_args=lwd_comm_args)
 
     @classmethod
     def resume_hccl_comm(cls):
@@ -577,6 +583,7 @@ class ModelRunner:
                     decode batch size putted {hidden.shape}")
                 self.data_comm.decode_batch_size_queue.put(hidden.shape[0])
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} decode send {hidden.shape}")
+                self.data_comm.npu_net_host_hidden_sync(hidden)
                 self.data_comm.send_hidden('d', hidden)
 
                 self.ctrl_comm.decode_send_msg = self.ctrl_comm.shape_to_msg(hidden.shape)
@@ -610,6 +617,7 @@ class ModelRunner:
                         logger.info(f"[layerwiseDisaggregated] edge rank {self.rank}, "
                                     f"end put {self.edge_pre_chunk_length}")
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill send {hidden.shape}")
+                self.data_comm.npu_net_host_hidden_sync(hidden)
                 self.data_comm.send_hidden('p', hidden)
 
                 self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(hidden.shape)
@@ -839,6 +847,11 @@ class ModelRunner:
             else:
                 res = self.forward_layerwise_disaggregated_cloud(**kwargs)
         else:
+            if not self.data_comm.init_finish and self.data_comm.get_lwd_rank_file() is not None:
+                self.data_comm.init_hccl()
+                if self.data_comm.init_finish:
+                    self.data_comm.hccl_comm_warmup(self.model.hidden_size)
+
             # warmup处理
             if layerwise_disaggregated_exe_stage is None:
                 input_lengths = kwargs.get("input_lengths")
@@ -851,6 +864,8 @@ class ModelRunner:
                 out_dict = {OUT_HIDDEN: torch.ones([len(input_ids), self.model.hidden_size],
                                                     dtype=self.dtype, device=self.device)}
                 kwargs.update(out_dict)
+                if self.data_comm.global_comm is not None:
+                    self.mapping.set_lwd_global_comm(self.data_comm.global_comm)
 
             """Call model's forward pass."""
             res = self.model.forward(**kwargs)

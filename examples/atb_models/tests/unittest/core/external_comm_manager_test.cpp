@@ -117,6 +117,19 @@ TEST_F(ExternalCommManagerTest, RanktablefileInitTest)
     EXPECT_EQ(atb_speed::GetSingleton<atb_speed::ExternalCommManager>().rankTableFile_, rankTableFileTemp);
 }
 
+// 测试 LwdGlobalComm Init 接口
+TEST_F(ExternalCommManagerTest, InitLwdGlobalCommTest)
+{
+    std::string lwdGlobalComm = std::to_string(1);
+
+    atb_speed::GetSingleton<atb_speed::ExternalCommManager>().Init(worldSize, subCommRankId, backend,
+        rankTableFile, streamId, lwdGlobalComm);
+    EXPECT_EQ(atb_speed::GetSingleton<atb_speed::ExternalCommManager>().worldSize_, worldSize);
+    EXPECT_EQ(atb_speed::GetSingleton<atb_speed::ExternalCommManager>().rank_, subCommRankId);
+    EXPECT_EQ(atb_speed::GetSingleton<atb_speed::ExternalCommManager>().rankTableFile_, rankTableFile);
+    EXPECT_EQ((uint64_t)(atb_speed::GetSingleton<atb_speed::ExternalCommManager>().globalComm_), (uint64_t)1);
+}
+
 // 测试 GetHcclSubCommDomain 接口
 TEST_F(ExternalCommManagerTest, GetHcclSubCommDomainTest)
 {

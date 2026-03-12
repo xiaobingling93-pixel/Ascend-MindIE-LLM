@@ -184,6 +184,7 @@ class Mapping:
         self.dynamic_eplb.buffer_size = 128 # 动态eplb的通信域128MB够用
 
         self.update_pp()
+        self.lwd_global_comm = None
 
     def __repr__(self):
         return (
@@ -656,4 +657,9 @@ class Mapping:
             "denseTp": self.dense_tp.to_dict(),
             "dynamicEplb": self.dynamic_eplb.to_dict()
         }
+        if self.lwd_global_comm is not None:
+            parallel_dict.update({"lwdGlobalComm": self.lwd_global_comm})
         return parallel_dict
+
+    def set_lwd_global_comm(self, lwd_global_comm):
+        self.lwd_global_comm = str(lwd_global_comm)

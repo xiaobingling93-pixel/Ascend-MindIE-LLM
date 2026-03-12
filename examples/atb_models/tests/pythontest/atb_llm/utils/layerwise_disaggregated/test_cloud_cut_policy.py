@@ -21,7 +21,7 @@ class TestCloudCutPolicy(unittest.TestCase):
         mock_acl.get_soc_name = Mock()
         mock_acl.get_soc_name.return_value = 'Ascend910B4'
         self.cloud_cut_policy = CloudCutPolicy("slave")
-        self.cloud_cut_policy.initialize("slave", 0, (2, 62), False, None)
+        self.cloud_cut_policy.initialize("slave", 0, (2, 62), False)
         pass
 
     @classmethod
@@ -95,11 +95,11 @@ class TestCloudCutPolicy(unittest.TestCase):
     def test_ajust_prefill_cut_num_for_multi_nodes(self):
         self.cloud_cut_policy.moe_quantize = 'w4a8_dynamic'
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
-        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 32)
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
 
         self.cloud_cut_policy.moe_quantize = None
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
-        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 45)
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
         
 if __name__ == "__main__":
     unittest.main()

@@ -557,6 +557,10 @@ static bool CheckEngineConfig(EngineConfig &engineConfig)
         MINDIE_LLM_LOG_WARN("Both splitfuse and supportSelectBatch are configured, the " <<
             "scheduling strategy will be executed according to splitfuse, supportSelectBatch will be disabled.");
     }
+    if (ConfigManager::GetInstance().IslayerwiseDisaggregated() && engineConfig.enablePrefixCache) {
+        MINDIE_LLM_LOG_ERROR("Prefix cache isn't supported in layerwise-disaggregated mode.");
+        checkRes = false;
+    }
     return checkRes;
 }
 

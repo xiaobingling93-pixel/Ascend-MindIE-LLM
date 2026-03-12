@@ -47,7 +47,7 @@ class CloudCutPolicy():
             cls._instance = super(CloudCutPolicy, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, name="", model_name_or_path='qwen', batch_p_num=1):
+    def __init__(self, name="", model_name_or_path='qwen', batch_p_num=1, moe_quantize=None):
         if not hasattr(self, 'initialized'):
             self.name = name
             self.model_type = self.__get_model_name(model_name_or_path)
@@ -56,6 +56,7 @@ class CloudCutPolicy():
             self.soc_name = acl.get_soc_name()
             self.batch_p_num = batch_p_num
             self.multi_nodes_enable = False
+            self.moe_quantize = moe_quantize
             self.initialized = False
 
             # Predict the number of chunks, hardcoded based on empirical values: n(K): [cut_num, cut_num_max];
@@ -93,15 +94,11 @@ class CloudCutPolicy():
             self.moe_quantize = None
 
             if self.model_type == CloudCutModelType.DEEP_SEEK:
-                self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 44, 1.8: 40, 0.8: 21, 0: 21}
-                self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 44, 1.8: 40, 0.8: 21, 0: 21}
-                self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 43, 1.8: 40, 0.8: 21, 0: 21}
+                self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
+                self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
+                self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 62, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
                 self.prefill_seq_k_len_default_forward_time = {31.5: 10000, 15.5: 10000, 7.5: 10000, 3.8: 10000,
                     3.3: 1000, 1.8: 10000, 0.8: 10000, 0: 10000}
-            self.__ajust_prefill_cut_num_for_diff_npu_soc()
-            logger.info(f"[layerwiseDisaggregated] cut policy init, model_type: {self.model_type.name} role_type: "
-                f"{self.role_type.name} soc_name: {self.soc_name} default_cut_map: {self.prefill_default_cut_map}"
-                f"cut_num_max: {self.prefill_cut_num_max} cut_num_min: {self.prefill_cut_num_min} ")
 
             self.cut_state = CloudCutState.FIND_IN_TBL
 
@@ -119,14 +116,17 @@ class CloudCutPolicy():
             return CloudCutModelType.DEEP_SEEK
         return CloudCutModelType.QWEN
 
-    def initialize(self, name, rank_id, cut_num_range, multi_nodes_enable, moe_quantize):
+    def initialize(self, name, rank_id, cut_num_range, multi_nodes_enable):
         self.role_type = CloudCutClassType.CLOUD if name == "slave" else CloudCutClassType.OTHER
         self.rank_id = rank_id
         self.min_cut_num, self.max_cut_num = cut_num_range
         self.multi_nodes_enable = multi_nodes_enable
-        self.moe_quantize = moe_quantize
-        if self.model_type == CloudCutModelType.DEEP_SEEK and self.multi_nodes_enable:
-            self.__ajust_prefill_cut_num_for_multi_nodes()
+        self.__ajust_prefill_cut_num_for_diff_npu_soc()
+        self.__ajust_prefill_cut_num_for_multi_nodes()
+        logger.info(f"[layerwiseDisaggregated] cut policy init, model_type: {self.model_type.name} role_type: "
+            f"{self.role_type.name} soc_name: {self.soc_name} moe_quantize: {self.moe_quantize} "
+            f"default_cut_map: {self.prefill_default_cut_map} cut_num_max: {self.prefill_cut_num_max} "
+            f"cut_num_min: {self.prefill_cut_num_min} ")
         self.initialized = True
 
     def get_cut_num(self, input_data: CloudCutInputData):
@@ -137,13 +137,14 @@ class CloudCutPolicy():
             return self.last_cut_num
 
         batch_size = len(input_data.prefill_gap_time)
-        if self.multi_nodes_enable and self.moe_quantize == 'w4a8_dynamic' and input_data.seq_len <= 7500:
+        if self.multi_nodes_enable and self.moe_quantize == 'w4a8_dynamic':
             tmp_k_len = input_data.seq_len / 1024
         else:
             tmp_k_len = input_data.seq_len / 1024 / batch_size
         # DS暂时保留一位小数
         self.seq_k_len = round(tmp_k_len, 1) if self.model_type == CloudCutModelType.DEEP_SEEK else round(tmp_k_len)
         self.adjust_ds_1k_cut_map(self.seq_k_len, batch_size)
+        self.adjust_ds_8k_cut_map(self.seq_k_len, batch_size)
         self.calc_avg_request_rate(input_data)
         self.gap_time_list = self.request_rate
 
@@ -154,7 +155,8 @@ class CloudCutPolicy():
             return self.last_cut_num
         cut_num = func()
         logger.info(f"[layerwiseDisaggregated] prefill len:{input_data.seq_len} batch_size:{batch_size} gap_time_list: "
-                    f"{self.gap_time_list} decode_avg_time: {self.decode_avg_time} cut_num: {cut_num}")
+                    f"{self.gap_time_list} prefill_exec_time: {self.prefill_exec_time} decode_avg_time: "
+                    f"{self.decode_avg_time} cut_num: {cut_num}")
         return cut_num
 
     def set_decode_start_time(self, is_prefill, curr_time):
@@ -208,12 +210,13 @@ class CloudCutPolicy():
 
         avg_gap_time = sum_gap_time / seq_num
         prefill_exec_time = self.get_prefill_exec_time_for_tbl()
-        if prefill_exec_time + decode_avg_time > avg_gap_time:
-            return CloudCutState.FIND_IN_TBL
-
         self.decode_avg_time = decode_avg_time
         self.avg_gap_time = avg_gap_time
         self.prefill_exec_time = prefill_exec_time
+
+        if prefill_exec_time + decode_avg_time > avg_gap_time:
+            return CloudCutState.FIND_IN_TBL
+
         return CloudCutState.CAL_BY_DECODE
 
     def find_cut_num_in_tbl(self):
@@ -266,20 +269,35 @@ class CloudCutPolicy():
     def adjust_ds_1k_cut_map(self, k_len, batch_size):
         if self.model_type != CloudCutModelType.DEEP_SEEK or k_len > 1.8 or k_len < 0.8:
             return
-
-        cut_num_1k = 21 if batch_size == 2 else 15
+        if not self.multi_nodes_enable:
+            cut_num_1k = 17 if batch_size == 2 else 10
+        else:
+            cut_num_1k = 21 if batch_size == 2 else 15
         self.prefill_default_cut_map[0.8] = cut_num_1k
         self.prefill_cut_num_max[0.8] = cut_num_1k
         self.prefill_cut_num_min[0.8] = cut_num_1k
 
+    def adjust_ds_8k_cut_map(self, k_len, batch_size):
+        if self.model_type != CloudCutModelType.DEEP_SEEK or self.moe_quantize != 'w4a8_dynamic' or \
+            not self.multi_nodes_enable:
+            return
+
+        if k_len > 8.5 or k_len < 7.5:
+            return
+
+        cut_num_8k = 20 if batch_size == 2 else 38
+        self.prefill_default_cut_map[7.5] = cut_num_8k
+        self.prefill_cut_num_max[7.5] = cut_num_8k
+        self.prefill_cut_num_min[7.5] = cut_num_8k
+
     def __ajust_prefill_cut_num_for_diff_npu_soc_qwen(self):
-        if self.soc_name == 'Ascend910B2':
+        if self.soc_name.startswith('Ascend910B2'):
             if self.batch_p_num != 1:
                 self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
                 self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
                 self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
             return
-        if self.soc_name == 'Ascend910B3':
+        if self.soc_name.startswith('Ascend910B3'):
             if self.batch_p_num == 1:
                 self.prefill_default_cut_map = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
                 self.prefill_cut_num_max = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
@@ -289,7 +307,7 @@ class CloudCutPolicy():
                 self.prefill_cut_num_max = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
                 self.prefill_cut_num_min = {125: 330, 64: 120, 32: 70, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
             return
-        if self.soc_name == 'Ascend910B4':
+        if self.soc_name.startswith('Ascend910B4'):
             if self.batch_p_num == 1:
                 self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
                 self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
@@ -322,13 +340,14 @@ class CloudCutPolicy():
             return
 
     def __ajust_prefill_cut_num_for_multi_nodes(self):
+        if not self.multi_nodes_enable or self.model_type != CloudCutModelType.DEEP_SEEK:
+            return
+
         if self.moe_quantize == 'w4a8_dynamic':
-            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_default_cut_map = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
         else:
-            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 20, 3.3: 20, 1.8: 17, 0.8: 21, 0: 21}
-        logger.info(f"[layerwiseDisaggregated] cut policy init multi nodes success, model_type: {self.model_type} "
-                f"role_type: {self.role_type} default_cut_map: {self.prefill_default_cut_map}")
+            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}

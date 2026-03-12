@@ -306,7 +306,7 @@ class EdgeCloudCtrlComm:
         self.multi_nodes_ctrl_client = None
         self.multi_nodes_need_synchronize = False
 
-        self.dp_size = 1
+        self.comm_group_size = 1
 
         self.tls_config = tls_config
 
@@ -323,10 +323,14 @@ class EdgeCloudCtrlComm:
         self.server_ip = server_ip
         self.server_port = json.loads(server_port)
 
-    def init_multi_nodes_infer_link(self, is_master=False, cloud_ctrl_port=None, cloud_ctrl_address=None, dp_size=None):
+    def init_multi_nodes_infer_link(self, multi_nodes_config):
         self.multi_nodes_infer_enabled = True
-        self.dp_size = dp_size
+        self.comm_group_size = multi_nodes_config.get('comm_group_size')
 
+        is_master = multi_nodes_config.get('is_master', False)
+        cloud_ctrl_address = multi_nodes_config.get('cloud_ctrl_address')
+        cloud_ctrl_port = multi_nodes_config.get('cloud_ctrl_port')
+        
         self.multi_nodes_is_master = is_master
         if self.multi_nodes_is_master:
             self.multi_nodes_ctrl_server = TCPServer(cloud_ctrl_address, int(cloud_ctrl_port), \
@@ -346,15 +350,15 @@ class EdgeCloudCtrlComm:
         self.init_role(role, server_ip, server_port)
         
         is_cloud_or_single_node = \
-            (self.role == CLOUD or multi_nodes_infer_args is None or multi_nodes_infer_args['dp_size'] < 2)
+            (self.role == CLOUD or multi_nodes_infer_args is None or multi_nodes_infer_args['comm_group_size'] < 2)
         if self.rank != 0 and is_cloud_or_single_node:
             self.init_finish = True
             return
 
         if self.role == CLOUD:
             if multi_nodes_infer_args is not None:
-                self.init_multi_nodes_infer_link(**multi_nodes_infer_args)
-            if multi_nodes_infer_args is None or self.dp_size > 1 or multi_nodes_infer_args['is_master']:
+                self.init_multi_nodes_infer_link(multi_nodes_infer_args)
+            if multi_nodes_infer_args is None or self.comm_group_size > 1 or multi_nodes_infer_args['is_master']:
                 self.prefill_server = TCPServer(self.server_ip, int(self.server_port[0]), self.tls_config)
                 self.decode_server = TCPServer(self.server_ip, int(self.server_port[1]), self.tls_config)
                 logger.info(f"[layerwiseDisaggregated] EdgeCloudCtrlComm \

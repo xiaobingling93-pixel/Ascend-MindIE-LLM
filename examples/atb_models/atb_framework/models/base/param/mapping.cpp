@@ -21,6 +21,9 @@ void Mapping::ParseParam(const nlohmann::json &paramJson)
     this->worldSize_ = FetchJsonParam<uint32_t>(paramJson, "worldSize");
     this->rank_ = FetchJsonParam<uint32_t>(paramJson, "rank");
     this->rankTableFile_ = FetchJsonParam<std::string>(paramJson, "rankTableFile");
+    if (paramJson.contains("lwdGlobalComm")) {
+        this->lwdGlobalComm_ = FetchJsonParam<std::string>(paramJson, "lwdGlobalComm");
+    }
     this->localWorldSize_ = FetchJsonParam<uint32_t>(paramJson, "localWorldSize");
     GetSingleton<ExternalCommManager>().SetLcclCommDomainRange(
         FetchJsonParam<uint32_t>(paramJson, "lcclCommDomainLowerBound"),
@@ -71,8 +74,13 @@ void Mapping::InitGlobalCommDomain(std::string defaultBackend)
         this->localWorldSize_, fixedRankIds, this->defaultBackend_);
     // Create global comm
     ATB_SPEED_LOG_DEBUG("External Comm Manager: InitCommDomain: init");
-    GetSingleton<ExternalCommManager>().Init(this->worldSize_, this->rank_,
-        backend, this->rankTableFile_, streamId);
+    if (backend == HCCL && this->lwdGlobalComm_ != "") {
+        GetSingleton<ExternalCommManager>().Init(this->worldSize_, this->rank_,
+            backend, this->rankTableFile_, streamId, this->lwdGlobalComm_);
+    } else {
+        GetSingleton<ExternalCommManager>().Init(this->worldSize_, this->rank_,
+            backend, this->rankTableFile_, streamId);
+    }
     this->isInitialized_ = true;
 }
 

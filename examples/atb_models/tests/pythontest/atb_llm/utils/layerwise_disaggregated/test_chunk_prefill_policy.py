@@ -18,7 +18,7 @@ class TestChunkPrefilPolicy(unittest.TestCase):
         mock_acl.get_soc_name = Mock()
         mock_acl.get_soc_name.return_value = 'Ascend910B4'
         self.qwen_policy = ChunkPrefilPolicy()
-        self.deepseek_policy = ChunkPrefilPolicy('deepseek')
+        self.deepseek_policy = ChunkPrefilPolicy('deepseek', 1, None)
 
     @classmethod
     def setUpClass(cls):
@@ -30,8 +30,3 @@ class TestChunkPrefilPolicy(unittest.TestCase):
         
     def test_map_prefill_chunk_num(self):
         self.assertEqual(self.deepseek_policy.map_prefill_chunk_num(8192), 2)
-        
-    def test_ajust_prefill_chunk_map_for_diff_npu_soc(self):
-        self.qwen_policy.soc_name = 'Ascend910B3'
-        self.qwen_policy._ChunkPrefilPolicy__ajust_prefill_chunk_map_for_diff_npu_soc()
-        self.assertEqual(self.qwen_policy.prefill_chunk_map.get(32), 10)

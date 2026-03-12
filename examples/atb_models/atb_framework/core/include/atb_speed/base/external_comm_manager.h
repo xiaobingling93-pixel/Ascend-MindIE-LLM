@@ -47,6 +47,9 @@ public:
     void Init(uint32_t worldSize, uint32_t subCommRankId,
         std::string backend, std::string rankTableFile, uint32_t streamId);
 
+    void Init(uint32_t worldSize, uint32_t subCommRankId,
+        std::string backend, std::string rankTableFile, uint32_t streamId, std::string lwdGlobalComm);
+
     void SetLcclCommDomainRange(int32_t lowerBound, int32_t upperBound);
 
     void Reset();
@@ -68,6 +71,7 @@ public:
     uint32_t worldSize_ = 0;
     uint32_t rank_;
     std::string rankTableFile_ = "";
+    std::string lwdGlobalComm_ = "";
 
 private:
     std::string GetCommDomainFromCache(

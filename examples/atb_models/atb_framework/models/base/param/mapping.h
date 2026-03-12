@@ -100,6 +100,8 @@ private:
     std::string defaultBackend_ = "";
     /// Path of the file contains devices' Ip and rank info to construct communication groups
     std::string rankTableFile_ = "";
+    /// The global communication in layerwise-disaggregated
+    std::string lwdGlobalComm_ = "";
 };
 
 } // namespace base

@@ -271,6 +271,8 @@ class SharedMemCommunication:
 
     def stop(self):
         self._is_running = False
+        if self.config.layerwise_disaggregated == "true":
+            self.request_router.final_cleanup()
 
     def is_running(self) -> bool:
         return self._is_running

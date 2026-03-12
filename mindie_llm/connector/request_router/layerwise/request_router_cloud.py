@@ -93,11 +93,10 @@ class RequestRouterCloud(RequestRouterLwd):
         self.total_layer_num = (64 if not hasattr(model_runner_config, 'num_hidden_layers')
             else model_runner_config.num_hidden_layers)
         self.cloud_layer_num = self.total_layer_num - self.start_layer_num - self.end_layer_num
-        moe_quantize = getattr(model_runner_config, 'moe_quantize', None)
 
         cloud_cut_instance = self.router_impl.generator.model_wrapper.model_runner.time_counter
         cut_num_range = (LAYERS_DIVI_MIN_NUM, self.cloud_layer_num)
-        cloud_cut_instance.initialize("slave", self.rank, cut_num_range, self.lwd_multi_nodes_enable, moe_quantize)
+        cloud_cut_instance.initialize("slave", self.rank, cut_num_range, self.lwd_multi_nodes_enable)
         self.prepare_prefill_cut_policy(self.prefill_layers_divi_num)
 
         logger.info(f"[layerwiseDisaggregated] cloud initliaze ok rank:{self.rank}, "
@@ -162,7 +161,7 @@ class RequestRouterCloud(RequestRouterLwd):
                 if self.prefill_dp_max_seq_len > self.get_long_seq_len_min() else 1
             if self.isqwenvl:
                 self.prefill_dp_seq_len = self.prefill_dp_seq_len * 2
-            if self.cp_size > 1:
+            if self.cp_size > 1:    # cp开启时, 每个cp域的hidden大小会不一样, 此时dp=1, 因此要修改
                 self.prefill_dp_seq_len = self.calc_cp_seq_len(self.prefill_request)
             self.data_comm.p_shape[self.data_comm.recv_index] = \
                 math.ceil(self.prefill_dp_seq_len / self.prefill_chunk_num) 

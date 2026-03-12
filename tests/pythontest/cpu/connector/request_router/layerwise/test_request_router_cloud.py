@@ -369,6 +369,7 @@ class TestRequestRouterCloud(unittest.TestCase):
     @patch('mindie_llm.connector.common.send_model_execute_response')
     @patch('mindie_llm.connector.request_listener.shared_mem_communication.SharedMemCommunication.send_model_execute_response_cls')
     @patch.object(LwdCommunicationManager, 'initialize')
+    @patch.object(LwdCommunicationManager, 'communication_config_verify', return_value=True)
     @patch('mindie_llm.connector.request_router.layerwise.request_router_lwd.ExecuteResponseBuilder')
     @patch('mindie_llm.connector.request_router.request_router.RouterImpl')
     @patch("mindie_llm.connector.request_router.request_router.BaseConfig")

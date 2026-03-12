@@ -21,7 +21,7 @@ class TestEdgeCloudComm(unittest.TestCase):
 
     def test_init(self):
         test_router = LwdCommunicationManager()
-        self.assertIsNone(test_router.rank)
+        self.assertIsNone(test_router.config.rank)
 
     def test_is_valid_port(self):
         result = LwdCommunicationManager.is_valid_port(100)
@@ -126,9 +126,182 @@ class TestEdgeCloudComm(unittest.TestCase):
         result = router.communication_config_check(config)
         self.assertTrue(result)
 
+    def test_lwd_ranktable_parse_check_proc(self):
+        router = LwdCommunicationManager()
+        router.config.npu_edge_num = 2
+
+        lwd_rank_table = {
+            "server_count": "2"
+        }
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertFalse(result)
+
+        lwd_rank_table = {
+            "server_count": "2",
+            "server_list": [
+                {
+                    "server_id": "172.16.0.1"
+                },
+                {
+                    "server_id": "172.16.0.2"
+                }
+            ]
+        }
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertFalse(result)
+
+        lwd_rank_table = {
+            "server_count": "2",
+            "server_list": [
+                {
+                    "server_id": "172.16.0.1",
+                    "container_ip": "172.16.0.1",
+                    "host_ip": "172.16.0.1",
+                    "para_net_position": "device",
+                    "para_net_protocol": "rdam",
+                    "device": [
+                        {
+                            "rank_id": "0",
+                            "device_id": "0",
+                            "device_ip": "192.168.1.2",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "1",
+                            "device_id": "1",
+                            "device_ip": "192.168.1.3",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "2",
+                            "device_id": "2",
+                            "device_ip": "192.168.1.4",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "3",
+                            "device_id": "3",
+                            "device_ip": "192.168.1.5",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "4",
+                            "device_id": "4",
+                            "device_ip": "192.168.1.6",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "5",
+                            "device_id": "5",
+                            "device_ip": "192.168.1.7",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "6",
+                            "device_id": "6",
+                            "device_ip": "192.168.1.8",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "7",
+                            "device_id": "7",
+                            "device_ip": "192.168.1.9",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        }
+                    ]
+                },
+                {
+                    "server_id": "172.16.0.2",
+                    "container_ip": "172.16.0.2",
+                    "host_ip": "172.16.0.2",
+                    "para_net_position": "host",
+                    "para_net_protocol": "rdam",
+                    "device": [
+                        {
+                            "rank_id": "8",
+                            "device_id": "0",
+                            "device_ip": "192.168.2.2",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        },
+                        {
+                            "rank_id": "9",
+                            "device_id": "1",
+                            "device_ip": "192.168.2.2",
+                            "device_port": "16666",
+                            "host_port": "60002"
+                        }
+                    ]
+                }
+            ]
+        }
+
+        # server_count与server_list匹配检查
+        del lwd_rank_table["server_count"]
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertFalse(result)
+
+        lwd_rank_table.update({"server_count": "3"})
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertFalse(result)
+        lwd_rank_table["server_count"] = "2"
+
+        # NPU走host网卡配置检查
+        router.config.role_type = 'slave'
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertTrue(result)
+        self.assertFalse(router.config.npu_net_host)
+
+        router.config.role_type = 'master'
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertTrue(result)
+        self.assertTrue(router.config.npu_net_host)
+
+        # ranktable中云的配置在前，边的配置在后，检查配置顺序
+        lwd_rank_table["server_list"][0], lwd_rank_table["server_list"][1] = \
+            lwd_rank_table["server_list"][1], lwd_rank_table["server_list"][0]
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertFalse(result)
+
+        lwd_rank_table["server_list"][0], lwd_rank_table["server_list"][1] = \
+            lwd_rank_table["server_list"][1], lwd_rank_table["server_list"][0]
+        result = router.lwd_ranktable_parse_check_proc(lwd_rank_table)
+        self.assertTrue(result)
+
+    def test_communication_config_verify(self):
+        router = LwdCommunicationManager()
+
+        model_config = {'local_rank':1, 'model_id':'', 'rank':1, 'world_size':2, 'npu_device_id':1,
+                        'npu_device_ids':'0,1', 'cpu_mem':0, 'npu_mem':0, 'max_seq_len':65536, 'max_iter_times':999,
+                        'max_prefill_tokens':65536, "block_size":1, "distributed_enable":True}
+        config = BaseConfig(model_config)
+
+        config.model_config.update({"layerwiseDisaggregatedRoleType":"master"})
+        config.model_config.update({"layerwiseDisaggregatedSlaveIpAddress":"1.1.1.1"})
+        config.model_config.update({"layerwiseDisaggregatedMasterIpAddress":"1.1.1.3"})
+        config.model_config.update({"models":'{"layerwiseDisaggregatedMasterDeviceNum": 2, \
+                                    "layerwiseDisaggregatedSlaveDeviceNum": 8}'})
+        config.model_config.update({"layerwiseDisaggregatedCrtlPort":"10001,10002"})
+        result = router.communication_config_verify(config)
+        self.assertFalse(result)
+
+        config.model_config.update({"layerwiseDisaggregatedDataPort":10000})
+        result = router.communication_config_verify(config)
+        self.assertTrue(result)
+
     def test_initialize(self):
         router = LwdCommunicationManager()
         generator = MagicMock()
+        generator.model_wrapper.model_runner.ctrl_comm = None
+        generator.model_wrapper.model_runner.data_comm = None
 
         model_config = {'local_rank':1, 'model_id':'', 'rank':1, 'world_size':2, 'npu_device_id':1,
                         'npu_device_ids':'0,1', 'cpu_mem':0, 'npu_mem':0, 'max_seq_len':65536, 'max_iter_times':999,
@@ -145,12 +318,6 @@ class TestEdgeCloudComm(unittest.TestCase):
         router.parse(config)
         router.initialize(config, initialize_result, generator)
         self.assertEqual(initialize_result["status"], "error")
-
-        initialize_result = {"status":"ok"}
-        config.model_config.update({"layerwiseDisaggregatedDataPort":10000})
-        router.parse(config)
-        router.initialize(config, initialize_result, generator)
-        self.assertEqual(initialize_result["status"], "ok")
 
     def test_communication_init(self):
         router = LwdCommunicationManager()

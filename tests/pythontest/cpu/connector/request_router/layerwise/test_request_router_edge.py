@@ -86,13 +86,16 @@ class TestRequestRouterEdge(unittest.TestCase):
             ("cloudIpAddress", "127.0.0.0"),
             ("max_iter_times", "136096"),
             ("max_batch_size", "200"),
-            ("max_prefill_tokens", "136096"),
             ("trust_remote_code", "false"),
             ("backend_type", "atb"),
             ("models", json.dumps({"startLayerNum": 1}))
         ]
 
         mock_base_config_instance = Mock()
+        mock_base_config_instance.dp_size = 1
+        mock_base_config_instance.cp_size = 1
+        mock_base_config_instance.max_seq_len = 133000
+        mock_base_config_instance.max_prefill_tokens = 133000
         mock_model_config = dict(mock_config.items.return_value)
         mock_base_config_instance.model_config = mock_model_config
         mock_base_config.return_value = mock_base_config_instance

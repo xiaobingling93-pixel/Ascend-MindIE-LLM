@@ -492,8 +492,13 @@ PDPriorityType Scheduler::LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t
 
 LwdPDelayType Scheduler::LayerwiseDecidePDelay()
 {
+    static bool isDelayEnable = true;
+    int32_t maxRequestIntervalTime = 2500;
+    int32_t minRequestIntervalTime = 2000;
+    static int32_t requestIntervalOverThresholdCount = 0;
+    static int32_t requestIntervalUnderThresholdCount = 0;
     // 开启Lwd特性前提下，本函数决定本轮是否延迟下发Prefill请求，以及若延迟下发采用的处理策略
-    if (schedulerConfig_->batchPnum == 2 && waiting_.Size() > 0) { // 2为最大的P batch数量
+    if (isDelayEnable && schedulerConfig_->batchPnum == 2 && waiting_.Size() > 0) { // 2为最大的P batch数量
         auto currentTime = std::chrono::high_resolution_clock::now();
         int32_t pWaitTime = -1;
         if (pDelayTime != INVALID_TIME) {
@@ -501,6 +506,13 @@ LwdPDelayType Scheduler::LayerwiseDecidePDelay()
         }
         int32_t maxPWaitTime = 1000; // 最大等待1000ms
         if (waiting_.Front()->requestGap_ > 0) {
+            bool isGapOverIntervalTime = waiting_.Front()->requestGap_ > maxRequestIntervalTime;
+            requestIntervalOverThresholdCount += isGapOverIntervalTime ? 1 : 0;
+            // 累计5次请求到达间隔超过2.5s, 关闭延迟下发
+            if (isGapOverIntervalTime && requestIntervalOverThresholdCount >= 5) {
+                isDelayEnable = false;
+                requestIntervalUnderThresholdCount = 0;
+            }
             // maxPWaitTime = waiting_.Front()->requestGap_ / 2;
             maxPWaitTime = std::min(maxPWaitTime, waiting_.Front()->requestGap_ / 2);
             // 这里稍微调了下，一是避免重计算情况下延迟下发太久，二是真是情况下也可能请求率就是特别低
@@ -521,6 +533,13 @@ LwdPDelayType Scheduler::LayerwiseDecidePDelay()
             return LwdPDelayType::PREFILL_SKIP;
         }
     } else {
+        if (!isDelayEnable && waiting_.Size() > 0 && waiting_.Front()->requestGap_ <= minRequestIntervalTime) {
+            requestIntervalUnderThresholdCount++;
+            if (requestIntervalUnderThresholdCount >= 3) { // 累计3次请求到达间隔不超过2s, 开启延迟下发
+                requestIntervalOverThresholdCount = 0;
+                isDelayEnable = true;
+            }
+        }
         pDelayTime = INVALID_TIME;
         return LwdPDelayType::PREFILL_KEEP;
     }
