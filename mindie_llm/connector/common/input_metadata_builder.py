@@ -386,7 +386,7 @@ def convert_execute_model_request_to_input_metadata_composite(
                 seq_group_metadata, block_id_for_simulate_req, is_sp_enable, is_cp_enable, config
             )
         else:
-            seq_blocks = convert_bytes_to_list(seq_group_metadata.block_tables)
+            seq_blocks = convert_bytes_to_list(seq_group_metadata.block_tables[0])
             if lwd_multi_nodes_enable and lwd_is_slave and is_scp_enbale:
                 seq_blocks = convert_bytes_to_list(seq_group_metadata.lwd_cloud_metadata.lwd_cloud_block_tables)
             sp_rank_block_num = None
@@ -606,7 +606,7 @@ def convert_pull_kv_request_to_input_metadata_composite(
         if config is not None:
             is_sp_enable = config.sp_size > 1
             is_cp_enable = config.cp_size > 1
-        seq_blocks = convert_bytes_to_list(pull_kv_info.seq_group_metadata.block_tables)
+        seq_blocks = convert_bytes_to_list(pull_kv_info.seq_group_metadata.block_tables[0])
 
         if is_sp_enable or is_cp_enable:
             block_max_len = max(block_max_len, len(seq_blocks))

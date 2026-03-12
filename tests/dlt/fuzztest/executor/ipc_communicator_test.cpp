@@ -248,14 +248,14 @@ TEST_F(IPCCommunicatorTest, SerializeExecuteMessageFuzz)
 
         ExecuteModelRequestPtr batchInferRequest = std::make_unique<model_execute_data::ExecuteModelRequest>();
         model_execute_data::SequenceGroupMetadata metadata;
-        auto &blockTables = *metadata.mutable_block_tables();
 
         int init_blocks = 1024 * 1024 * 4;
         int min_blocks = 1024 * 1024 * 8; // will exceed the buffer size
         int max_blocks = 1024 * 1024 * 16;
         int block_num = *reinterpret_cast<int*>(DT_SetGetNumberRange(&g_Element[0], init_blocks, min_blocks, max_blocks));
         std::vector<BlockId> blockIds(block_num, 0);
-        metadata.set_block_tables(blockIds.data(), blockIds.size() * sizeof(BlockId));
+        metadata.add_block_tables(
+            std::string(reinterpret_cast<const char *>(blockIds.data()), blockIds.size() * sizeof(BlockId)));
         batchInferRequest->mutable_seq_group_metadata_list()->Add(std::move(metadata));
 
         ExecuteRequest execRequest;
@@ -272,14 +272,14 @@ TEST_F(IPCCommunicatorTest, SerializeExecuteMessageFuzz)
     {
         ExecuteModelRequestPtr batchInferRequest = std::make_unique<model_execute_data::ExecuteModelRequest>();
         model_execute_data::SequenceGroupMetadata metadata;
-        auto &blockTables = *metadata.mutable_block_tables();
         
         int init_blocks = 1024 * 1;
         int min_blocks =  1024 * 2; // will exceed the buffer size
         int max_blocks =  1024 * 4;
         int block_num = *reinterpret_cast<int*>(DT_SetGetNumberRange(&g_Element[0], init_blocks, min_blocks, max_blocks));
         std::vector<BlockId> blockIds(block_num, 0);
-        metadata.set_block_tables(blockIds.data(), blockIds.size() * sizeof(BlockId));
+        metadata.add_block_tables(
+            std::string(reinterpret_cast<const char *>(blockIds.data()), blockIds.size() * sizeof(BlockId)));
         batchInferRequest->mutable_seq_group_metadata_list()->Add(std::move(metadata));
 
         ExecuteRequest execRequest;

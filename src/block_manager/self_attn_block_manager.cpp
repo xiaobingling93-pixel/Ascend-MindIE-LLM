@@ -67,8 +67,8 @@ BlockSpaceManagerSPtr BlockManagerFactory::CreateBlockSpaceManager(BlockManagerT
                                                                    const BlockManagerConfig &config, size_t localDPRank)
 {
     switch (type) {
-        case BlockManagerType::SELFATTNBLOCKMANGER: return std::make_shared<SelfAttnBlockManager>(config, localDPRank);
-        case BlockManagerType::LWDSELFATTNBLOCKMANGER:
+        case BlockManagerType::SELFATTNBLOCKMANAGER: return std::make_shared<SelfAttnBlockManager>(config, localDPRank);
+        case BlockManagerType::LWDSELFATTNBLOCKMANAGER:
             return std::make_shared<LwdSelfAttnBlockManager>(config, localDPRank);
         default: throw std::invalid_argument("Invalid block manager type");
     }
@@ -255,9 +255,9 @@ void SelfAttnBlockManager::Free(SequenceId seqId)
     seqId2BlockTable_.erase(it);
 }
 
-std::vector<BlockId> SelfAttnBlockManager::GetBlockIds(SequenceId seqId) const
+std::vector<BlockIds> SelfAttnBlockManager::GetBlockIds(SequenceId seqId) const
 {
-    return seqId2BlockTable_.at(seqId).GetBlockIds();
+    return {seqId2BlockTable_.at(seqId).GetBlockIds()};
 }
 
 void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const
@@ -384,7 +384,7 @@ std::vector<BlockId> SelfAttnBlockManager::GetCommonComputedBlockIds(const std::
     return blockAllocator_->GetCommonComputedBlockIds(computedSeqBlockIds);
 }
 
-std::vector<size_t> SelfAttnBlockManager::GetRemoteComputedBlockIds(
+std::vector<BlockId> SelfAttnBlockManager::GetRemoteComputedBlockIds(
     const std::vector<SequenceSPtr> &seqs, size_t computedLens, uint32_t tpSize, std::string modelName)
 {
     std::vector<std::vector<BlockId>> remoteComputedSeqBlockIds;

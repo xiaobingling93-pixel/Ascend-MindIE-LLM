@@ -119,7 +119,7 @@ void FillDecodeParams(DecodeParameters &params)
 void PrepareDmiInfo(TestBacking &tb)
 {
     tb.dmi.pNodeAddr = "10.0.0.1:50051";
-    tb.dmi.kvCacheInfo.blockTable = {1, 2, 3};
+    tb.dmi.kvCacheInfo.blockTable = std::vector<std::vector<int64_t>>{{1, 2, 3}};
     tb.dmi.kvCacheInfo.dpInstanceIds = {1001, 1002};
 }
 
@@ -324,8 +324,9 @@ TEST_F(DecodeReqHandlerTestF, UpdateInferRequest_SetsIdsAndTables)
 
     EXPECT_EQ(reqObj->reqType, InferReqType::REQ_DECODE);
     EXPECT_EQ(reqObj->pInstanceId, 7u);
-    ASSERT_EQ(reqObj->srcBlockTable.size(), 3u);
-    EXPECT_EQ(reqObj->srcBlockTable[2], 3u);
+    ASSERT_EQ(reqObj->srcBlockTable.size(), 1u);
+    ASSERT_EQ(reqObj->srcBlockTable[0].size(), 3u);
+    EXPECT_EQ(reqObj->srcBlockTable[0][2], 3u);
     ASSERT_EQ(reqObj->dpInstanceIds.size(), 2u);
     EXPECT_EQ(reqObj->dpInstanceIds[0], 71001u);
     ASSERT_TRUE(handler->inferParam_ != nullptr);

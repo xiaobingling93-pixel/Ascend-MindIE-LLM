@@ -65,7 +65,7 @@ public:
 
     // REVIEW: need to be changed GetBlocks
     // read block id list from seqId's block Table
-    std::vector<BlockId> GetBlockIds(SequenceId seqId) const override;
+    std::vector<BlockIds> GetBlockIds(SequenceId seqId) const override;
 
     void GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const override;
 
@@ -91,7 +91,7 @@ public:
 
     std::vector<size_t> GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) override;
 
-    std::vector<size_t> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+    std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
                                                 size_t computedLens, uint32_t tpSize, std::string modelName) override;
 
     std::vector<size_t> GetAllRankRemoteComputedBlockIds(

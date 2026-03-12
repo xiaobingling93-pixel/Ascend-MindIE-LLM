@@ -359,7 +359,9 @@ TEST_P(BlockManagerSystemTest, TestFlow)
         // CHECKPOINT 4: used block ids
         auto index = blockManager.seqId2BlockTable_.find(thisOperation.seqId);
         if (index != blockManager.seqId2BlockTable_.end()) { // sequence still exists
-            EXPECT_EQ(blockManager.GetBlockIds(thisOperation.seqId).size(),
+            const auto allBlockIds = blockManager.GetBlockIds(thisOperation.seqId);
+            ASSERT_EQ(allBlockIds.size(), 1u);
+            EXPECT_EQ(allBlockIds[0].size(),
                       blockTable.ChunkTokensForAllocate(thisSeqPtr->GetTokenIds(), stData.setup.blockSize).size());
         }
     }

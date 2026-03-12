@@ -297,8 +297,12 @@ bool FcfsPolicy::AllocBlocks4ParallelSeqGrp(SequenceGroupSPtr seqGroup,
             blockManager_->GetCommonComputedBlockIds({seqGrpSPtr->firstSeq});
 
             // 将父亲节点的block内容拷贝给子sequence
-            std::vector<BlockId> parentBlockIds = seqGrpSPtr->parentBlockIds_;
-            std::vector<BlockId> blockIds = blockManager_->GetBlockIds(seqGrpSPtr->firstSeq->seqId_);
+            std::vector<BlockId> parentBlockIds = seqGrpSPtr->parentBlockIds_[0];
+            const auto allIds = blockManager_->GetBlockIds(seqGrpSPtr->firstSeq->seqId_);
+            if (allIds.empty() || allIds[0].empty()) {
+                throw std::runtime_error("Child sequence has no block ids after allocation.");
+            }
+            std::vector<BlockId> blockIds = allIds[0];
             if (parentBlockIds.size() > blockIds.size()) {
                 throw std::runtime_error("Parent and child sequence block ids size mismatch. parent size: " +
                                          std::to_string(parentBlockIds.size()) +

@@ -1115,6 +1115,20 @@ static void LLMInitSchedulerConfig(SchedulerConfig &schedulerConfig, BlockNum bl
     InitBufferResponseConfig(schedulerConfig, engineConfig);
     InitLayerwiseDisaggregated(schedulerConfig);
     InitKvPoolConfig(schedulerConfig, engineConfig);
+    // Fill multi-kv-cache descriptors from executor (populated via RemoteModelInitResults.kv_cache_descs).
+    // Backward compatible: if empty, scheduler will create a single block manager using cacheBlockSize.
+    {
+        std::lock_guard<std::mutex> lock(IExecutor::kvCacheOverview_.updateValueMutex);
+        schedulerConfig.kvCacheDescs.clear();
+        for (const auto &d : IExecutor::kvCacheOverview_.kvCacheDescs) {
+            SchedulerConfig::KVCacheDesc sd;
+            sd.npuBlockNum = d.npuBlockNum;
+            sd.blockSize = d.blockSize;
+            sd.compressionRatio = d.compressionRatio;
+            sd.cacheType = d.cacheType;
+            schedulerConfig.kvCacheDescs.push_back(sd);
+        }
+    }
 }
 
 static void LlmSetLoraConfig(const std::map<std::string, std::string> &loraModules,

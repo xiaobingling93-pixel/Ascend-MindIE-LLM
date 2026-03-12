@@ -136,7 +136,9 @@ message SequenceGroupMetadata {
   optional bytes prompt_token_ids = 5;
   optional bool do_sample = 6;
   optional SamplingParams sampling_params = 7;
-  bytes block_tables = 8;
+  // Block tables for KV cache. Each element is a serialized contiguous BlockId array (bytes),
+  // corresponding to one block manager (manager0, manager1, ...).
+  repeated bytes block_tables = 8;
   bytes computed_block_order = 9;
   bytes computed_block_lens = 10;
   optional int32 token_chunk_size = 11;
@@ -237,8 +239,8 @@ message PublishKVRequest {
 // PD disaggregation: pull KV Cache (request message for D instance)
 message PullKVRequest {
   message PullKVInfo {
-    bytes src_block_tables = 1;
-    bytes dst_block_tables = 2;
+    repeated bytes src_block_tables = 1;
+    repeated bytes dst_block_tables = 2;
     string cluster_id = 3;
     SequenceGroupMetadata seq_group_metadata = 4;
   }
@@ -340,10 +342,18 @@ message PullKVResponse {
   repeated PullKVResult pull_kv_results = 1;
 }
 
+// KV cache description for multi block managers (e.g. different block sizes / compression ratios).
+message KVCacheDesc {
+  int32 npu_block_num = 1;
+  int32 block_size = 2;
+  uint32 compression_ratio = 3;
+  int32 cache_type = 4;
+}
+
 message RemoteModelInitResults {
   int32 cpu_block_num = 1;
-  int32 npu_block_num = 2;
-  int32 max_position_embeddings = 3;
+  int32 max_position_embeddings = 2;
+  repeated KVCacheDesc kv_cache_descs = 3;
 }
 
 message RecoverCommandResponse {
@@ -355,6 +365,9 @@ message RecoverCommandResponse {
 message ExecuteResponse {
   message InitResults {
     map<string, string> init_result_map = 1;
+    // Multi KV cache descriptors for creating multiple block managers on upper layer.
+    // Backward compatible: old versions ignore this field.
+    repeated KVCacheDesc kv_cache_descs = 2;
   }
   int32 msg_type = 1;
   int32 rank = 2;

@@ -207,11 +207,19 @@ class RouterImpl:
             num_npu_blocks = num_npu_blocks - 1
         # 最后一个block 预留为陪跑使用
         self.block_id_for_empty_req = num_npu_blocks - 1
+        kv_desc = [
+            {
+                "npuBlockNum": int(num_npu_blocks - 1),
+                "blockSize": self.block_size,
+                "compressionRatio": 1,
+                "cacheType": 0,
+            }
+        ]
         initialize_result = {
             "status": "ok",
-            "npuBlockNum": str(num_npu_blocks - 1),
             "cpuBlockNum": str(self.generator.kvcache_settings.num_cpu_blocks),
             "maxPositionEmbeddings": str(self.generator.max_position_embeddings),
+            "kvCacheDescs": kv_desc,
         }
         initialize_result["memPoolId"] = "-1"
 
@@ -525,8 +533,8 @@ class RouterImpl:
         batch_p_ip_int = []
 
         for pull_kv_info in execute_request.pull_kv_request.pull_kv_infos:
-            batch_dst_block_tables.append(np.frombuffer(pull_kv_info.dst_block_tables, dtype=np.int64).tolist())
-            batch_src_block_tables.append(np.frombuffer(pull_kv_info.src_block_tables, dtype=np.int64).tolist())
+            batch_dst_block_tables.append(np.frombuffer(pull_kv_info.dst_block_tables[0], dtype=np.int64).tolist())
+            batch_src_block_tables.append(np.frombuffer(pull_kv_info.src_block_tables[0], dtype=np.int64).tolist())
             batch_req_ids.append(pull_kv_info.seq_group_metadata.request_id)
             batch_p_ip_int.append(pull_kv_info.cluster_id)
 

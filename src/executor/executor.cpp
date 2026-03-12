@@ -12,6 +12,7 @@
 
 #include <cstring>
 #include <csignal>
+#include <vector>
 #include "log.h"
 #include "string_utils.h"
 #include "math_utils.h"
@@ -280,9 +281,14 @@ bool Executor::SlaveSendInitResponseToMaster()
 
     auto *slaveResponse = response.mutable_remote_model_init_results();
     slaveResponse->set_cpu_block_num(IExecutor::kvCacheOverview_.cpuBlockNum);
-    slaveResponse->set_npu_block_num(IExecutor::kvCacheOverview_.npuBlockNum);
     slaveResponse->set_max_position_embeddings(IExecutor::kvCacheOverview_.maxPositionEmbeddings);
-
+    for (const auto &desc : IExecutor::kvCacheOverview_.kvCacheDescs) {
+        auto *protoDesc = slaveResponse->add_kv_cache_descs();
+        protoDesc->set_npu_block_num(static_cast<int32_t>(desc.npuBlockNum));
+        protoDesc->set_block_size(static_cast<int32_t>(desc.blockSize));
+        protoDesc->set_compression_ratio(static_cast<uint32_t>(desc.compressionRatio));
+        protoDesc->set_cache_type(desc.cacheType);
+    }
     communicator_->SendAsyncReponseToRemote(response);
     return true;
 }
@@ -294,18 +300,54 @@ bool Executor::MasterHandleSlaveInitResponse(ExecuteResponse &response) const
         return false;
     }
     auto &slaveInfo = response.remote_model_init_results();
+    if (slaveInfo.kv_cache_descs_size() == 0) {
+        MINDIE_LLM_LOG_ERROR("Invalid model init info response from slave node: missing kv_cache_descs.");
+        return false;
+    }
+    const uint32_t npuBlockNum = static_cast<uint32_t>(slaveInfo.kv_cache_descs(0).npu_block_num());
     if (modelLaunchConfig_.layerwiseDisaggregated && modelLaunchConfig_.scp > 1) {
-        uint32_t lwdCloudNpuBlockNum = slaveInfo.npu_block_num();
+        uint32_t lwdCloudNpuBlockNum = npuBlockNum;
         kvCacheOverview_.lwdCloudNpuBlockNum = std::min(kvCacheOverview_.lwdCloudNpuBlockNum, lwdCloudNpuBlockNum);
     } else {
-        IExecutor::kvCacheOverview_.UpdateIfSmaller(slaveInfo.cpu_block_num(), slaveInfo.npu_block_num(),
+        IExecutor::kvCacheOverview_.UpdateIfSmaller(slaveInfo.cpu_block_num(), npuBlockNum,
                                                     slaveInfo.max_position_embeddings());
+        if (slaveInfo.kv_cache_descs_size() > 0) {
+            std::vector<KVCacheOverview::KVCacheDesc> descs = ParseProtoKvCacheDescs(response);
+            if (!IExecutor::kvCacheOverview_.UpdateKvCacheDescsIfEmptyOrEqual(descs)) {
+                MINDIE_LLM_LOG_WARN("KV cache descs mismatch between master and slave; keep existing master descs.");
+            }
+        }
     }
     MINDIE_LLM_LOG_INFO("[Executor::MasterHandleSlaveInitResponse]: Updated KV cache overview from slave: CPU blocks = "
                         << IExecutor::kvCacheOverview_.cpuBlockNum
                         << ", NPU blocks = " << IExecutor::kvCacheOverview_.npuBlockNum
                         << ", MaxPosEmb = " << IExecutor::kvCacheOverview_.maxPositionEmbeddings);
     return true;
+}
+
+std::vector<KVCacheOverview::KVCacheDesc> Executor::ParseProtoKvCacheDescs(const ExecuteResponse &response) const
+{
+    std::vector<KVCacheOverview::KVCacheDesc> descs;
+    const ::google::protobuf::RepeatedPtrField<model_execute_data::KVCacheDesc> *protoDescs = nullptr;
+
+    if (response.has_remote_model_init_results() && response.remote_model_init_results().kv_cache_descs_size() > 0) {
+        protoDescs = &response.remote_model_init_results().kv_cache_descs();
+    } else if (response.has_init_results() && response.init_results().kv_cache_descs_size() > 0) {
+        protoDescs = &response.init_results().kv_cache_descs();
+    }
+
+    if (protoDescs != nullptr) {
+        descs.reserve(static_cast<size_t>(protoDescs->size()));
+        for (const auto &protoDesc : *protoDescs) {
+            KVCacheOverview::KVCacheDesc d;
+            d.npuBlockNum = static_cast<uint32_t>(protoDesc.npu_block_num());
+            d.blockSize = static_cast<uint32_t>(protoDesc.block_size());
+            d.compressionRatio = static_cast<uint32_t>(protoDesc.compression_ratio());
+            d.cacheType = protoDesc.cache_type();
+            descs.push_back(d);
+        }
+    }
+    return descs;
 }
 
 bool Executor::AsyncExecuteModel(ExecuteModelRequestPtr &modelRequest,
@@ -431,19 +473,37 @@ bool Executor::HandleInitResult(std::vector<ExecuteResponse> &responses) const
                 return false;
             }
         }
-        if (initResults.count("cpuBlockNum") == 0 || initResults.count("npuBlockNum") == 0 ||
-            initResults.count("maxPositionEmbeddings") == 0) {
+        if (initResults.count("cpuBlockNum") == 0 || initResults.count("maxPositionEmbeddings") == 0) {
             MINDIE_LLM_LOG_ERROR("Init result error: Required fields missing in response.");
             return false;
         }
         try {
+            // npuBlockNum is no longer carried in init_result_map; use kv_cache_descs instead.
+            if (responses[i].init_results().kv_cache_descs_size() == 0) {
+                MINDIE_LLM_LOG_ERROR("Init result error: kv_cache_descs is missing in response.");
+                return false;
+            }
+            const uint32_t npuBlockNum =
+                static_cast<uint32_t>(responses[i].init_results().kv_cache_descs(0).npu_block_num());
             IExecutor::kvCacheOverview_.UpdateIfSmaller(std::stoul(initResults.at("cpuBlockNum")),
-                                                        std::stoul(initResults.at("npuBlockNum")),
+                                                        npuBlockNum,
                                                         std::stoul(initResults.at("maxPositionEmbeddings")));
+
+            std::vector<KVCacheOverview::KVCacheDesc> descs = ParseProtoKvCacheDescs(responses[i]);
+            if (!IExecutor::kvCacheOverview_.UpdateKvCacheDescsIfEmptyOrEqual(descs)) {
+                MINDIE_LLM_LOG_WARN("kv_cache_descs mismatch across init responses; keep existing descs.");
+            }
         } catch (const std::exception &e) {
-            MINDIE_LLM_LOG_ERROR("Invalid init result format for cpuBlockNum: "
-                                 << initResults.at("cpuBlockNum") << ", npuBlockNum: " << initResults.at("npuBlockNum")
-                                 << ", maxPositionEmbeddings: " << initResults.at("maxPositionEmbeddings"));
+            const auto itCpu = initResults.find("cpuBlockNum");
+            const auto itMaxPos = initResults.find("maxPositionEmbeddings");
+            const int kvSize = responses[i].init_results().kv_cache_descs_size();
+
+            MINDIE_LLM_LOG_ERROR("Invalid init result format: cpuBlockNum="
+                                 << (itCpu == initResults.end() ? "<missing>" : itCpu->second)
+                                 << ", maxPositionEmbeddings="
+                                 << (itMaxPos == initResults.end() ? "<missing>" : itMaxPos->second)
+                                 << ", kv_cache_descs_size=" << kvSize
+                                 << ", exception=" << e.what());
             return false;
         }
     }

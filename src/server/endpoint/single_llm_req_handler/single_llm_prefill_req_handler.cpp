@@ -430,11 +430,16 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
     params.set_e2estarttime(e2eStartTimeNs);
     PROF(prof.Attr("e2estarttime", e2eStartTimeNs));
 
-    std::vector<int64_t> blockTable = response->responseContents[0].srcBlockTable;
-    for (int64_t block : blockTable) {
-        params.add_blocktable(block);
+    std::vector<std::vector<int64_t>> blockTables = response->responseContents[0].srcBlockTable;
+    for (const auto& blockTable : blockTables) {
+        auto *blockIds = params.add_blocktable();
+        for (int64_t block : blockTable) {
+            blockIds->add_blockid(block);
+        }
     }
-    PROF(prof.NumArrayAttr("blocktable", blockTable.begin(), blockTable.end()));
+    if (!blockTables.empty()) {
+        PROF(prof.NumArrayAttr("blocktable", blockTables[0].begin(), blockTables[0].end()));
+    }
     std::vector<uint64_t> dpInstanceIds = {
         static_cast<unsigned int>(response->responseContents[0].singleLLMPrefillReqHandlerId)};
     for (uint64_t dpId : dpInstanceIds) {

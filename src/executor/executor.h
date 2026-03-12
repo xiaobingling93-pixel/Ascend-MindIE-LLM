@@ -116,6 +116,7 @@ private:
     int GetRemoteDPRankIdx(ModelLaunchConfig &modelConfig, int rankIdx, bool intraNodeTP) const;
     uint32_t GetGRPCCommunicatorNum(ModelLaunchConfig &modelConfig, bool intraNodeTP) const;
     bool HandleLoraOperationResponse(ExecuteResponse &executeResponse);
+    std::vector<KVCacheOverview::KVCacheDesc> ParseProtoKvCacheDescs(const ExecuteResponse &response) const;
 
     inline static std::atomic<uint64_t> ipcInitCounter_{0};
     bool isMultiNodesInfer_{false};

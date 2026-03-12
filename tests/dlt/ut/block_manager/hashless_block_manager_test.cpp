@@ -113,7 +113,8 @@ TEST_P(SwapOutTestClass, ExpectOneAllocateAndSwapOutSuccessHavingEnoughCpuAndFai
     EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), test.npuBlockNum);
 
     auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-    EXPECT_EQ(blockIds, test.blockIdsExpected);
+    ASSERT_EQ(blockIds.size(), 1u);
+    EXPECT_EQ(blockIds[0], test.blockIdsExpected);
 };
 
 /**
@@ -204,7 +205,8 @@ TEST_P(SwapOutTestClass, ExpectSuccessHavingMultipleAllocateAndSwapOut)
         EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), currNumFreeNpuBlocks);
 
         auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-        EXPECT_EQ(blockIds, test.blockIdsExpected); // 检查块 ID 是否符合预期
+        ASSERT_EQ(blockIds.size(), 1u);
+        EXPECT_EQ(blockIds[0], test.blockIdsExpected); // 检查块 ID 是否符合预期
         numAllAllocatedBlocks -= AllocatedNumBlocks[i];
         i++;
     }
@@ -287,7 +289,8 @@ TEST_P(SwapInTestClass, ExpectSuccessHavingOneAllocateAndSwapOutAndSwapInAndFree
     EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), test.npuBlockNum - numBlocks);
 
     auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-    EXPECT_EQ(blockIds, test.blockIdsExpectedAfterSwapIn);
+    ASSERT_EQ(blockIds.size(), 1u);
+    EXPECT_EQ(blockIds[0], test.blockIdsExpectedAfterSwapIn);
 
     blockManager.Free(seqPtr->seqId_);
     EXPECT_EQ(blockManager.GetNumFreeCpuBlocks(), test.cpuBlockNum);
@@ -404,7 +407,8 @@ TEST_P(SwapTestClass, ExpectSwapInSuccessHavingEnoughNpuAndSwapInFailNotHavingEn
         EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), currNumFreeNpuBlocks);
 
         auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-        EXPECT_EQ(blockIds, sequencialSwapInTestData[i].blockIdsExpectedAfterSwapIn);
+        ASSERT_EQ(blockIds.size(), 1u);
+        EXPECT_EQ(blockIds[0], sequencialSwapInTestData[i].blockIdsExpectedAfterSwapIn);
     }
 }
 INSTANTIATE_TEST_SUITE_P(SwapTestSuite, SwapTestClass, ::testing::ValuesIn(sequencialSwapInTestData));
@@ -494,7 +498,8 @@ TEST(SwapTestClass, ExpectSuccessWhenSwapOutAndReverselySwapIn)
         EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), currNumFreeNpuBlocks);
 
         auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-        EXPECT_EQ(blockIds, sequencialSwapInTestData[i].blockIdsExpectedAfterSwapIn);
+        ASSERT_EQ(blockIds.size(), 1u);
+        EXPECT_EQ(blockIds[0], sequencialSwapInTestData[i].blockIdsExpectedAfterSwapIn);
 
         blockManager.Free(seqPtr->seqId_);
         currNumFreeNpuBlocks += AllocatedNumBlocks[i];

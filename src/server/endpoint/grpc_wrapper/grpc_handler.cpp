@@ -56,7 +56,10 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
     PROF(prof.Attr("details", para.details()));
     PROF(prof.Attr("id", para.id()));
     PROF(prof.Attr("e2estarttime", para.e2estarttime()));
-    PROF(prof.NumArrayAttr("blocktable", para.blocktable().begin(),  para.blocktable().end()));
+    if (para.blocktable_size() > 0) {
+        PROF(prof.NumArrayAttr("blocktable", para.blocktable()[0].blockid().begin(),
+                               para.blocktable()[0].blockid().end()));
+    }
     PROF(prof.Attr("prevdecodeindex", para.prevdecodeindex()));
     PROF(prof.Attr("currentdecodeindex", para.currentdecodeindex()));
     PROF(prof.Attr("postsingletext", para.postsingletext()));
@@ -78,9 +81,16 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
         return;
     }
     KvCacheInfo kvCacheInfo;
+    
+    kvCacheInfo.blockTable.resize(para.blocktable_size());
     for (int i = 0; i < para.blocktable_size(); ++i) {
-        kvCacheInfo.blockTable.push_back(para.blocktable()[i]);
+        const auto &blocktable = para.blocktable(i);
+        kvCacheInfo.blockTable[i].reserve(blocktable.blockid_size());
+        for (int j = 0; j < blocktable.blockid_size(); ++j) {
+            kvCacheInfo.blockTable[i].push_back(blocktable.blockid(j));
+        }
     }
+    
     for (int i = 0; i < para.dpinstanceids_size(); ++i) {
         kvCacheInfo.dpInstanceIds.push_back(para.dpinstanceids()[i]);
     }

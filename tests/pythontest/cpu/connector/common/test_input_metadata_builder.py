@@ -76,7 +76,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         seq_group_metadata.sampling_params.seed = 52516453
         s64_array = array.array('q',
                                 [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
-        seq_group_metadata.block_tables = s64_array.tobytes()
+        seq_group_metadata.block_tables.append(s64_array.tobytes())
 
         seq_group_metadata.seqIds = struct.pack('<1q', 1)
 
@@ -92,7 +92,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         self.sp_seq_group_metadata.sp_rank_token_num.extend([10, 20, 30])
         self.sp_seq_group_metadata.sp_rank_block_num.extend([2, 2, 2])
         sp_block_array = array.array('q', [1, 2, 3, 4, 5, 6])
-        self.sp_seq_group_metadata.block_tables = sp_block_array.tobytes()
+        self.sp_seq_group_metadata.block_tables.append(sp_block_array.tobytes())
         self.sp_seq_group_metadata.seqIds = struct.pack('<2q', 2, 3)
         self.sp_seq_group_metadata.prompt_lens = struct.pack('<2q', 10, 20)
         self.sp_seq_group_metadata.sampling_params.seed = 12345
@@ -300,7 +300,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         seq_group_metadata.sampling_params.temperature = 0
         s64_array = array.array('q',
                                 [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
-        seq_group_metadata.block_tables = s64_array.tobytes()
+        seq_group_metadata.block_tables.append(s64_array.tobytes())
         seq_group_metadata.seqIds = struct.pack('<1q', 1)
         prompt_len_array = array.array('q', [34])
         seq_group_metadata.prompt_lens = prompt_len_array.tobytes()
@@ -342,7 +342,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         sp_seq_group_metadata.sp_rank_token_num.extend([1, 1, 1, 1, 1, 1, 1, 1])
         sp_seq_group_metadata.sp_rank_block_num.extend([1, 1, 1, 1, 1, 1, 1, 1])
         sp_block_array = array.array('q', [0] * 8)
-        sp_seq_group_metadata.block_tables = sp_block_array.tobytes()
+        sp_seq_group_metadata.block_tables.append(sp_block_array.tobytes())
         prompt_len_array = array.array('q', [8])
         sp_seq_group_metadata.prompt_lens = prompt_len_array.tobytes()
         sp_seq_group_metadata.seqIds = struct.pack('<1q', 100)
@@ -507,7 +507,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         normal_sp_request.sp_rank_token_num.extend([10, 20, 30, 0])  # sp_size = 4
         normal_sp_request.sp_rank_block_num.extend([2, 1, 2, 0])  # total_blocks = 5
         normal_block_array = array.array('q', [1, 2, 3, 4, 5])  # 5 blocks
-        normal_sp_request.block_tables = normal_block_array.tobytes()
+        normal_sp_request.block_tables.append(normal_block_array.tobytes())
         normal_sp_request.seqIds = struct.pack('<1q', 100)
         normal_sp_request.prompt_lens = struct.pack('<1q', 60)
         normal_prompt_array = array.array('q', [1, 2, 3, 4, 5])  # non-empty prompt tokens
@@ -520,7 +520,8 @@ class TestInputMetadataBuilder(unittest.TestCase):
         simulate_sp_request.sp_rank_id = 0
         simulate_sp_request.sp_rank_token_num.extend([10, 20, 30, 0])  # sp_size = 4, same as normal
         simulate_sp_request.sp_rank_block_num.extend([2, 1, 2, 0])  # total_blocks = 5, same as normal
-        simulate_sp_request.block_tables = b''
+        # Keep one empty bytes element so upper layer can safely index [0]
+        simulate_sp_request.block_tables.append(b'')
         simulate_sp_request.seqIds = struct.pack('<1q', SIMULATE_SEQUENCE_ID)  # Use simulate sequence id
         simulate_sp_request.prompt_lens = struct.pack('<1q', 60)
         simulate_prompt_array = array.array('q', [1, 2, 3])  # non-empty prompt tokens

@@ -69,7 +69,7 @@ struct SequenceGroup {
     bool isSynchronous_{false};
 
     /* 为PD分离预留，prefill阶段的block table。P节点需要设置，D节点上需要此数据 */
-    std::vector<int64_t> pBlockTable{};
+    std::vector<BlockIds> pBlockTable{};
 
     /* 为PD分离预留，P节点的instance id。用于计算最终传给D节点的 dpinstanceid */
     InstanceId pInstanceId = 0;
@@ -102,7 +102,7 @@ struct SequenceGroup {
     SequenceId parentSeqId_{-1};
 
     /* 并行采样使用，保存父序列的 blockId */
-    std::vector<BlockId> parentBlockIds_{};
+    std::vector<BlockIds> parentBlockIds_{};
 
     std::optional<std::string> loraId_;
 

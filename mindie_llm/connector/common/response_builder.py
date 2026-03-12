@@ -17,6 +17,8 @@ from mindie_llm.connector.common.model_execute_data_pb2 import CompletionSequenc
 from mindie_llm.utils.prof.profiler import span_start, span_end, span_attr
 from mindie_llm.utils.log.logging import logger
 
+DEFAULT_BLOCK_SIZE = 128
+
 SUCCESS_STATUS = 0
 
 
@@ -26,8 +28,24 @@ class ExecuteResponseBuilder:
     @staticmethod
     def build_from_init_result(init_results) -> ExecuteResponse:
         proto_response = ExecuteResponse(msg_type=ExecuteType.MODEL_INIT, status=SUCCESS_STATUS)
+        kv_descs = init_results.get("kvCacheDescs")
         for key, value in init_results.items():
+            if key == "kvCacheDescs":
+                continue
             proto_response.init_results.init_result_map[key] = value
+
+        if kv_descs:
+            for desc in kv_descs:
+                block_size = desc.get("blockSize", DEFAULT_BLOCK_SIZE)
+                compression_ratio = desc.get("compressionRatio", 1)
+                npu_block_num = desc.get("npuBlockNum")
+                cache_type = desc.get("cacheType", 0)
+                proto_response.init_results.kv_cache_descs.add(
+                    block_size=int(block_size),
+                    compression_ratio=int(compression_ratio),
+                    npu_block_num=int(npu_block_num),
+                    cache_type=int(cache_type)
+                )
         return proto_response
 
     @staticmethod

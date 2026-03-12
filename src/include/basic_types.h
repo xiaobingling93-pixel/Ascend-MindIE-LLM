@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <string>
 #include <queue>
+#include <vector>
 namespace mindie_llm {
 
 // for server module
@@ -24,7 +25,8 @@ using RespBodyQueue = std::queue<std::string>;
 using TokenId = long;
 using Probability = float;
 using InstanceId = uint32_t;
-using BlockId = uint64_t; // global block id. Like npu block id is from 0~99, cpu block id is from 100~199.
+using BlockId = int64_t; // global block id. Like npu block id is from 0~99, cpu block id is from 100~199.
+using BlockIds = std::vector<BlockId>;
 // SequenceId type need to disscuss
 using SequenceId = long;
 using RequestId = std::string;
@@ -70,7 +72,7 @@ struct NodeInfo {
     std::string serviceIp;
 };
 
-constexpr uint64_t INVALID_BLOCKID = 0xFFFFFFFFFFFFFFFFULL;
+constexpr BlockId INVALID_BLOCKID = static_cast<BlockId>(-1);
 constexpr HashValue INVALID_HASH_VALUE = 0;
 constexpr TimeStamp DEFAULT_LAST_ACCESSED_TIME = -1;
 constexpr TokenId PLACEHOLDER_TOKEN = -1;

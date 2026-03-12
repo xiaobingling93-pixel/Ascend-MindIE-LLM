@@ -32,7 +32,7 @@ protected:
                                         schedulerConfig_->enablePrefixCache,
                                         schedulerConfig_->spSize * schedulerConfig_->cpSize};
         blockManager_ = std::static_pointer_cast<SelfAttnBlockManager>(BlockManagerFactory::CreateBlockSpaceManager(
-            BlockManagerType::SELFATTNBLOCKMANGER, std::move(blockConf), 0));
+            BlockManagerType::SELFATTNBLOCKMANAGER, std::move(blockConf), 0));
         blockManager_->seqId2BlockTable_[0] = BlockTable();
         blockManager_->seqId2BlockTable_[0].blockIds_.push_back(1);
 

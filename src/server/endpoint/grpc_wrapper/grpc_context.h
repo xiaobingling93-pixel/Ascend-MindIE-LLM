@@ -25,14 +25,22 @@
 
 namespace mindie_llm {
 struct KvCacheInfo {
-    std::vector<int64_t> blockTable;
+    std::vector<std::vector<int64_t>> blockTable;
     std::vector<uint64_t> dpInstanceIds;
 
     // toString 方法使用 vectorToString
     std::string ToString() const
     {
-        return "KvCacheInfo { blockTable: " + VectorToString(blockTable) +
-            ", dpInstanceIds: " + VectorToString(dpInstanceIds) + " }";
+        std::ostringstream oss;
+        oss << "KvCacheInfo { blockTable: [";
+        for (size_t i = 0; i < blockTable.size(); ++i) {
+            if (i > 0) {
+                oss << ", ";
+            }
+            oss << "m" << i << "=" << VectorToString(blockTable[i]);
+        }
+        oss << "], dpInstanceIds: " << VectorToString(dpInstanceIds) << " }";
+        return oss.str();
     }
 };
 

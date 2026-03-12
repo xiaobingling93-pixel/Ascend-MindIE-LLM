@@ -76,7 +76,8 @@ protected:
             SequenceGroupSPtr seqGrpSPtr = std::make_shared<SequenceGroup>(reqId, seqs, sampling);
             seqGrpSPtr->metrics_.inferReqId_ = std::to_string(startSeqId + i);
             seqGrpSPtr->pInstanceId = 0;
-            seqGrpSPtr->pBlockTable = std::vector<int64_t>{i + 1, i + 2};
+            seqGrpSPtr->pBlockTable = std::vector<BlockIds>{
+                BlockIds{static_cast<BlockId>(i + 1), static_cast<BlockId>(i + 2)}};
 
             LiveInferContext::GetInstance(0)->Add(seqGrpSPtr);
         }
@@ -239,7 +240,7 @@ TEST_F(ModelExecOutputHandlerTest, ShouldReturnCorrectTensorWhenPublishKvCache)
     ResponseSPtr response = responses_.back();
     EXPECT_EQ(response->transferStatusFlag, TransferStatusType::PUBLISH_KV_COMPLETE);
     // check response contents
-    EXPECT_EQ(response->responseContents[0].srcBlockTable, std::vector<int64_t>({1, 2}));
+    EXPECT_EQ(response->responseContents[0].srcBlockTable, std::vector<std::vector<int64_t>>({{1, 2}}));
     EXPECT_EQ(response->responseContents[0].singleLLMPrefillReqHandlerId, 0);
     
     size_t beforeEntry4ExecutorCount = responses_.size();

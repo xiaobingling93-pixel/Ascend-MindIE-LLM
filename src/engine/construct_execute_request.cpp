@@ -9,9 +9,10 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "construct_execute_request.h"
+#include <string>
 #include "log.h"
 #include "id_utils.h"
+#include "construct_execute_request.h"
 
 namespace mindie_llm {
 
@@ -121,7 +122,16 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
     protoMeta.set_seqids(metaData.seqIds_.data(), metaData.seqIds_.size() * sizeof(SequenceId));
 
     // 构造block table
-    protoMeta.set_block_tables(metaData.blockIds_.data(), metaData.blockIds_.size() * sizeof(BlockId));
+    protoMeta.clear_block_tables();
+    for (const auto &mgrBlockIds : metaData.blockIds_) {
+        const size_t bytesLen = mgrBlockIds.size() * sizeof(BlockId);
+        if (bytesLen == 0) {
+            protoMeta.add_block_tables("");
+            continue;
+        }
+        const char *ptr = reinterpret_cast<const char *>(mgrBlockIds.data());
+        protoMeta.add_block_tables(ptr, bytesLen);
+    }
     
     if (metaData.isSp_ or metaData.isCp_) {
         // sp & cp common part
@@ -288,8 +298,27 @@ PullKVRequestPtr ConstructExecuteRequest::ConstructPullKVRequest(SequenceGroupMe
     PullKVRequestPtr request = std::make_unique<model_execute_data::PullKVRequest>();
     for (auto &metadata : seqGroupMetadata.metaList) {
         auto *info = request->add_pull_kv_infos();
-        info->set_dst_block_tables(metadata.blockIds_.data(), metadata.blockIds_.size() * sizeof(BlockId));
-        info->set_src_block_tables(metadata.srcBlockIds_.data(), metadata.srcBlockIds_.size() * sizeof(BlockId));
+
+        for (const auto& blockIds : metadata.blockIds_) {
+            const size_t bytesLen = blockIds.size() * sizeof(BlockId);
+            if (bytesLen == 0) {
+                info->add_dst_block_tables("");
+                continue;
+            }
+            const char *ptr = reinterpret_cast<const char *>(blockIds.data());
+            info->add_dst_block_tables(ptr, bytesLen);
+        }
+
+        for (const auto& blockIds : metadata.srcBlockIds_) {
+            const size_t bytesLen = blockIds.size() * sizeof(BlockId);
+            if (bytesLen == 0) {
+                info->add_src_block_tables("");
+                continue;
+            }
+            const char *ptr = reinterpret_cast<const char *>(blockIds.data());
+            info->add_src_block_tables(ptr, bytesLen);
+        }
+
         info->set_cluster_id(std::to_string(metadata.dpInstanceId_));
 
         model_execute_data::SequenceGroupMetadata *protoMeta = info->mutable_seq_group_metadata();

@@ -321,7 +321,7 @@ TEST_F(PrefillReqHandlerTestF, BuildDecodeParameters_PacksAllKeyFields)
     // Response to supply src block table and producer instance id
     ResponseSPtr resp = std::make_shared<Response>(RequestIdNew{});
     resp->responseContents.resize(1);
-    resp->responseContents[0].srcBlockTable = {1, 2};
+    resp->responseContents[0].srcBlockTable = std::vector<std::vector<int64_t>>{{1, 2}};
     resp->responseContents[0].singleLLMPrefillReqHandlerId = 8;
 
     DecodeParameters out;
@@ -369,8 +369,9 @@ TEST_F(PrefillReqHandlerTestF, BuildDecodeParameters_PacksAllKeyFields)
     EXPECT_EQ(out.e2estarttime(), 0u);
 
     // Block table
-    ASSERT_EQ(out.blocktable_size(), 2);
-    EXPECT_EQ(out.blocktable(1), 2);
+    ASSERT_EQ(out.blocktable_size(), 1);
+    ASSERT_EQ(out.blocktable(0).blockid_size(), 2);
+    EXPECT_EQ(out.blocktable(0).blockid(1), 2);
 
     // Prev/current decode index + post single text
     EXPECT_EQ(out.prevdecodeindex(), 42u);

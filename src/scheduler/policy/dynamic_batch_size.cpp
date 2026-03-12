@@ -153,7 +153,11 @@ uint32_t DynamicBatchSize::GetScheduledOutBlockNum(SchedulerOutputs schedulerOut
         const auto scheSeqGroup = schedulerOut.scheduledSeqGroups_[i];
         const auto seqGroup = scheSeqGroup->seqGroup_;
         SequenceId seqId = seqGroup->seqs_[0]->seqId_;
-        blockNum += blockManager_->GetBlockIds(seqId).size();
+        const auto allIds = blockManager_->GetBlockIds(seqId);
+        if (allIds.empty()) {
+            continue;
+        }
+        blockNum += static_cast<uint32_t>(allIds[0].size());
     }
     return blockNum;
 }

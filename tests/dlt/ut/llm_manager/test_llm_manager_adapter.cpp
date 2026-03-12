@@ -392,7 +392,7 @@ TEST_F(LlmManagerTest, should_return_v1_output_ids_ok_when_input_v2_response_ids
     content.topLogProbs.push_back(4.0f);
     content.topLogProbs.push_back(5.0f);
     content.topLogProbs.push_back(6.0f);
-    content.srcBlockTable.push_back(6);
+    content.srcBlockTable.push_back(std::vector<int64_t>{6});
     responsev2->metrics.batchSize = 6;
     responsev2->metrics.queueWaitTime = 8;
     responsev2->responseContents.push_back(content);

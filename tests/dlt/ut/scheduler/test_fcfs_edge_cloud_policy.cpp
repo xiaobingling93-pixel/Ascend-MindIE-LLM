@@ -71,7 +71,7 @@ protected:
                      0,
                      schedulerConfig_->enablePrefixCache,
                      schedulerConfig_->spSize * schedulerConfig_->cpSize};
-        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANGER,
+        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANAGER,
                                                                     std::move(blockConf_), 0);
         policy_ = std::make_shared<LayerwiseFcfsPolicy>(schedulerConfig_, blockManager_);
     }

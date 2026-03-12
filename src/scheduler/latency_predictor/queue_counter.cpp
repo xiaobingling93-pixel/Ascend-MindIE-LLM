@@ -112,7 +112,11 @@ size_t QueueCounter::CountBlocks(SequenceGroupSPtr &seqgrp, SequenceStatus statu
         // 获取第一个序列的ID
         SequenceId seqId = seqgrp->seqs_[0]->seqId_;
         // 直接查询块管理器获取该序列实际使用的块数量
-        return blockManager_->GetBlockIds(seqId).size();
+        const auto allIds = blockManager_->GetBlockIds(seqId);
+        if (allIds.empty()) {
+            return 0;
+        }
+        return allIds[0].size();
     }
 
     // 情况2：其他状态（如WAITING、SWAPPED等），根据序列长度和块大小计算预估需要的块数量

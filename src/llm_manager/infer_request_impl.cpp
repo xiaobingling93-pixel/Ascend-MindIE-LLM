@@ -190,12 +190,16 @@ std::string InferRequestImpl::GetPrefillAddr() const
 
 void InferRequestImpl::SetSrcBlockTable(const std::vector<int64_t> &srcBlockTable)
 {
-    srcBlockTable_ = srcBlockTable;
+    srcBlockTable_.clear();
+    srcBlockTable_.push_back(srcBlockTable);
 }
 
 std::vector<int64_t> InferRequestImpl::GetSrcBlockTable() const
 {
-    return srcBlockTable_;
+    if (srcBlockTable_.empty()) {
+        return {};
+    }
+    return srcBlockTable_[0];
 }
 
 void InferRequestImpl::SetDpInstanceIds(const std::vector<uint64_t> &dpInstanceIds)

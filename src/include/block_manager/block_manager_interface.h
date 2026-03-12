@@ -24,8 +24,11 @@ namespace mindie_llm {
 using SequenceGroupSPtr = std::shared_ptr<SequenceGroup>;
 using SequenceSPtr = std::shared_ptr<Sequence>;
 enum class BlockManagerType : int32_t {
-    SELFATTNBLOCKMANGER,
-    LWDSELFATTNBLOCKMANGER,
+    SELFATTNBLOCKMANAGER,
+    LWDSELFATTNBLOCKMANAGER,
+    COMPOSITEBLOCKMANAGER,
+    REQUESTSINGLEBLOCKMANAGER,
+    REQUESTSLIDINGWINDOWBLOCKMANAGER
 };
 
 struct RankedBlockId {
@@ -41,6 +44,12 @@ enum class RankBlockAllocationMode : int32_t {
     BALANCED,        // 平均分配到各个rank
                      // deprecated
     SMALL_RANK_FIRST // 优先分配到小rank, PD分离场景, P节点使用此模式
+};
+
+enum class KvCacheType: int32_t {
+    TOKEN = 0,
+    SEQUENCE = 1,
+    SLIDING_WINDOW = 2
 };
 
 struct BlockManagerConfig {
@@ -67,6 +76,16 @@ struct BlockManagerConfig {
     std::string cachePoolConfigPath = "";
 
     RankBlockAllocationMode allocationMode = RankBlockAllocationMode::SMALL_RANK_FIRST;
+
+    KvCacheType cacheType = KvCacheType::TOKEN;
+
+    // Multi-manager (composite) configs. Only used when BlockManagerType is COMPOSITEBLOCKMANAGER.
+    // If empty, COMPOSITEBLOCKMANAGER creation will fail fast.
+    std::vector<BlockManagerConfig> subManagers{};
+
+    // Request-scoped window size for request-level block managers (e.g. sliding window manager).
+    // Meaning: each request holds at most N BlockIds; when appending beyond N, the oldest block is released.
+    size_t requestBlockWindowSize = 2;
 };
 
 class BlockSpaceManager {
@@ -102,7 +121,7 @@ public:
 
     virtual void Free(SequenceId seqId) = 0;
 
-    virtual std::vector<BlockId> GetBlockIds(SequenceId seqId) const = 0;
+    virtual std::vector<BlockIds> GetBlockIds(SequenceId seqId) const = 0;
 
     // virtual std::vector<RankedBlockId> GetRankedBlockIds(SequenceId seqId) const = 0;
     virtual void GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const = 0;
@@ -133,7 +152,7 @@ public:
 
     virtual std::vector<size_t> GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) = 0;
 
-    virtual std::vector<size_t> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+    virtual std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
                                                     size_t computedLens, uint32_t tpSize, std::string modelName) = 0;
 
     virtual std::vector<size_t> GetAllRankRemoteComputedBlockIds(

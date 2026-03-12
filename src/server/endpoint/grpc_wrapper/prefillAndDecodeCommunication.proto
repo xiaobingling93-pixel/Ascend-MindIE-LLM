@@ -20,6 +20,10 @@ message DecodeRequestResponse {
     string errorMessage = 2;
 }
 
+message BlockIds {
+    repeated int64 blockId = 1;
+}
+
 message DecodeParameters {
     string reqId = 1;
     repeated int64 tokens = 2;
@@ -48,7 +52,7 @@ message DecodeParameters {
     uint32 prevdecodeindex = 24;
     uint32 currentdecodeindex = 25;
 
-    repeated int64 blockTable = 26;
+    repeated BlockIds blockTable = 26;
     string pNodeAddr = 27;
     uint32 pInstanceId = 28;
     uint64 e2eStartTime = 29;

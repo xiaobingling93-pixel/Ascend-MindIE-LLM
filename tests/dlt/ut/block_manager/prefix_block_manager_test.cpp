@@ -199,7 +199,8 @@ void SwapOutTestHelper(const std::vector<AllocateTestData> &sequencialAllocateTe
         EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), currNumFreeNpuBlockIds);
 
         auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-        EXPECT_EQ(blockIds, test.blockIdsExpected); // 检查块 ID 是否符合预期
+        ASSERT_EQ(blockIds.size(), 1u);
+        EXPECT_EQ(blockIds[0], test.blockIdsExpected); // 检查块 ID 是否符合预期
         i++;
     }
 }
@@ -444,7 +445,8 @@ void SwapInTestHelper(const std::vector<AllocateTestData> &sequencialAllocateTes
         EXPECT_EQ(blockManager.GetNumFreeNpuBlocks(), currNumFreeNpuBlockIds);
 
         auto blockIds = blockManager.GetBlockIds(seqPtr->seqId_);
-        EXPECT_EQ(blockIds, test.blockIdsExpected); // 检查块 ID 是否符合预期
+        ASSERT_EQ(blockIds.size(), 1u);
+        EXPECT_EQ(blockIds[0], test.blockIdsExpected); // 检查块 ID 是否符合预期
 
         seqPtr->status_ = SequenceStatus::RUNNING;
         blockManager.GetCommonComputedBlockIds(groupPtr->GetSequences(SequenceStatus::RUNNING));

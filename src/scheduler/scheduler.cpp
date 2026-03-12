@@ -35,6 +35,51 @@ constexpr int PREPARE_DATA_EXPANSION_FACTOR = 2;
 constexpr int TIME_WINDOW_INTERVAL = 1000; // 统计1s之内的的QPS
 constexpr int BUCKET_TIME_INTERVAL = 20;   // 每个bukcet的时间间隔是20ms
 
+namespace {
+BlockSpaceManagerSPtr CreateBlockManagerFromSchedulerConfig(const SchedulerConfig &cfg, size_t localDPRank)
+{
+    if (cfg.spSize * cfg.cpSize > 1 && cfg.kvCacheDescs.size() > 1) {
+        throw std::invalid_argument("Composite block manager is not supported when sp/cp is enabled.");
+    }
+
+    // Backward compatible: if kvCacheDescs is empty, fallback to single block manager config.
+    if (cfg.kvCacheDescs.empty()) {
+        BlockManagerConfig blockConf = {cfg.cacheBlockSize,
+                                        cfg.cpuBlockNum,
+                                        cfg.npuBlockNum,
+                                        0,
+                                        cfg.speculationGamma,
+                                        cfg.enablePrefixCache,
+                                        cfg.spSize * cfg.cpSize,
+                                        1,
+                                        cfg.enableKvPool,
+                                        cfg.kvPoolConfig.backend,
+                                        cfg.kvPoolConfig.configPath};
+        return BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANAGER,
+                                                            std::move(blockConf), localDPRank);
+    } else if (cfg.kvCacheDescs.size() == 1) {
+        auto desc = cfg.kvCacheDescs[0];
+        BlockManagerConfig blockConf = {static_cast<size_t>(desc.blockSize) *
+                                            static_cast<size_t>(desc.compressionRatio),
+                                        cfg.cpuBlockNum,
+                                        static_cast<uint32_t>(desc.npuBlockNum),
+                                        0,
+                                        cfg.speculationGamma,
+                                        cfg.enablePrefixCache,
+                                        cfg.spSize * cfg.cpSize,
+                                        1,
+                                        cfg.enableKvPool,
+                                        cfg.kvPoolConfig.backend,
+                                        cfg.kvPoolConfig.configPath};
+        blockConf.cacheType = static_cast<KvCacheType>(desc.cacheType);
+        return BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANAGER,
+                                                            std::move(blockConf), localDPRank);
+    }
+
+    throw std::invalid_argument("Multiple kvCacheDescs are not supported by current BlockManagerFactory.");
+}
+} // namespace
+
 Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                      std::shared_ptr<LatencyPredictor> predictor, Role pdRole, size_t localDPRank)
     : schedulerConfig_(schedulerConfig), predictor_(predictor), localDPRank_(localDPRank),
@@ -53,8 +98,8 @@ Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                                     schedulerConfig->kvPoolConfig.configPath};
     dpRankId_ = schedulerConfig_->dpRankId_;
     if (schedulerConfig_->layerwiseDisaggregated && schedulerConfig->spSize * schedulerConfig->cpSize > 1) {
-        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::LWDSELFATTNBLOCKMANGER,
-            std::move(blockConf), localDPRank);
+        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::LWDSELFATTNBLOCKMANAGER,
+                                                                     std::move(blockConf), localDPRank);
         BlockManagerConfig blockConf = {schedulerConfig->cacheBlockSize,
                                         schedulerConfig->cpuBlockNum,
                                         schedulerConfig->lwdCloudNpuBlockNum,
@@ -68,8 +113,7 @@ Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                                         schedulerConfig->kvPoolConfig.configPath};
         blockManager_->LwdInitCloudBlockManager(std::move(blockConf), localDPRank);
     } else {
-        blockManager_ = BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANGER,
-                                                                     std::move(blockConf), localDPRank);
+        blockManager_ = CreateBlockManagerFromSchedulerConfig(*schedulerConfig_, localDPRank);
     }
     // create inference scheduling policy and kv transfer scheduling policy according to role
     // If role is P only or D only, polices will be created again.
@@ -919,17 +963,23 @@ std::vector<BlockId> Scheduler::SetSpCpParamAndReturnAllBlocks(SequenceGroupMeta
     }
 
     // 获取spcp rank 所有的block table的数据
-    seqGrpSPtr->pBlockTable.clear();
-    for (std::vector<BlockId> &rankBlocks : allRankBlocks) {
+    if (forwardMode == ForwardMode::PREFILL) {
+        if (seqGrpSPtr->pBlockTable.empty()) {
+            seqGrpSPtr->pBlockTable.resize(1);
+        } else {
+            seqGrpSPtr->pBlockTable[0].clear();
+        }
+    }
+
+    for (auto &rankBlocks : allRankBlocks) {
         blockIds.insert(blockIds.end(), rankBlocks.begin(), rankBlocks.end());
         meta.spRankBlockNum_.push_back(rankBlocks.size());
 
-        // 设置p节点的src block table。SP的时候，需要打上padding
         if (forwardMode == ForwardMode::PREFILL) {
-            seqGrpSPtr->pBlockTable.insert(seqGrpSPtr->pBlockTable.end(), rankBlocks.begin(), rankBlocks.end());
-            Assert(maxRankBlockNum > rankBlocks.size());
-            for (size_t i = 0; i < maxRankBlockNum - rankBlocks.size(); i++) {
-                seqGrpSPtr->pBlockTable.push_back(-1);
+            auto &firstBlockTable = seqGrpSPtr->pBlockTable[0];
+            firstBlockTable.insert(firstBlockTable.end(), rankBlocks.begin(), rankBlocks.end());
+            for (size_t i = 0; i < maxRankBlockNum - rankBlocks.size(); ++i) {
+                firstBlockTable.push_back(static_cast<BlockId>(-1));
             }
         }
     }
@@ -985,13 +1035,13 @@ std::vector<BlockId> Scheduler::LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupM
     return blockIds;
 }
 
-std::vector<BlockId> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const
+std::vector<BlockIds> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const
 {
-    std::vector<BlockId> blockIds;
+    std::vector<BlockIds> blockIds;
     blockIds = blockManager_->GetBlockIds(seqId);
     if (role_ == Role::P || role_ == Role::FlexP) {
         seqGrpSPtr->pBlockTable.clear();
-        seqGrpSPtr->pBlockTable.insert(seqGrpSPtr->pBlockTable.end(), blockIds.begin(), blockIds.end());
+        seqGrpSPtr->pBlockTable = blockIds;
     }
     return blockIds;
 }
@@ -1063,29 +1113,38 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
         SetBasicMetadata(metaList[i], seqGroup, scheSeqGroup);
 
         for (auto seq : runningSeqSPtrs) {
-            std::vector<BlockId> blockIds;
+            std::vector<BlockIds> blockIds;
             std::vector<BlockId> lwdCloudBlockIds;
             bool isSimulateSeq = (seq->seqId_ == SIMULATE_SEQUENCE_ID);
             if (isSimulateSeq) {
                 MINDIE_LLM_LOG_INFO("GetBlockIds called for special seqId: " << seq->seqId_);
-                blockIds.push_back(static_cast<BlockId>(schedulerConfig_->npuBlockNum - 1));
+                blockIds.push_back({static_cast<BlockId>(schedulerConfig_->npuBlockNum - 1)});
             } else if (schedulerConfig_->spSize * schedulerConfig_->cpSize <= 1) {
                 blockIds = GetAllBlocks(seqGroup, seq->seqId_);
             } else {
-                blockIds =
-                    SetSpCpParamAndReturnAllBlocks(metaList[i], seqGroup, seq->seqId_, schedulerOut.forwardMode_);
+                blockIds = {SetSpCpParamAndReturnAllBlocks(metaList[i],
+                    seqGroup, seq->seqId_, schedulerOut.forwardMode_)};
                 if (schedulerConfig_->layerwiseDisaggregated) {
                     lwdCloudBlockIds = LwdSetSpCpParamAndReturnAllBlocks(metaList[i],
                         seqGroup, seq->seqId_, schedulerOut.forwardMode_);
                 }
             }
+            std::vector<BlockIds> perSeqBlockTables = blockIds;
 
             // 虚推请求跳过 PrefixCache 的 LRU 访问时间更新
             if (!isSimulateSeq) {
                 blockManager_->AccessAllblocksInSeq(seq, now);
             }
             metaList[i].seqIds_.push_back(seq->seqId_);
-            metaList[i].blockIds_.insert(metaList[i].blockIds_.end(), blockIds.begin(), blockIds.end());
+            // Accumulate per-sequence block tables into seq-group tables. Never shrink outer dimension to avoid
+            // dropping previously appended manager tables in mixed/edge scenarios (e.g. simulate seq).
+            const size_t targetMgrCount = std::max(metaList[i].blockIds_.size(), perSeqBlockTables.size());
+            metaList[i].blockIds_.resize(targetMgrCount);
+            for (size_t m = 0; m < perSeqBlockTables.size(); ++m) {
+                metaList[i].blockIds_[m].reserve(metaList[i].blockIds_[m].size() + perSeqBlockTables[m].size());
+                metaList[i].blockIds_[m].insert(metaList[i].blockIds_[m].end(),
+                                                perSeqBlockTables[m].begin(), perSeqBlockTables[m].end());
+            }
             metaList[i].lwdCloudBlockIds_.insert(metaList[i].lwdCloudBlockIds_.end(),
                 lwdCloudBlockIds.begin(), lwdCloudBlockIds.end());
 
@@ -1203,16 +1262,28 @@ SequenceGroupMetaDatas Scheduler::GenSeqGroupMetadata(const SchedulerKVTransferO
         SetBasicMetadata(metaList[i], seqGroup, scheduleSeqGroups[i]);
 
         for (auto &seq : runningSeqs) {
-            std::vector<BlockId> blockIds = blockManager_->GetBlockIds(seq->seqId_);
+            std::vector<BlockIds> blockIds = blockManager_->GetBlockIds(seq->seqId_);
 
             metaList[i].seqIds_.push_back(seq->seqId_);
-            metaList[i].blockIds_.insert(metaList[i].blockIds_.end(), blockIds.begin(), blockIds.end());
+
+            metaList[i].blockIds_.resize(blockIds.size());
+            for (size_t j = 0; j < blockIds.size(); ++j) {
+                metaList[i].blockIds_[j].reserve(metaList[i].blockIds_[j].size() + blockIds[j].size());
+                metaList[i].blockIds_[j].insert(metaList[i].blockIds_[j].end(), blockIds[j].begin(), blockIds[j].end());
+            }
+
             metaList[i].promptLens_.push_back(seq->data_.promptTokenIds.size());
             metaList[i].tokenIds_.insert(metaList[i].tokenIds_.end(), seq->data_.promptTokenIds.begin(),
                                          seq->data_.promptTokenIds.end());
             metaList[i].dpInstanceId_ = seqGroup->dpInstanceId_;
-            metaList[i].srcBlockIds_.insert(metaList[i].srcBlockIds_.end(), seqGroup->pBlockTable.begin(),
-                                            seqGroup->pBlockTable.end());
+
+            metaList[i].srcBlockIds_.resize(seqGroup->pBlockTable.size());
+            for (size_t j = 0; j < seqGroup->pBlockTable.size(); ++j) {
+                metaList[i].srcBlockIds_[j].reserve(
+                    metaList[i].srcBlockIds_[j].size() + seqGroup->pBlockTable[j].size());
+                metaList[i].srcBlockIds_[j].insert(metaList[i].srcBlockIds_[j].end(),
+                                                   seqGroup->pBlockTable[j].begin(), seqGroup->pBlockTable[j].end());
+            }
         }
 
         metadatas.maxSeqLen = std::max(metadatas.maxSeqLen, static_cast<int64_t>(metaList[i].tokenIds_.size()));

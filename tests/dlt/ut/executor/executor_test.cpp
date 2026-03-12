@@ -46,6 +46,14 @@ protected:
     void SetUp() override
     {
         executor_ = std::make_shared<Executor>();
+        // Reset global KV cache overview to avoid cross-test contamination.
+        {
+            std::lock_guard<std::mutex> lock(IExecutor::kvCacheOverview_.updateValueMutex);
+            IExecutor::kvCacheOverview_.cpuBlockNum = 0xFFFFFFFF;
+            IExecutor::kvCacheOverview_.npuBlockNum = 0xFFFFFFFF;
+            IExecutor::kvCacheOverview_.maxPositionEmbeddings = 0xFFFFFFFF;
+            IExecutor::kvCacheOverview_.kvCacheDescs.clear();
+        }
         executeModelResponseHandled_ = false;
         pullKVResponseHandled_ = false;
         configFromManager_ = {
@@ -351,9 +359,9 @@ TEST_F(ExecutorTest, AsyncExecuteModel)
 
     ExecuteModelRequestPtr request = std::make_unique<model_execute_data::ExecuteModelRequest>();
     model_execute_data::SequenceGroupMetadata metadata;
-    auto &blockTables = *metadata.mutable_block_tables();
     std::vector<BlockId> blockIds = {1, 2, 3};
-    metadata.set_block_tables(blockIds.data(), blockIds.size() * sizeof(BlockId));
+    metadata.add_block_tables(
+        std::string(reinterpret_cast<const char *>(blockIds.data()), blockIds.size() * sizeof(BlockId)));
     request->mutable_seq_group_metadata_list()->Add(std::move(metadata));
 
     bool ret = executor_->AsyncExecuteModel(request);
@@ -433,8 +441,12 @@ TEST_F(ExecutorTest, HandleInitResult_Valid)
     auto *initResults = response.mutable_init_results();
     auto &initResultMap = *initResults->mutable_init_result_map();
     initResultMap["cpuBlockNum"] = "1024";
-    initResultMap["npuBlockNum"] = "1024";
     initResultMap["maxPositionEmbeddings"] = "2048";
+    auto *desc0 = initResults->add_kv_cache_descs();
+    desc0->set_npu_block_num(1024);
+    desc0->set_block_size(128);
+    desc0->set_compression_ratio(1);
+    desc0->set_cache_type(0);
     std::vector<ExecuteResponse> responses;
     responses.push_back(response);
 
@@ -455,8 +467,12 @@ TEST_F(ExecutorTest, HandleInitResult_Invalid)
     auto *initResults = responses[0].mutable_init_results();
     auto &initResultMap = *initResults->mutable_init_result_map();
     initResultMap["cpuBlockNum"] = "not_an_int"; // Invalid format
-    initResultMap["npuBlockNum"] = "1024";
     initResultMap["maxPositionEmbeddings"] = "2048";
+    auto *desc0 = initResults->add_kv_cache_descs();
+    desc0->set_npu_block_num(1024);
+    desc0->set_block_size(128);
+    desc0->set_compression_ratio(1);
+    desc0->set_cache_type(0);
 
     EXPECT_FALSE(executor_->HandleInitResult(responses));
 }

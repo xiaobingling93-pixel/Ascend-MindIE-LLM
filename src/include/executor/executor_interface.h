@@ -13,9 +13,11 @@
 #ifndef IMODEL_WORKER_H
 #define IMODEL_WORKER_H
 
+#include <algorithm>
 #include <stdexcept>
 #include <memory>
 #include <map>
+#include <vector>
 #include <functional>
 #include <mutex>
 #include "basic_types.h"
@@ -72,10 +74,24 @@ using PullKVResponseHandler = std::function<void(PullKVResponseSPtr)>;
 enum class MasterSlaveRole { MASTER, SLAVE };
 
 struct KVCacheOverview {
+    struct KVCacheDesc {
+        uint32_t npuBlockNum{0};
+        uint32_t blockSize{0};
+        uint32_t compressionRatio{1};
+        int32_t cacheType{0};
+
+        bool operator==(const KVCacheDesc &other) const
+        {
+            return npuBlockNum == other.npuBlockNum && blockSize == other.blockSize &&
+                   compressionRatio == other.compressionRatio && cacheType == other.cacheType;
+        }
+    };
+
     uint32_t cpuBlockNum{0xFFFFFFFF};
     uint32_t npuBlockNum{0xFFFFFFFF};
     uint32_t maxPositionEmbeddings{0xFFFFFFFF};
     uint32_t lwdCloudNpuBlockNum{0xFFFFFFFF};
+    std::vector<KVCacheDesc> kvCacheDescs{};
     mutable std::mutex updateValueMutex; // Internal mutex to support thread-safe updates
 
     void UpdateIfSmaller(uint32_t newCpuBlockNum, uint32_t newNpuBlockNum, uint32_t newMaxPositionEmbeddings)
@@ -84,6 +100,31 @@ struct KVCacheOverview {
         cpuBlockNum = std::min(cpuBlockNum, newCpuBlockNum);
         npuBlockNum = std::min(npuBlockNum, newNpuBlockNum);
         maxPositionEmbeddings = std::min(maxPositionEmbeddings, newMaxPositionEmbeddings);
+    }
+
+    bool UpdateKvCacheDescsIfEmptyOrEqual(const std::vector<KVCacheDesc> &newDescs)
+    {
+        std::lock_guard<std::mutex> lock(updateValueMutex);
+        if (newDescs.empty()) {
+            return true;
+        }
+        if (kvCacheDescs.empty()) {
+            kvCacheDescs = newDescs;
+            return true;
+        }
+        if (kvCacheDescs.size() != newDescs.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < kvCacheDescs.size(); ++i) {
+            if (kvCacheDescs[i].blockSize != newDescs[i].blockSize ||
+                kvCacheDescs[i].compressionRatio != newDescs[i].compressionRatio ||
+                kvCacheDescs[i].cacheType != newDescs[i].cacheType) {
+                return false;
+            }
+            kvCacheDescs[i].npuBlockNum = std::min(kvCacheDescs[i].npuBlockNum, newDescs[i].npuBlockNum);
+        }
+        return true;
     }
 };
 

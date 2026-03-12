@@ -56,7 +56,7 @@ struct ResponseContent {
     std::vector<TokenId> topLogProbTokenIds{}; // a list of tokens with highest logProbs
     std::vector<float> topLogProbs{};          // their corresponding logProbs values
     // the following items are used for PD disaggregation
-    std::vector<int64_t> srcBlockTable{};        // block table of prefill instance
+    std::vector<std::vector<int64_t>> srcBlockTable{};        // block table of prefill instance
     InstanceId singleLLMPrefillReqHandlerId = 0; // instance id of prefill instance
     int64_t pdErrorCode = 0;
 };

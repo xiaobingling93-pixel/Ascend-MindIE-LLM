@@ -165,8 +165,10 @@ class TestRouterImpl(unittest.TestCase):
         mock_set_compile.assert_called_once()
 
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["npuBlockNum"], "9")
         self.assertEqual(result["cpuBlockNum"], "5")
+        self.assertIn("kvCacheDescs", result)
+        self.assertEqual(result["kvCacheDescs"][0]["npuBlockNum"], 9)
+        self.assertEqual(result["kvCacheDescs"][0]["blockSize"], 64)
 
         mock_config.max_seq_len = 3000
         with self.assertLogs(logger="llm", level='WARNING') as log:
@@ -178,7 +180,7 @@ class TestRouterImpl(unittest.TestCase):
         # Test DP scenario
         mock_mapping.has_dp = Mock(return_value=True)
         result_with_dp = self.router.initialize(mock_config)
-        self.assertEqual(result_with_dp["npuBlockNum"], "8")
+        self.assertEqual(result_with_dp["kvCacheDescs"][0]["npuBlockNum"], 8)
 
     @patch('mindie_llm.connector.request_router.router_impl.send_model_execute_response')
     def test_seq_ctrl(self, mock_send_response):
@@ -225,14 +227,14 @@ class TestRouterImpl(unittest.TestCase):
         mock_request = Mock(spec=ExecuteRequest)
 
         mock_pull_kv_info1 = Mock()
-        mock_pull_kv_info1.dst_block_tables = np.array([10, 20], dtype=np.int64).tobytes()
-        mock_pull_kv_info1.src_block_tables = np.array([1, 2], dtype=np.int64).tobytes()
+        mock_pull_kv_info1.dst_block_tables = [np.array([10, 20], dtype=np.int64).tobytes()]
+        mock_pull_kv_info1.src_block_tables = [np.array([1, 2], dtype=np.int64).tobytes()]
         mock_pull_kv_info1.seq_group_metadata = Mock(request_id="1001", prompt_lens=struct.pack("<q", 100))
         mock_pull_kv_info1.cluster_id = "10000"
 
         mock_pull_kv_info2 = Mock()
-        mock_pull_kv_info2.dst_block_tables = np.array([30, 40], dtype=np.int64).tobytes()
-        mock_pull_kv_info2.src_block_tables = np.array([3, 4], dtype=np.int64).tobytes()
+        mock_pull_kv_info2.dst_block_tables = [np.array([30, 40], dtype=np.int64).tobytes()]
+        mock_pull_kv_info2.src_block_tables = [np.array([3, 4], dtype=np.int64).tobytes()]
         mock_pull_kv_info2.seq_group_metadata = Mock(request_id="1002", prompt_lens=struct.pack("<q", 100))
         mock_pull_kv_info2.cluster_id = "20000"
 
@@ -323,14 +325,14 @@ class TestRouterImpl(unittest.TestCase):
 
         mock_request = Mock(spec=ExecuteRequest)
         mock_kv1 = Mock(
-            dst_block_tables=np.array([1, 2], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([10, 20], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([1, 2], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([10, 20], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="2001", prompt_lens=struct.pack("<q", 100)),
             cluster_id="20000"
         )
         mock_kv2 = Mock(
-            dst_block_tables=np.array([5, 6, 7, 8], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([50, 60, 70, 80], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([5, 6, 7, 8], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([50, 60, 70, 80], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="2002", prompt_lens=struct.pack("<q", 100)),
             cluster_id="30000"
         )
@@ -361,8 +363,8 @@ class TestRouterImpl(unittest.TestCase):
         mock_request = Mock(spec=ExecuteRequest)
 
         mock_kv = Mock(
-            dst_block_tables=np.array([10], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([1], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([10], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([1], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="3001", prompt_lens=struct.pack("<q", 100)),
             cluster_id="30000"
         )
@@ -407,8 +409,8 @@ class TestRouterImpl(unittest.TestCase):
         # dp_instance_id = 10000，表示 P instance 1, dpRank 0
         # 通过映射 10000 // 10000 = 1，得到实际 cluster_id [1000000001]
         mock_kv = Mock(
-            dst_block_tables=np.array([10, 20], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([1, 2], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([10, 20], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([1, 2], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="req_450", prompt_lens=struct.pack("<q", 100)),
             cluster_id="10000"
         )
@@ -457,15 +459,15 @@ class TestRouterImpl(unittest.TestCase):
 
         # 请求1：来自 P1（dp_instance_id=10000，P instance 1）
         mock_kv1 = Mock(
-            dst_block_tables=np.array([10], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([1], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([10], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([1], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="req_100", prompt_lens=struct.pack("<q", 100)),
             cluster_id="10000"
         )
         # 请求2：来自 P2（dp_instance_id=20000，P instance 2）
         mock_kv2 = Mock(
-            dst_block_tables=np.array([30], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([3], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([30], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([3], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="req_200", prompt_lens=struct.pack("<q", 100)),
             cluster_id="20000"
         )
@@ -511,8 +513,8 @@ class TestRouterImpl(unittest.TestCase):
 
         # dp_size > 1 时，cluster_id 传入的直接是 dp_instance_id
         mock_kv = Mock(
-            dst_block_tables=np.array([10], dtype=np.int64).tobytes(),
-            src_block_tables=np.array([1], dtype=np.int64).tobytes(),
+            dst_block_tables=[np.array([10], dtype=np.int64).tobytes()],
+            src_block_tables=[np.array([1], dtype=np.int64).tobytes()],
             seq_group_metadata=Mock(request_id="req_500", prompt_lens=struct.pack("<q", 100)),
             cluster_id="5"
         )
@@ -562,7 +564,7 @@ class TestRouterImpl(unittest.TestCase):
             result = self.router.initialize(mock_config)
 
             self.assertEqual(self.router.dp_rank_id, 0)
-            self.assertEqual(result["npuBlockNum"], "18")
+            self.assertEqual(result["kvCacheDescs"][0]["npuBlockNum"], 18)
             mock_generator_cls.assert_called_once()
 
     def test_check_output_invalid_eos_info(self):

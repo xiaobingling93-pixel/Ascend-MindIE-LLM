@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "status.h"
 #include "infer_tensor.h"
 #include "infer_callback.h"
@@ -100,7 +101,7 @@ private:
     bool isRecompute_ = false;
     std::string dTarget_;
     std::string prefillAddr_{0};
-    std::vector<int64_t> srcBlockTable_{};
+    std::vector<std::vector<int64_t>> srcBlockTable_{}; // per block manager
     std::vector<uint64_t> dpInstanceIds_{};
     std::vector<std::vector<int64_t>> srcHmoTable_{};
 };

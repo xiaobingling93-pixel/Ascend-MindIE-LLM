@@ -251,7 +251,6 @@ int MockInstanceInit(llm::backend::ModelBackend *modelBackend, const std::map<st
                      std::map<std::string, std::string> &initResults, bool isMultiNodesInfer)
 {
     initResults["cpuBlockNum"] = "1";
-    initResults["npuBlockNum"] = "1";
     initResults["maxPositionEmbeddings"] = "1";
     initResults["status"] = "ok";
     MINDIE_LLM_LOG_INFO("MockInstanceInit success");

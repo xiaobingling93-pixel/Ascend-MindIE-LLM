@@ -43,6 +43,34 @@ class TestExecuteResponseBuilder(unittest.TestCase):
         self.assertEqual(response.status, SUCCESS_STATUS)
         self.assertEqual(len(response.init_results.init_result_map), 0)
 
+    def test_build_from_init_result_with_kv_cache_descs(self):
+        init_results = {
+            "param1": "value1",
+            "kvCacheDescs": [
+                {"npuBlockNum": "16", "blockSize": 256, "compressionRatio": 2, "cacheType": 1},
+                {"npuBlockNum": 8},  # exercise default values
+            ],
+        }
+        response = ExecuteResponseBuilder.build_from_init_result(init_results)
+
+        self.assertEqual(response.msg_type, ExecuteType.MODEL_INIT)
+        self.assertEqual(response.status, SUCCESS_STATUS)
+        self.assertEqual(response.init_results.init_result_map["param1"], "value1")
+        self.assertNotIn("kvCacheDescs", response.init_results.init_result_map)
+
+        self.assertEqual(len(response.init_results.kv_cache_descs), 2)
+        d0 = response.init_results.kv_cache_descs[0]
+        self.assertEqual(d0.npu_block_num, 16)
+        self.assertEqual(d0.block_size, 256)
+        self.assertEqual(d0.compression_ratio, 2)
+        self.assertEqual(d0.cache_type, 1)
+
+        d1 = response.init_results.kv_cache_descs[1]
+        self.assertEqual(d1.npu_block_num, 8)
+        self.assertEqual(d1.block_size, 128)
+        self.assertEqual(d1.compression_ratio, 1)
+        self.assertEqual(d1.cache_type, 0)
+
     @patch('mindie_llm.connector.common.response_builder.span_start')
     @patch('mindie_llm.connector.common.response_builder.span_end')
     @patch('mindie_llm.connector.common.response_builder.span_attr')

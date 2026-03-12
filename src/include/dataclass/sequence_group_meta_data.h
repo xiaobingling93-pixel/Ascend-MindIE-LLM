@@ -42,11 +42,11 @@ struct SequenceGroupMetaData {
 
     std::vector<TokenId> tokenIds_; // prompt的tokenid
 
-    std::vector<BlockId> blockIds_; // 个数和promptLens_相关，无需额外定义block的个数
+    std::vector<BlockIds> blockIds_; // 个数和promptLens_相关，无需额外定义block的个数
 
     uint64_t dpInstanceId_; // the instance ids of P Node dp
 
-    std::vector<BlockId> srcBlockIds_; // // the block ids in P Node
+    std::vector<BlockIds> srcBlockIds_; // // the block ids in P Node
 
     std::vector<size_t> computedLens_;
 

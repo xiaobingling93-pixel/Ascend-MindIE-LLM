@@ -139,15 +139,21 @@ TEST_F(GrpcCommunicationMngTest, InitWithValidAddress)
     EXPECT_FALSE(mng->Init(true, "127.0.0.1", "50051"));
     MOCKER_CPP(&GrpcCommunicationMng::SetEnvForSecurity, bool (*)()).stubs().will(returnValue(false));
     EXPECT_FALSE(mng->Init(true, "127.0.0.1", "50051"));
-    MOCKER_CPP(&GrpcCommunicationMng::IsValidServerAddr, bool (*)(const std::string &))
+    MOCKER_CPP(&GrpcCommunicationMng::IsValidServerAddr, bool (*)(const std::string &, const std::string &))
         .stubs()
         .will(returnValue(false));
     EXPECT_FALSE(mng->Init(false, "127.0.0.1", "50051"));
     MOCKER_CPP(sem_init, int (*)(sem_t *, int, unsigned int)).stubs().will(returnValue(1));
     EXPECT_FALSE(mng->Init(true, "127.0.0.1", "50051"));
     GlobalMockObject::verify();
+    GlobalMockObject::reset();
     MockServerConfig();
+    MOCKER_CPP(sem_init, int (*)(sem_t *, int, unsigned int)).stubs().will(returnValue(0));
+    MOCKER_CPP(&GrpcCommunicationMng::IsValidServerAddr, bool (*)(const std::string &, const std::string &))
+        .stubs()
+        .will(returnValue(true));
     EXPECT_TRUE(mng->Init(false, "127.0.0.1", "50051"));
+    mng->StopServerThread();
 }
 
 TEST_F(GrpcCommunicationMngTest, SetTlsOpsSuccess)
@@ -258,6 +264,11 @@ TEST_F(GrpcCommunicationMngTest, RunServer)
 
 TEST_F(GrpcCommunicationMngTest, StopServerThreadHandlesErrors)
 {
+    if (!mng->serverThread_.joinable()) {
+        mng->serverThread_ = std::thread([]() { std::this_thread::sleep_for(std::chrono::milliseconds(50)); });
+    }
+    mng->terminateSemInitialized_ = false;
+    mng->isRunning_.store(true);
     pthread_cancel(mng->serverThread_.native_handle());
     mng->serverThread_.detach();
     mng->StopServerThread();

@@ -33,7 +33,7 @@ def create_request():
     execute_request = ExecuteRequest()
     metadata = SequenceGroupMetadata()
     s64_array = array.array("q", [1, 3, 4])
-    metadata.block_tables = s64_array.tobytes()
+    metadata.block_tables.append(s64_array.tobytes())
     execute_request.execute_model_request.seq_group_metadata_list.append(metadata)
     return execute_request
 
@@ -176,7 +176,7 @@ class TestSharedMemoryChannel(unittest.TestCase):
         mem.shared_memory.close()
 
         metadata2 = request2.execute_model_request.seq_group_metadata_list[0]
-        blocks = np.frombuffer(metadata2.block_tables, dtype=np.int64).tolist()
+        blocks = np.frombuffer(metadata2.block_tables[0], dtype=np.int64).tolist()
         self.assertEqual(blocks[0], 1)
         self.assertEqual(blocks[1], 3)
         self.assertEqual(blocks[2], 4)

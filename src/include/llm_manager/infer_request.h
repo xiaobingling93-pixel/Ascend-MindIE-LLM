@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 #include "infer_tensor.h"
 #include "infer_request_id.h"
 #include "status.h"

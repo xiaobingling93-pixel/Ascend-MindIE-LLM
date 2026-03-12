@@ -449,6 +449,16 @@ struct SchedulerConfig {
     // blockManageConfig
     uint32_t cacheBlockSize;
 
+    // New requirement: multiple KV cache block managers (e.g. different block sizes / compression ratios).
+    // If empty, fallback to legacy single block manager using `cacheBlockSize`.
+    struct KVCacheDesc {
+        uint32_t npuBlockNum{0};
+        uint32_t blockSize{0};
+        uint32_t compressionRatio{1};
+        int32_t cacheType{0};
+    };
+    std::vector<KVCacheDesc> kvCacheDescs{};
+
     // workflow
     std::string modelName;
     std::string templateType;

@@ -162,7 +162,7 @@ private:
     std::vector<BlockId> LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta, SequenceGroupSPtr seqGrpSPtr,
                                                         SequenceId seqId, ForwardMode forwardMode) const;
 
-    std::vector<BlockId> GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const;
+    std::vector<BlockIds> GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const;
     void SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) const;
 
     PDPriorityType DecidePDPriority(bool needSync);
