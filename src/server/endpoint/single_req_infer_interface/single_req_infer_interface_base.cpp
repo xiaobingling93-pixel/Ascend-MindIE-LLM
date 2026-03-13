@@ -610,13 +610,15 @@ bool SingleReqInferInterfaceBase::ProcessResponseSingle(ResponseSPtr response, c
     return true;
 }
 
-bool SingleReqInferInterfaceBase::GetUniqueSequenceId(uint64_t &seqId)
+bool SingleReqInferInterfaceBase::GetUniqueSequenceId(uint64_t &seqId, bool needLog)
 {
     if (respTokenMap.size() != 1) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
-                   "Failed to get sequence id which must exist and be unique, got count of sequence id "
-                       << respTokenMap.size());
+        if (needLog) {
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                "Failed to get sequence id which must exist and be unique, got count of sequence id " <<
+                respTokenMap.size());
+        }
         return false;
     }
     seqId = respTokenMap.begin()->first;
@@ -651,7 +653,7 @@ bool SingleReqInferInterfaceBase::PushLatestCache(std::string &errMsg)
         std::map<uint64_t, std::pair<bool, bool>>{parsingContentFlag.begin(), parsingContentFlag.end()};
 
     uint64_t seqId = 0;
-    if (GetUniqueSequenceId(seqId)) {
+    if (GetUniqueSequenceId(seqId, false)) {
         cache.curTokenNum = respTokenMap[seqId].size();
     }
 
