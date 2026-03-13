@@ -145,17 +145,14 @@ void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashVa
             currentSpRank_ = (currentSpRank_ + 1) % rankSize_;
             numEmptySlots = GetNumEmptySlots(currentSpRank_);
         }
-        if (numEmptySlots < 1 + numLookaheadSlots) {
+        if (numEmptySlots < 1) {
             auto &rankBlockObjs = blockObjs_[currentSpRank_];
-            size_t numBlocksToAllocate = CeilDiv(1 + numLookaheadSlots - numEmptySlots, blockSize_);
-            for (size_t i = 0; i < numBlocksToAllocate; ++i) {
-                std::vector<TokenId> emptyTokenIds;
-                BlockObjSPtr newBlockObj = blockAllocator_->AllocateMutableBlock(
-                    DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(), extraHash,
-                    currentSpRank_);
-                rankBlockObjs.push_back(newBlockObj);
-                blockIds_.push_back(newBlockObj->GetBlockId());
-            }
+            std::vector<TokenId> emptyTokenIds;
+            BlockObjSPtr newBlockObj = blockAllocator_->AllocateMutableBlock(
+                DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(), extraHash,
+                currentSpRank_);
+            rankBlockObjs.push_back(newBlockObj);
+            blockIds_.push_back(newBlockObj->GetBlockId());
         }
         std::vector<TokenId> currentSpToken{newTokenIds.back()};
         // append token

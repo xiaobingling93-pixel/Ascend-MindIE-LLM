@@ -7,8 +7,7 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
-# redundant alias for ruff check
-from .logits_handler import LogitsHandlerList as LogitsHandlerList
+
 from ...utils.config import HandlingBackend
 
 

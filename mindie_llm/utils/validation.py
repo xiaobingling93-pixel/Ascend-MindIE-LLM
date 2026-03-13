@@ -7,7 +7,12 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
-from typing import Any, List, Union
+
+import json
+
+from typing import Any, List, Union, Dict, Optional
+from enum import Enum
+
 
 SAFE_STRING_LENGTH = 10 ** 6
 SAFE_LIST_LENGTH = 10 ** 3
@@ -72,3 +77,62 @@ def validate_list(param_name: str, param_list: List[Any]) -> None:
 def validate_string(param_name: str, param_str: str) -> None:
     if len(param_str) > SAFE_STRING_LENGTH:
         raise OutOfBoundsError(param_name, 'SAFE_STRING_LENGTH', SAFE_STRING_LENGTH)
+
+
+class ParseType(int, Enum):
+    TO_STR = 0
+    TO_INT = 1
+    TO_FLOAT = 2
+    TO_BOOL = 3
+    TO_JSON = 4
+
+
+MODEL_CONFIG_KEY_TYPE = {
+    "load_tokenizer": ParseType.TO_BOOL,
+    "max_position_embeddings": ParseType.TO_INT,
+    "max_sequence_length": ParseType.TO_INT,
+    "max_seq_len": ParseType.TO_INT,
+    "bos_token_id": ParseType.TO_INT,
+    "eos_token_id": ParseType.TO_JSON,
+    "pad_token_id": ParseType.TO_INT,
+    "cpu_mem": ParseType.TO_INT,
+    "npu_mem": ParseType.TO_INT,
+    "block_size": ParseType.TO_INT,
+    "temperature": ParseType.TO_FLOAT,
+    "top_k": ParseType.TO_INT,
+    "top_p": ParseType.TO_FLOAT,
+    "typical_p": ParseType.TO_FLOAT,
+    "do_sample": ParseType.TO_BOOL,
+    "seed": ParseType.TO_INT,
+    "repetition_penalty": ParseType.TO_FLOAT,
+    "frequency_penalty": ParseType.TO_FLOAT,
+    "presence_penalty": ParseType.TO_FLOAT,
+    "watermark": ParseType.TO_BOOL,
+    "length_penalty": ParseType.TO_FLOAT,
+    'num_speculative_tokens': ParseType.TO_INT,
+}
+
+
+def parse_config(
+    model_config: Dict[str, str],
+    item_name: str,
+    required: bool = False,
+    parse_type: ParseType = ParseType.TO_STR,
+    default_value: Optional[Any] = None
+):
+    value = model_config.get(item_name)
+    if value is None:
+        if required:
+            raise ValueError(f"model_config: `{item_name}` is required, but not set")
+        if default_value is not None:
+            value = default_value
+    elif parse_type == ParseType.TO_INT:
+        value = int(value)
+    elif parse_type == ParseType.TO_FLOAT:
+        value = float(value)
+    elif parse_type == ParseType.TO_BOOL:
+        value = value.lower() if isinstance(value, str) else value
+        value = value is True or value == 'true' or value == '1'
+    elif parse_type == ParseType.TO_JSON:
+        value = json.loads(value)
+    return value

@@ -15,7 +15,7 @@ import random
 import string
 import unittest
 
-from mindie_llm.text_generator.plugins import PluginParameterValidator
+from mindie_llm.text_generator.plugins.plugin_utils import PluginParameterValidator
 
 
 class TestPluginInit(unittest.TestCase):

@@ -109,7 +109,7 @@ class PluginManagerLwd(PluginManager):
     @timer.track_time_async('generate_token')
     def generate_token(self, input_metadata: InputMetadata, warmup=False):
         prof = span_start("preprocess")
-        cache_ids, model_inputs, sampling_metadata, trace_ids = self.preprocess(input_metadata)
+        cache_ids, model_inputs, sampling_metadata, trace_ids = self.preprocess(input_metadata, warmup=warmup)
         if not self.is_mix_model:
             self.plugin_data_param.q_len = None
             self.plugin_data_param.mask = None
@@ -175,16 +175,16 @@ class PluginManagerLwd(PluginManager):
 
         return generation_output
 
-    def generate_token_async_edge(self, input_metadata: InputMetadata) -> GenerationOutput:
+    def generate_token_async_edge(self, input_metadata: InputMetadata, warmup=False) -> GenerationOutput:
         with self.generator_backend.get_new_stream():
             cache_ids = None
             postprocess_done = threading.Event()
             if input_metadata.layerwise_disaggregated_exe_stage.start_exec_layer == 0:
                 prof = span_start("preprocess")
                 hit_mask = np.isin(input_metadata.all_sequence_ids, self.last_sequence_ids)
-                cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(input_metadata,
-                                                                                        hit_mask=hit_mask
-                                                                                        )
+                cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(
+                    input_metadata, warmup=warmup, hit_mask=hit_mask
+                )
                 self.infer_context.last_sampling_metadata.clear()  # Do not use sampling cache under async inference.
                 model_input, _, _ = self.model_inputs_update_manager(
                     model_input, input_metadata, sampling_metadata, cache_ids, hit_mask=hit_mask)
@@ -222,7 +222,7 @@ class PluginManagerLwd(PluginManager):
 
                 model_input_wrapper = ModelInputWrapper(
                 cache_ids, input_metadata, model_input, model_kwargs, sampling_metadata,
-                trace_ids, current_dp_sequence_ids, postprocess_done)
+                trace_ids, current_dp_sequence_ids, postprocess_done, warmup)
 
                 if input_metadata.is_prefill:
                     self.cached_p_model_input_wrapper_queue.put(model_input_wrapper)
@@ -359,16 +359,16 @@ class PluginManagerLwd(PluginManager):
             span_end(prof)
         return generation_output
 
-    def generate_token_async_cloud(self, input_metadata: InputMetadata) -> GenerationOutput:
+    def generate_token_async_cloud(self, input_metadata: InputMetadata, warmup=False) -> GenerationOutput:
         with self.generator_backend.get_new_stream():
             cache_ids = None
             postprocess_done = threading.Event()
             if input_metadata.layerwise_disaggregated_exe_stage.start_exec_layer == 0:
                 prof = span_start("preprocess")
                 hit_mask = np.isin(input_metadata.all_sequence_ids, self.last_sequence_ids)
-                cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(input_metadata,
-                                                                                        hit_mask=hit_mask
-                                                                                        )
+                cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(
+                    input_metadata, warmup=warmup, hit_mask=hit_mask
+                )
                 self.infer_context.last_sampling_metadata.clear()  # Do not use sampling cache under async inference.
                 model_input, _, _ = self.model_inputs_update_manager(
                     model_input, input_metadata, sampling_metadata, cache_ids, hit_mask=hit_mask)

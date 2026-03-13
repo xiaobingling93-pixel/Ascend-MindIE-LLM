@@ -8,32 +8,44 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+from __future__ import annotations
+
 import importlib
 import queue
 import threading
 import copy
-from typing import Iterable, Optional, Any, TYPE_CHECKING, List
 from dataclasses import fields
-import torch
-import numpy as np
-import numpy.typing as npt 
-from mindie_llm.utils.status import CoreThread
-from .plugin_data_param import PluginDataParam
-from ..utils.generation_output import GenerationOutput
-from ..utils.input_metadata import InputMetadata
-from ..utils.model_input import ModelInputWrapper
-from ..utils.model_output import ModelOutputWrapper
-from ..utils.sampling_output import SamplingOutput
-from ..utils.npu_mem_tool import NpuMemoryWatcher
-from ...modeling.backend_type import BackendType
-from ...utils.decorators.time_decorator import timer
-from ...utils.env import ENV
-from ...utils.prof.profiler import span_start, span_end, span_req, span_attr, count_block
-from ...utils.log.logging import logger
-from ...utils.log.logging_base import HandlerType
-from ..utils.input_metadata import SIMULATE_SEQUENCE_ID
+from typing import Iterable, Optional, Any, TYPE_CHECKING
 
-SPECULATIVE_PLUGIN_LIST = ["la", "memory_decoding"]
+import numpy as np
+import torch
+
+from mindie_llm.text_generator.utils import (
+    GenerationOutput,
+    InputMetadata,
+    ModelInputWrapper,
+    ModelOutputWrapper,
+    SamplingOutput,
+    NpuMemoryWatcher
+)
+from mindie_llm.text_generator.plugins.plugin_utils import PluginDataParam
+from mindie_llm.text_generator.utils.input_metadata import SIMULATE_SEQUENCE_ID
+from mindie_llm.modeling.backend_type import BackendType
+from mindie_llm.utils.status import CoreThread
+from mindie_llm.utils.decorators.time_decorator import timer
+from mindie_llm.utils.env import ENV
+from mindie_llm.utils.log import logger, HandlerType
+from mindie_llm.utils.prof.profiler import span_start, span_end, span_req, span_attr, count_block
+
+if TYPE_CHECKING:
+    from mindie_llm.text_generator.utils import (
+        KVCacheSettings,
+        TGInferContextStore,
+        OutputFilter
+    )
+    from mindie_llm.text_generator.utils.separate_deployment_engine import DmiModeNodeRole
+    from mindie_llm.text_generator.adapter.generator_backend import GeneratorBackend
+
 LAUNCH_DONE_TIMEOUT = 1
 MEM_DETECT_INTERVAL = 1000
 
@@ -41,14 +53,14 @@ MEM_DETECT_INTERVAL = 1000
 class PluginManager:
     def __init__(
         self,
-        generator_backend,
-        kvcache_settings,
-        infer_context,
-        output_filter,
-        is_mix_model,
-        plugin_list,
-        model_role,
-        watcher,
+        generator_backend: GeneratorBackend,
+        kvcache_settings: KVCacheSettings,
+        infer_context: TGInferContextStore,
+        output_filter: OutputFilter,
+        is_mix_model: bool,
+        plugin_list: list[str],
+        model_role: DmiModeNodeRole | str,
+        watcher: NpuMemoryWatcher,
         **kwargs
     ):
         self.generator_backend = generator_backend
@@ -163,7 +175,6 @@ class PluginManager:
                 self.generator_backend,
                 self.kvcache_settings,
                 self.infer_context,
-                self.output_filter,
                 self.plugin_data_param,
                 **self.kwargs,
             )
@@ -179,10 +190,10 @@ class PluginManager:
             self.mem_det_trigger_counter = 0
 
     @timer.track_time_async('generate_token')
-    def generate_token(self, input_metadata: InputMetadata, warmup=False):
+    def generate_token(self, input_metadata: InputMetadata, warmup=False) -> GenerationOutput:
         try:
             prof = span_start("preprocess")
-            cache_ids, model_inputs, sampling_metadata, trace_ids = self.preprocess(input_metadata)
+            cache_ids, model_inputs, sampling_metadata, trace_ids = self.preprocess(input_metadata, warmup=warmup)
             if not self.is_mix_model:
                 self.plugin_data_param.q_len = None
                 self.plugin_data_param.mask = None
@@ -199,6 +210,7 @@ class PluginManager:
             span_attr(prof, "blocks", count_block(input_metadata.block_tables))
             if hasattr(self.model_wrapper, "mapping"):
                 span_attr(prof, "dp_rank", str(self.model_wrapper.mapping.attn_dp.rank))
+                
             if ENV.framework_backend == BackendType.ATB:
                 self.model_wrapper.model_runner.clear_internal_tensors()
                 if (self.plugin_list and "mtp" not in self.plugin_list) or self.is_mix_model:
@@ -253,7 +265,9 @@ class PluginManager:
         with self.generator_backend.get_new_stream():
             prof = span_start("preprocess")
             hit_mask = np.isin(input_metadata.all_sequence_ids, self.last_sequence_ids)
-            cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(input_metadata, hit_mask=hit_mask)
+            cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(
+                input_metadata, warmup=warmup, hit_mask=hit_mask
+            )
             self.infer_context.last_sampling_metadata.clear()  # Do not use sampling cache under async inference.
             model_input, _, _ = self.model_inputs_update_manager(
                 model_input, input_metadata, sampling_metadata, cache_ids, hit_mask=hit_mask)
@@ -366,16 +380,34 @@ class PluginManager:
         return generation_output
 
     @timer.track_time('preprocess')
-    def preprocess(self, input_metadata, hit_mask=None):
+    def preprocess(self, input_metadata, warmup=False, hit_mask=None):
         cache_ids = self.infer_context.get_batch_context_handles(input_metadata)
         if self.is_mix_model:
-            model_inputs, cache_ids, sampling_metadata, q_len, attention_mask, trace_ids = \
-                self.mix_preprocess.splitfuse_preprocess.splitfuse_preprocess(input_metadata, hit_mask=hit_mask)
+            (
+                model_inputs,
+                cache_ids,
+                sampling_metadata,
+                q_len,
+                attention_mask,
+                trace_ids,
+            ) = self.mix_preprocess.splitfuse_preprocess.splitfuse_preprocess(
+                input_metadata,
+                warmup=warmup,
+                hit_mask=hit_mask,
+            )
             self.plugin_data_param.q_len = q_len
             self.plugin_data_param.mask = attention_mask
         else:
-            model_inputs, sampling_metadata, trace_ids = \
-                self.infer_context.compose_model_inputs(input_metadata, cache_ids, warmup=False, hit_mask=hit_mask)
+            (
+                model_inputs,
+                sampling_metadata,
+                trace_ids
+            ) = self.infer_context.compose_model_inputs(
+                input_metadata,
+                cache_ids,
+                warmup=warmup,
+                hit_mask=hit_mask
+            )
         
         # 生成结构化输出 bitmask (直接调用 StructuredOutputManager)
         if self._structured_output_manager is not None and sampling_metadata is not None:
@@ -409,7 +441,6 @@ class PluginManager:
                 logits = logits.squeeze(1)
                 sampling_output.token_ids = logits.cpu().numpy()
 
-        # md need cache_ids and  model_inputs
         if not self.async_inference:
             self.plugin_verify_manager(sampling_output, cache_ids, result)
         
@@ -542,7 +573,7 @@ class PluginManager:
         model_output_wrapper = None
         while True:
             prof = span_start("get_from_input_queue")
-            model_input_wrapper = self.input_queue.get()
+            model_input_wrapper: ModelInputWrapper = self.input_queue.get()
             span_end(prof)
             # Maintain backward compatibility with the previous implementation
             if ENV.model_runner_exp:
@@ -757,17 +788,18 @@ class PluginManager:
                     model_inputs.context_length[hit_sequence_ids_mask] += 1
                     model_inputs.max_seq_len = max(model_inputs.context_length)
 
-    def _get_token_num_per_seq(self, input_metadata):
+    def _get_token_num_per_seq(self, input_metadata: InputMetadata):
+        batch_seq_len = input_metadata.split_end_position - input_metadata.split_start_position
         # computed_blocks为None时prefixcache无命中，batch_seq_len即为q_len
         if input_metadata.computed_blocks is None:
-            token_num_per_seq = input_metadata.batch_seq_len.astype(np.int64)
-        # computed_blocks非None时prefixcache有命中，需从batch_seq_len中减去命中token数，且只有首块包含命中token
+            token_num_per_seq = batch_seq_len
+        # computed_blocks非None时prefixcache有命中，需从batch_seq_len中减去命中token
         else:
             token_num_per_seq = np.where(
                 input_metadata.batch_is_prefill & (input_metadata.split_start_position == 0),
-                input_metadata.batch_seq_len - self.generator_backend.block_size * input_metadata.computed_blocks,
-                input_metadata.batch_seq_len
+                batch_seq_len - self.generator_backend.block_size * input_metadata.computed_blocks,
+                batch_seq_len
             ).astype(np.int64)
-            cache_len_eaqual_mask = input_metadata.batch_is_prefill & (token_num_per_seq == 0)
-            token_num_per_seq[cache_len_eaqual_mask] = self.generator_backend.block_size
+            cache_len_equal_mask = input_metadata.batch_is_prefill & (token_num_per_seq == 0)
+            token_num_per_seq[cache_len_equal_mask] = self.generator_backend.block_size
         return token_num_per_seq

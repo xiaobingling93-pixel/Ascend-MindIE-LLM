@@ -28,6 +28,8 @@ namespace atb_speed {
 static std::atomic<atb::Status> g_executeStatus(atb::NO_ERROR);
 static std::atomic<atb::Status> g_preExecuteStatus(atb::NO_ERROR);
 
+std::map<uint32_t, std::vector<std::pair<atb::Tensor, bool>>> Model::internalTensors_ = {};
+
 static bool IsTensorDimsEqual(const atb::Dims &left, const atb::Dims &other)
 {
     if (left.dimNum != other.dimNum) {
@@ -288,7 +290,6 @@ atb::Status Model::Execute(atb::Context *context, std::vector<atb::Tensor> &inTe
 
     ParseParam(param);
 
-    ClearInternalTensors();
     for (auto& i : nodeOutTensors_) {
         i.second.clear();
     }

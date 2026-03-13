@@ -8,8 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 # redundant alias for ruff check
-from .generator_backend import parse_config as parse_config
-from .generator_backend import ParseType as ParseType
+
 from ...modeling.backend_type import BackendType
 from ...utils.log.error_code import ErrorCode
 from ...utils.log.logging import logger
