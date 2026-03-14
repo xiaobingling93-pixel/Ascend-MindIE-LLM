@@ -161,6 +161,10 @@ bool CheckIPV4(const std::string &ipAddress, const std::string &inputName, bool 
 
 bool CheckIPV6(const std::string &ipAddress, const std::string &inputName, bool enableZeroIp);
 
+bool IsIPv4(const std::string &ipAddress);
+
+bool IsIPv6(const std::string &ipAddress);
+
 std::string FormatGrpcAddress(const std::string& ip, const std::string& port);
 
 // safe get value from map<vector<int64_t>>

@@ -11,6 +11,7 @@
  */
 
 #include "process_group.h"
+#include "common_util.h"
 #include "log.h"
 
 #include <arpa/inet.h>
@@ -18,6 +19,7 @@
 #include <cstdlib>
 #include <netinet/in.h>
 #include <stdexcept>
+#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -25,9 +27,63 @@
 
 namespace mindie_llm {
 namespace {
+int BindMasterSocket(int listenFd, const std::string &masterAddr, uint16_t masterPort, bool isIPv6)
+{
+    if (isIPv6) {
+        int v6only = 0;
+        if (::setsockopt(listenFd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) < 0) {
+            MINDIE_LLM_LOG_WARN("BindMasterSocket setsockopt IPV6_V6ONLY failed, errno=" << errno);
+        }
+
+        sockaddr_in6 addr {};
+        addr.sin6_family = AF_INET6;
+        addr.sin6_port = htons(masterPort);
+        if (::inet_pton(AF_INET6, masterAddr.c_str(), &addr.sin6_addr) != 1) {
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv6, masterAddr=" << masterAddr <<
+                                 ", errno=" << errno);
+            return -1;
+        }
+
+        if (::bind(listenFd, static_cast<sockaddr *>(static_cast<void *>(&addr)), sizeof(addr)) < 0) {
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv6, masterAddr=" << masterAddr <<
+                                 ", port=" << masterPort << ", errno=" << errno);
+            return -1;
+        }
+    } else {
+        sockaddr_in addr {};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(masterPort);
+        if (::inet_pton(AF_INET, masterAddr.c_str(), &addr.sin_addr) != 1) {
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv4, masterAddr=" << masterAddr <<
+                                 ", errno=" << errno);
+            return -1;
+        }
+
+        if (::bind(listenFd, static_cast<sockaddr *>(static_cast<void *>(&addr)), sizeof(addr)) < 0) {
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv4, masterAddr=" << masterAddr <<
+                                 ", port=" << masterPort << ", errno=" << errno);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 int CreateMasterListenSocket(const std::string &masterAddr, uint16_t masterPort)
 {
-    int listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
+    bool isIPv6 = IsIPv6(masterAddr);
+    bool isIPv4 = IsIPv4(masterAddr);
+    if (!isIPv4 && !isIPv6) {
+        MINDIE_LLM_LOG_ERROR("CreateMasterListenSocket invalid IP address format: " << masterAddr);
+        return -1;
+    }
+
+    int listenFd = -1;
+    if (isIPv6) {
+        listenFd = ::socket(AF_INET6, SOCK_STREAM, 0);
+    } else {
+        listenFd = ::socket(AF_INET, SOCK_STREAM, 0);
+    }
+
     if (listenFd < 0) {
         MINDIE_LLM_LOG_ERROR("CreateMasterListenSocket socket failed, errno=" << errno);
         return -1;
@@ -40,20 +96,7 @@ int CreateMasterListenSocket(const std::string &masterAddr, uint16_t masterPort)
         return -1;
     }
 
-    sockaddr_in addr {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(masterPort);
-    if (::inet_pton(AF_INET, masterAddr.c_str(), &addr.sin_addr) != 1) {
-        MINDIE_LLM_LOG_ERROR("CreateMasterListenSocket inet_pton failed, masterAddr=" << masterAddr <<
-                                                                                       ", errno=" << errno);
-        ::close(listenFd);
-        return -1;
-    }
-
-    if (::bind(listenFd, static_cast<sockaddr *>(static_cast<void *>(&addr)), sizeof(addr)) < 0) {
-        MINDIE_LLM_LOG_ERROR("CreateMasterListenSocket bind failed, masterAddr=" << masterAddr <<
-                                                                                 ", port=" << masterPort <<
-                                                                                 ", errno=" << errno);
+    if (BindMasterSocket(listenFd, masterAddr, masterPort, isIPv6) < 0) {
         ::close(listenFd);
         return -1;
     }

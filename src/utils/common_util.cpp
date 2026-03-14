@@ -703,18 +703,25 @@ bool CheckIp(const std::string &ipAddress, const std::string &inputName, bool en
         return false;
     }
 
-    bool isIPv6 = (ipAddress.find(':') != std::string::npos);
-    bool isIPv4 = (ipAddress.find('.') != std::string::npos);
-
-    if (isIPv6) {
+    if (IsIPv6(ipAddress)) {
         return CheckIPV6(ipAddress, inputName, enableZeroIp);
-    } else if (isIPv4) {
+    } else if (IsIPv4(ipAddress)) {
         return CheckIPV4(ipAddress, inputName, enableZeroIp);
     } else {
         std::cout << "Input " << inputName << " [" << ipAddress <<
             "] format is invalid (neither IPv4 nor IPv6)" << std::endl;
         return false;
     }
+}
+
+bool IsIPv4(const std::string &ipAddress)
+{
+    return ipAddress.find('.') != std::string::npos;
+}
+
+bool IsIPv6(const std::string &ipAddress)
+{
+    return ipAddress.find(':') != std::string::npos;
 }
 
 bool CheckIPV4(const std::string &ipAddress, const std::string &inputName, bool enableZeroIp)
