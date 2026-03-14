@@ -93,10 +93,20 @@ class MindIELLMConfig:
                 config_files = list(part_dir.glob("*.json"))
             config_files = [str(file) for file in config_files]
         quant_config_files = []
+        old_format_warned = False
+    
         for file_name in quant_cls.get_config_filenames():
             for actual_file_path in config_files:
                 if actual_file_path.endswith(file_name):
                     quant_config_files.append(actual_file_path)
+
+                    if file_name != "quant_model_description.json" and not old_format_warned:
+                        logger.info(
+                            f"Using old format quantization config file: {file_name}. "
+                            f"After 2026/06/30, the existing quantization weight will be degraded. "
+                            f"To generate the latest version, please upgrade MindStudio ModelSlim."
+                        )
+                        old_format_warned = True
         if len(quant_config_files) == 0:
             logger.warning(f"Cannot find the config file for `QuantizationConfig`. "
                         f"Try to load weights in the floating points instead.")

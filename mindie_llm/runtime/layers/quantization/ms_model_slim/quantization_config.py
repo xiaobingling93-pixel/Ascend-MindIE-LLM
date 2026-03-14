@@ -46,7 +46,15 @@ class QuantizationConfig(QuantizationConfigBase):
 
     @staticmethod
     def get_config_filenames() -> list[str]:
-        return ["quant_model_description.json"]
+        return [
+            "quant_model_description.json", 
+            "quant_model_description_w8a8.json",
+            "quant_model_description_w8a8_mix.json",
+            "quant_model_description_w8a8s.json",
+            "quant_model_description_w8a8sc.json",
+            "quant_model_description_w8a8_dynamic.json",
+            "quant_model_description_w8a16.json"
+        ]
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> QuantizationConfigBase:

@@ -194,10 +194,20 @@ class BaseRouter:
                 self._generation_config = remove_part_of_generation_config(self._generation_config)
             self.config_dict.update(self._generation_config)
             self.config_dict["generation_config"] = self._generation_config
-
             filename = os.path.join(self.model_name_or_path, 'quant_model_description.json')
             if not file_utils.is_path_exists(filename):
                 filename = os.path.join(self.model_name_or_path, self.sub_model_path, 'quant_model_description.json')
+            if not file_utils.is_path_exists(filename):
+                quantize_type = self.config_dict.get(quantize, None)
+                if quantize_type:
+                    old_file = f'quant_model_description_{quantize_type.lower()}.json'
+                    old_path = os.path.join(self.model_name_or_path, old_file)
+                    if file_utils.is_path_exists(old_path):
+                        filename = old_path
+                    else:
+                        old_path_sub = os.path.join(self.model_name_or_path, self.sub_model_path, old_file)
+                        if file_utils.is_path_exists(old_path_sub):
+                            filename = old_path_sub
             if not file_utils.is_path_exists(filename):
                 filename = None
             if filename is not None:
