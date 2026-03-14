@@ -26,7 +26,7 @@
 #include "parameters_checker.h"
 #include "config_manager_impl.h"
 #include "safe_io.h"
-#include "safe_path.h"
+
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
@@ -1147,38 +1147,6 @@ bool SingleReqInferInterfaceBase::ParseChatTemplate(const nlohmann::ordered_json
             error = "enable_thinking must be boolean, got " + actual_type;
             return false;
         }
-    }
-    return true;
-}
-
-bool SingleReqInferInterfaceBase::ParseChatTemplateRequest(const nlohmann::ordered_json &jsonObj,
-    std::string &error) const
-{
-    const std::string key = "chat_template";
-    std::string chat_template = "";
-    if (!jsonObj.contains(key) || jsonObj[key].is_null()) {
-        return true;
-    } else {
-        if (!jsonObj[key].is_string()) {
-            error = "Parameter chat_template not string";
-            return false;
-        }
-        if (jsonObj[key]=="") {
-            error = "Parameter chat_template is not valid";
-            return false;
-        }
-        chat_template = jsonObj[key].get<std::string>();
-    }
-    std::regex pathPattern(R"(^(\/(?:[\w\-\.]+\/)*[\w\-\.]*\/?)?$|^(?:[\w\-\.]+\/)*[\w\-\.]*\/?$)");
-    if (std::regex_match(chat_template, pathPattern) && chat_template.find("..") == std::string::npos) {
-        mindie_llm::SafePath check_chat_template(chat_template, mindie_llm::PathType::FILE, "r", PERM_640,
-        1024 * 1024, ".jinja"); // 1024*1024 is maximum size of a file.
-        mindie_llm::Result is_chat_template = check_chat_template.Check(chat_template, true);
-        if (!is_chat_template.IsOk()) {
-            error = is_chat_template.message();
-            return false;
-        }
-        return true;
     }
     return true;
 }

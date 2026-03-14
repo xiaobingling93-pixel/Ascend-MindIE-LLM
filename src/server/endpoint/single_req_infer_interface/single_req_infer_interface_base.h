@@ -90,7 +90,6 @@ protected:
     void ParseDetokenizedOutput(std::string &inferResult, const uint64_t &seqId, const bool &decodeOneToken);
     void ConvertTokenToMap(const std::vector<BestNTokens> &decodeResult);
     bool ParseChatTemplate(const nlohmann::ordered_json &jsonObj, std::string &error) const;
-    bool ParseChatTemplateRequest(const nlohmann::ordered_json &jsonObj, std::string &error) const;
     std::string BuildReComputeInput();
     // userInputId -> requestId_
     inline static ConcurrentMap<std::string, std::string> userInputIdMap_;

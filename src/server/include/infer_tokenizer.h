@@ -101,7 +101,6 @@ struct SharedMemoryHeader {
     bool skipSpecialTokens = false;
     uint32_t useToolsCall = 0;
     std::optional<bool> enableThinking = true;
-    char chatTemplate[TOOL_CALLS_JSON_MAX_SIZE] = {0};
     bool isCurrentToolNameSent = false;
     bool isCurrentArgumentSent = false;
     int64_t currentToolId = -1;
@@ -120,14 +119,12 @@ public:
 
 public:
     void EncodeToken(std::string &prompt, std::vector<int64_t> &tokenIds);
-    void EncodeChatToken(std::string &prompt, std::optional<bool> enableThinking,
-        std::optional<std::string> chatTemplate, std::vector<int64_t> &tokenIds);
+    void EncodeChatToken(std::string &prompt, std::optional<bool> enableThinking, std::vector<int64_t> &tokenIds);
     void DecodeToken(std::vector<int64_t> &tokenIds, std::string &outputText, SharedMemoryHeader *header);
     void DecodeOneToken(std::vector<int64_t> &tokenIds, std::string &outputText, SharedMemoryHeader *header);
     bool DownloadUrl(std::string &prompt, uint64_t reqId, std::string &msg);
     void DeleteMultimodalCache(uint64_t reqId);
     std::string MaskPathsInString(const std::string &input) const;
-    std::string ExtractCoreErrorMessage(const std::string& originalError);
 
 private:
     void ProcessTokenIds(pybind11::list &originalTokenIds, std::vector<int64_t> &tokenIds) const;
@@ -166,7 +163,7 @@ public:
 
     bool InitTokenizerPool();
     Status Encode(const std::string &prompt, std::vector<int64_t> &tokenIds, HeadFlag flag, uint64_t &timestamp,
-        std::optional<bool> enableThinking = std::nullopt, std::optional<std::string> chatTemplate = std::nullopt);
+        std::optional<bool> enableThinking = std::nullopt);
     Status Decode(std::vector<int64_t> &tokenIds, std::string &output,
         const uint64_t &timestamp, bool useToolsCall = false, const bool &skipSpecialTokens = true,
         const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});

@@ -686,12 +686,6 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
                        msg << ". The requestId is " << requestId_);
             return false;
         }
-        if (!ParseChatTemplateRequest(body, msg)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
-                       msg << ". The requestId is " << requestId_);
-            return false;
-        }
         if (inputParam->useToolsCall) {
             if (!ParseToolCall(body, msg)) {
                 ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
@@ -716,16 +710,9 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
             }
         } else {
             auto encodeSpan = PROF(INFO, Domain("Request").Resource(requestId_.c_str()).SpanStart("encode"));
-            std::string chatTemplate;
-            if (body.contains("chat_template") && !body["chat_template"].is_null()) {
-                chatTemplate = body["chat_template"].get<std::string>();
-            } else {
-                chatTemplate = "";
-            }
             auto status = TokenizerProcessPool::GetInstance().Encode(inputParam->textInput, reqTokens_,
                                                                      ENCODE_CHAT_FLAG, timestamp,
-                                                                     inputParam->enableThinking,
-                                                                     chatTemplate);
+                                                                     inputParam->enableThinking);
             if (!status.IsOk()) {
                 msg = status.StatusMsg();
                 ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
