@@ -49,6 +49,7 @@ using model_execute_data::LoraOperationResponse;
 using model_execute_data::LORA_OPERATION;
 using model_execute_data::RECOVER_COMMAND_EXEC;
 using model_execute_data::PAUSE_COMMAND_EXEC;
+using model_execute_data::PAUSE_COMMAND_EXEC_ROCE;
 using model_execute_data::CLEAR_COMMAND_EXEC;
 using model_execute_data::START_COMMAND_EXEC;
 using model_execute_data::EXECUTE_ERROR;

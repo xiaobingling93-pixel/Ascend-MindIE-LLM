@@ -301,19 +301,14 @@ class RouterImpl:
 
         # responses中存放request_id:result_code
         responses = dict()
-        result_code = ModelWrapperErrorCode.SUCCESS
+        result_code = ModelWrapperErrorCode.PD_PULL_KV_ERROR if failed_p_id_set else ModelWrapperErrorCode.SUCCESS
         for pull_kv_info in execute_request.pull_kv_request.pull_kv_infos:
             request_id = pull_kv_info.seq_group_metadata.request_id
-            dp_instance_id = int(pull_kv_info.cluster_id)
-            # 需要通过 dp_inst_id_to_cluster_id 查出该 dpInstanceId 对应的所有 cluster_id，再检查是否失败
-            if self.dp_size == 1:
-                cluster_ids = self.config.dp_inst_id_to_cluster_id.get(dp_instance_id // 10000, [dp_instance_id])
-            else:
-                cluster_ids = self.config.dp_inst_id_to_cluster_id.get(dp_instance_id, [dp_instance_id])
-            if any(cid in failed_p_id_set for cid in cluster_ids):
-                result_code = ModelWrapperErrorCode.PD_PULL_KV_ERROR
+            # Caller uses errorCode in responses for actual result.
             responses[str(request_id)] = result_code
 
+        # Return success so executor can release kv cache.
+        result_code = ModelWrapperErrorCode.SUCCESS
         proto = ExecuteResponseBuilder.build_from_transfer_result(result_code.value, responses)
         send_transfer_response(proto)
 

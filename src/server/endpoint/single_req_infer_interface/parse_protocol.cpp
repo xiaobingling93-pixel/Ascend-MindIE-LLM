@@ -189,6 +189,8 @@ LOCAL_API std::string FaultRecoveryCmdToString(FaultRecoveryCmd cmdType)
             return "CMD_REINIT_NPU";
         case FaultRecoveryCmd::CMD_START_ENGINE:
             return "CMD_START_ENGINE";
+        case FaultRecoveryCmd::CMD_PAUSE_ENGINE_ROCE:
+            return "CMD_PAUSE_ENGINE_ROCE";
         default:
             return "CMD_UNKNOWN";
     }

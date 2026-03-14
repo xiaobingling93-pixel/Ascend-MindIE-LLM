@@ -1847,7 +1847,7 @@ bool LlmManagerImpl::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo) cons
 {
     std::string command = commandInfo.command;
 
-    if (command == "CMD_PAUSE_ENGINE") {
+    if (command == "CMD_PAUSE_ENGINE" || command == "CMD_PAUSE_ENGINE_ROCE") {
         llmEnginePtr_->PauseScheduling();
         llmEnginePtr_->ExecuteRecoverCommand(commandInfo);
         RecoverCommandInfo clearCommandInfo("CMD_CLEAR_TRANSER");

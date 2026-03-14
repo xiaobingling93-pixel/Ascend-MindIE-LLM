@@ -741,6 +741,12 @@ class Generator(PDInterface):
             
             ret_dict = self.generator_backend.execute_recover_command(command)
 
+        elif command == "CMD_PAUSE_ENGINE_ROCE":
+            # Delegate pause to generator backend
+            self.is_inference_pause = True
+            self.plugin.is_inference_pause = True
+            ret_dict[command_res_key] = 0
+
         elif command == "CMD_CLEAR_TRANSER":
             ret_dict[command_res_key] = 0
 

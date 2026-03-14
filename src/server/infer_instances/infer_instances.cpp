@@ -200,7 +200,7 @@ Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info)
     if (llmManagers_.empty()) {
         return Status(Error::Code::ERROR, "llmManagers_ is not initialized!");
     }
-    if (info.command == "CMD_PAUSE_ENGINE") {
+    if (info.command == "CMD_PAUSE_ENGINE" || info.command == "CMD_PAUSE_ENGINE_ROCE") {
         isPaused_.store(true);
     }
     for (auto &llmManager : llmManagers_) {

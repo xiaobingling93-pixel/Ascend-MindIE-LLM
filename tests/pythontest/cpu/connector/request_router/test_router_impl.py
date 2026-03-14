@@ -583,7 +583,8 @@ class TestRouterImpl(unittest.TestCase):
         mock_send.assert_called_once()
         proto_response = mock_send.call_args[0][0]
         self.assertEqual(proto_response.msg_type, ExecuteType.KV_TRANSFER)
-        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        # 顶层 status 恒为 SUCCESS 以便 executor 释放 kv cache；实际成败看各条 pd_error_code
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.SUCCESS.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].pd_error_code, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "3001")
 
@@ -629,8 +630,8 @@ class TestRouterImpl(unittest.TestCase):
 
         mock_send.assert_called_once()
         proto_response = mock_send.call_args[0][0]
-        # 验证：修复后能正确检测 pull_kv 失败，返回 PD_PULL_KV_ERROR
-        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        # 顶层 status 恒为 SUCCESS；修复后能正确检测 pull_kv 失败，各条 pd_error_code 为 PD_PULL_KV_ERROR
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.SUCCESS.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "req_450")
         self.assertEqual(
             proto_response.pull_kv_response.pull_kv_results[0].pd_error_code,
@@ -688,8 +689,8 @@ class TestRouterImpl(unittest.TestCase):
 
         mock_send.assert_called_once()
         proto_response = mock_send.call_args[0][0]
-        # 整体状态应为失败
-        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        # 顶层 status 恒为 SUCCESS；各条结果通过 pd_error_code 表示失败
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.SUCCESS.value)
         # req_100（来自P1）应标记为失败
         results = {r.request_id: r.pd_error_code for r in proto_response.pull_kv_response.pull_kv_results}
         self.assertEqual(results["req_100"], ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
@@ -733,9 +734,13 @@ class TestRouterImpl(unittest.TestCase):
 
         mock_send.assert_called_once()
         proto_response = mock_send.call_args[0][0]
-        # 验证 dp_size > 1 时也能通过映射正确检测失败
-        self.assertEqual(proto_response.status, ModelWrapperErrorCode.PD_PULL_KV_ERROR.value)
+        # 顶层 status 恒为 SUCCESS；dp_size > 1 时通过映射正确检测失败，pd_error_code 为 PD_PULL_KV_ERROR
+        self.assertEqual(proto_response.status, ModelWrapperErrorCode.SUCCESS.value)
         self.assertEqual(proto_response.pull_kv_response.pull_kv_results[0].request_id, "req_500")
+        self.assertEqual(
+            proto_response.pull_kv_response.pull_kv_results[0].pd_error_code,
+            ModelWrapperErrorCode.PD_PULL_KV_ERROR.value
+        )
 
     def test_initialize_distributed_mode(self):
         with patch('mindie_llm.connector.request_router.router_impl.set_npu_compile_mode') as _, \

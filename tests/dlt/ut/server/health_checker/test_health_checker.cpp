@@ -229,6 +229,7 @@ TEST_F(HealthCheckerTest, IsValidStatusTransition)
 
     // Valid transitions from PAUSE
     EXPECT_TRUE(checker.IsValidStatusTransition(SERVICE_PAUSE, SERVICE_READY));
+    EXPECT_TRUE(checker.IsValidStatusTransition(SERVICE_PAUSE, SERVICE_NORMAL));
 
     // Valid transitions from READY
     EXPECT_TRUE(checker.IsValidStatusTransition(SERVICE_READY, SERVICE_NORMAL));
@@ -238,7 +239,6 @@ TEST_F(HealthCheckerTest, IsValidStatusTransition)
     EXPECT_FALSE(checker.IsValidStatusTransition(SERVICE_INIT, SERVICE_PAUSE));
     EXPECT_FALSE(checker.IsValidStatusTransition(SERVICE_NORMAL, SERVICE_READY));
     EXPECT_FALSE(checker.IsValidStatusTransition(SERVICE_ABNORMAL, SERVICE_PAUSE));
-    EXPECT_FALSE(checker.IsValidStatusTransition(SERVICE_PAUSE, SERVICE_NORMAL));
 }
 
 // Test UpdateStatus with valid transition

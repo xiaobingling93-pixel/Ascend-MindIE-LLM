@@ -702,6 +702,24 @@ class TestGenerator(unittest.TestCase):
         generator.generator_backend.execute_recover_command.assert_called_once_with("CMD_PAUSE_ENGINE")
 
     @patch("mindie_llm.text_generator.generator.Generator.__init__", return_value=None)
+    def test_execute_recover_command_pause_engine_roce(self, _):
+        """测试CMD_PAUSE_ENGINE_ROCE命令"""
+        generator = Generator(self.model_config)
+        generator.backend_type = 'atb'
+        generator.npu_device_id = 0
+        generator.is_inference_pause = False
+        generator.plugin = MagicMock()
+        generator.plugin.is_inference_pause = False
+
+        result = generator.execute_recover_command("CMD_PAUSE_ENGINE_ROCE")
+
+        self.assertEqual(result["command_result"], 0)
+        self.assertEqual(result["error_msg"], "")
+        self.assertEqual(result["npu_device_id"], 0)
+        self.assertTrue(generator.is_inference_pause)
+        self.assertTrue(generator.plugin.is_inference_pause)
+
+    @patch("mindie_llm.text_generator.generator.Generator.__init__", return_value=None)
     def test_execute_recover_command_clear_transer(self, _):
         """测试CMD_CLEAR_TRANSER命令"""
         generator = Generator(self.model_config)

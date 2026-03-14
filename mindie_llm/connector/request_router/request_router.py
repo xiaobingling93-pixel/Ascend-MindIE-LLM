@@ -160,7 +160,7 @@ class RequestRouter:
             execute_type = execute_request.execute_type
             if execute_type == ExecuteType.LORA_OPERATION:
                 self.router_impl.process_lora_operation(execute_request)
-            elif execute_type == ExecuteType.PAUSE_COMMAND_EXEC:
+            elif execute_type == ExecuteType.PAUSE_COMMAND_EXEC or execute_type == ExecuteType.PAUSE_COMMAND_EXEC_ROCE:
                 self.router_impl.is_inference_pause = True
                 self.router_impl.recover_command_exec(execute_request)
             else:
@@ -178,7 +178,8 @@ class RequestRouter:
             execute_request.execute_type == ExecuteType.CLEAR_COMMAND_EXEC:
             self.transfer_queue.put(execute_request)
         elif execute_request.execute_type == ExecuteType.LORA_OPERATION or \
-            execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC:
+            execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC or \
+            execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC_ROCE:
             self.command_queue.put(execute_request)
         else:
             self.inference_queue.put(execute_request)

@@ -755,8 +755,12 @@ void HttpHandler::HandlePostCmdToEngine(const ReqCtxPtr &reqCtx)
     bool handled = callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE, SERVICE_NORMAL, ExecuteFaultRecoveryPauseCmd)
         || callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE, SERVICE_ABNORMAL, ExecuteFaultRecoveryPauseCmd)
         || callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE, SERVICE_BUSY, ExecuteFaultRecoveryPauseCmd)
+        || callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE_ROCE, SERVICE_NORMAL, ExecuteFaultRecoveryPauseCmd)
+        || callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE_ROCE, SERVICE_ABNORMAL, ExecuteFaultRecoveryPauseCmd)
+        || callHandler(FaultRecoveryCmd::CMD_PAUSE_ENGINE_ROCE, SERVICE_BUSY, ExecuteFaultRecoveryPauseCmd)
         || callHandler(FaultRecoveryCmd::CMD_REINIT_NPU, SERVICE_PAUSE, ExecuteFaultRecoveryReinitNpuCmd)
-        || callHandler(FaultRecoveryCmd::CMD_START_ENGINE, SERVICE_READY, ExecuteFaultRecoveryStartEngineCmd);
+        || callHandler(FaultRecoveryCmd::CMD_START_ENGINE, SERVICE_READY, ExecuteFaultRecoveryStartEngineCmd)
+        || callHandler(FaultRecoveryCmd::CMD_START_ENGINE, SERVICE_PAUSE, ExecuteFaultRecoveryStartEngineCmd);
     if (!handled) {
         ULOG_WARN(SUBMODLE_NAME_ENDPOINT,
                   GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_FAULT_CONTROL, CHECK_WARNING),

@@ -797,6 +797,8 @@ void Executor::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
     ExecuteRequest request;
     if (commandInfo.command == "CMD_PAUSE_ENGINE") {
         request.set_execute_type(PAUSE_COMMAND_EXEC);
+    } else if (commandInfo.command == "CMD_PAUSE_ENGINE_ROCE") {
+        request.set_execute_type(PAUSE_COMMAND_EXEC_ROCE);
     } else if (commandInfo.command == "CMD_CLEAR_TRANSER") {
         request.set_execute_type(CLEAR_COMMAND_EXEC);
     } else if (commandInfo.command == "CMD_REINIT_NPU") {

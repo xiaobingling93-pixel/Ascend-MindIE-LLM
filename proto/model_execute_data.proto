@@ -19,6 +19,7 @@ enum ExecuteType {
   RECOVER_COMMAND_EXEC = 12;
   START_COMMAND_EXEC = 13;
   EXECUTE_ERROR = 14;
+  PAUSE_COMMAND_EXEC_ROCE = 15;
 }
 
 enum ForwardType {

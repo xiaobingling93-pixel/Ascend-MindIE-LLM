@@ -138,6 +138,8 @@ class ExecuteResponseBuilder:
     def build_from_recover_command_result(responses_dict: str, command: str):
         if command == "CMD_PAUSE_ENGINE":
             msg_type = ExecuteType.PAUSE_COMMAND_EXEC
+        elif command == "CMD_PAUSE_ENGINE_ROCE":
+            msg_type = ExecuteType.PAUSE_COMMAND_EXEC_ROCE
         elif command == "CMD_CLEAR_TRANSER":
             msg_type = ExecuteType.CLEAR_COMMAND_EXEC
         elif command == "CMD_REINIT_NPU":

@@ -94,7 +94,8 @@ enum FaultRecoveryCmd: int32_t {
     CMD_UNKNOWN = -1,
     CMD_PAUSE_ENGINE = 0,
     CMD_REINIT_NPU = 1,
-    CMD_START_ENGINE = 2
+    CMD_START_ENGINE = 2,
+    CMD_PAUSE_ENGINE_ROCE = 3
 };
 
 struct NPUExecutionResult {
