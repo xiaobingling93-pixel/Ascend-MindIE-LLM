@@ -343,7 +343,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_path.glob.return_value = [mock_file1, mock_file2]
         mock_path_class.return_value = mock_path
         
-        result = WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+        handler = WeightsFileHandler.__new__(WeightsFileHandler)
+        handler.quantize = None
+        result = handler._get_weight_filenames(self.model_path, self.extension)
         
         # Should return list of file paths as strings
         self.assertEqual(len(result), 2)
@@ -360,7 +362,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_path_class.return_value = mock_path
         
         with self.assertRaises(FileNotFoundError) as context:
-            WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+            handler = WeightsFileHandler.__new__(WeightsFileHandler)
+            handler.quantize = None
+            handler._get_weight_filenames(self.model_path, self.extension)
         
         self.assertIn("No local weights found", str(context.exception))
         self.assertIn(self.extension, str(context.exception))
@@ -382,7 +386,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_path_class.return_value = mock_path
         mock_isfile.return_value = False  # Index file doesn't exist
         
-        result = WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+        handler = WeightsFileHandler.__new__(WeightsFileHandler)
+        handler.quantize = None
+        result = handler._get_weight_filenames(self.model_path, self.extension)
         
         # Should return all files when index file doesn't exist
         self.assertEqual(len(result), 2)
@@ -422,7 +428,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_safe_open.return_value = mock_file_context
         mock_json_load.return_value = mock_index_content
         
-        result = WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+        handler = WeightsFileHandler.__new__(WeightsFileHandler)
+        handler.quantize = None
+        result = handler._get_weight_filenames(self.model_path, self.extension)
         
         # Should return only files in index
         self.assertEqual(len(result), 2)
@@ -437,7 +445,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_path_class.return_value = mock_path
         
         with self.assertRaises(FileNotFoundError) as context:
-            WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+            handler = WeightsFileHandler.__new__(WeightsFileHandler)
+            handler.quantize = None
+            handler._get_weight_filenames(self.model_path, self.extension)
         
         self.assertIn("not exists or not a directory", str(context.exception))
 
@@ -450,7 +460,9 @@ class TestWeightsFileHandler(unittest.TestCase):
         mock_path_class.return_value = mock_path
         
         with self.assertRaises(FileNotFoundError) as context:
-            WeightsFileHandler._get_weight_filenames(self.model_path, self.extension)
+            handler = WeightsFileHandler.__new__(WeightsFileHandler)
+            handler.quantize = None
+            handler._get_weight_filenames(self.model_path, self.extension)
         
         self.assertIn("not exists or not a directory", str(context.exception))
 

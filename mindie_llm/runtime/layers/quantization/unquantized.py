@@ -12,7 +12,9 @@ import torch
 import torch_npu
 
 from mindie_llm.runtime.layers.fused_moe.fused_moe_method_base import FusedMoEMethodBase
+from mindie_llm.runtime.layers.quantization.quantization_config_base import get_model_quant_type
 from mindie_llm.runtime.layers.quantization.quantization_method_base import QuantizationMethodBase
+from mindie_llm.runtime.layers.quantization.ms_model_slim.quant_type import QuantType
 from mindie_llm.runtime.layers.linear.linear_method_base import LinearMethodBase
 from mindie_llm.runtime.layers.parameter import (
     BaseParameter,
@@ -41,6 +43,10 @@ class UnquantizedLinearMethod(LinearMethodBase):
                 dtype=weight_dtype,
             ),
         )
+        model_quant_type = get_model_quant_type(getattr(layer, "quant_config", None))
+        if model_quant_type in [QuantType.W8A8SC]:
+            from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import sparse_compressed_weight_loader
+            extra_weight_attrs["weight_loader"] = sparse_compressed_weight_loader
         weight.add_attrs({"input_dim": 1, "output_dim": 0, **extra_weight_attrs})
         layer.register_parameter("weight", weight)
 

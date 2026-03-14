@@ -35,6 +35,9 @@ from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8 import (
     W8A8PerTokenLinearMethod as W8A8PerTokenLinearMethodAdaptee,
     W8A8MixLinearMethod as W8A8MixLinearMethodAdaptee,
 )
+from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import (
+    W8A8SCLinearMethod as W8A8SCLinearMethodAdaptee,
+)
 from mindie_llm.runtime.layers.quantization.ms_model_slim.anti_outlier import \
     AntiOutlierNormMethod as AntiOutlierNormMethodAdaptee
 from mindie_llm.utils.log.logging import logger
@@ -54,6 +57,7 @@ class QuantizationConfig:
             W8A8PerTensorLinearMethodAdaptee: W8A8PerTensorLinearMethod,
             W8A8PerTokenLinearMethodAdaptee: W8A8PerTokenLinearMethod,
             W8A8MixLinearMethodAdaptee: W8A8MixLinearMethod,
+            W8A8SCLinearMethodAdaptee: W8A8SCLinearMethod,
             AntiOutlierNormMethodAdaptee: AntiOutlierNormMethod,
         }
         for quant_method_cls, adapter_cls in quant_method_cls_adapter_map.items():
@@ -325,6 +329,46 @@ class UnquantizedNormMethod(MethodSupportAtbGraph):
             return [layer.weight.data]
         bias_placeholder = torch.tensor([0] * layer.weight.data.shape[0], dtype=torch.get_default_dtype(), device='npu')
         return [layer.weight.data, bias_placeholder, self._PLACEHOLDER, self._PLACEHOLDER]
+
+
+class W8A8SCLinearMethod(LinearMethodSupportAtbGraph):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._weight_transpose_type = TransposeType.INVALID
+
+    def get_weights_for_atb_graph(
+        self, layer: torch.nn.Module,
+        padding: bool = True,
+        is_swiglu_quant_enabled: bool = False,
+        quant_type: QuantType = None
+    ) -> list[torch.Tensor]:
+        weight_list = [
+            layer.weight.data,
+            layer.quant_bias.data,
+            layer.deq_scale.data,
+            layer.input_offset.data,
+            layer.input_scale.data,
+            layer.index.data,
+        ]
+        return weight_list
+
+    def get_linear_descs(self, layer: LinearBase):
+        return LinearTypeV2.W8A8SC
+
+    def get_weight_transpose_type(self, layer: LinearBase):
+        return self._weight_transpose_type
+    
+    def process_weights_after_loading(self, layer: nn.Module) -> None:
+        if layer.weight.data.numel() > 0:
+            layer.weight.data = layer.weight.data.contiguous()
+        if layer.index.data.numel() > 0:
+            layer.index.data = layer.index.data.contiguous()
+
+        weight_shape = layer.weight.data.shape if layer.weight.data.numel() > 0 else None
+        if weight_shape is not None and len(weight_shape) >= 2:
+            self._weight_transpose_type = self._check_transpose(torch.tensor(weight_shape))
+        else:
+            self._weight_transpose_type = TransposeType.TRANSPOSE
 
 
 class AntiOutlierNormMethod(MethodSupportAtbGraph):

@@ -21,6 +21,7 @@ from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8 import (
     W8A8MXFP8PerGroupLinearMethod,
     W8A8PerTokenFusedMoEMethod
 )
+from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import W8A8SCLinearMethod
 from mindie_llm.runtime.layers.quantization.ms_model_slim.w4a8 import W4A8PerTokenFusedMoEMethod
 from mindie_llm.runtime.layers.quantization.ms_model_slim.c8 import KVQuantMethod
 from mindie_llm.runtime.layers.quantization.unquantized import UnquantizedFusedMoEMethod
@@ -120,6 +121,7 @@ class QuantizationConfig(QuantizationConfigBase):
                 QuantType.W8A8_DYNAMIC: W8A8PerTokenLinearMethod,
                 QuantType.W8A8_MIX: W8A8MixLinearMethod,
                 QuantType.W8A8_MXFP8: W8A8MXFP8PerGroupLinearMethod,
+                QuantType.W8A8SC: W8A8SCLinearMethod,
             }
             quant_method_cls = quant_type_method_cls_map.get(quant_type)
             if quant_method_cls is None:

@@ -22,10 +22,8 @@ class Qwen3Config(Qwen2Config):
     use_qk_norm: bool = True
     is_reasoning_model: bool = True
     attention_bias = False
-    
+
     def __init__(self, **kwargs):
         """Initializes Qwen3 configuration with optional keyword arguments.
         """
         super().__init__(**kwargs)
-        
-        
