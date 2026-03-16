@@ -32,50 +32,6 @@ class TestSplitFusePreprocess(unittest.TestCase):
         prefix_cache_preprocess = PrefixCachePreprocess(infer_context, cp_size, scp_size, scp_rank)
         self.assertEqual(prefix_cache_preprocess.block_size, infer_context.block_size)
     
-    @data((129, 0,
-           np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([-1])),
-          (129, 1,
-           np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128])),
-          (260, 1,
-           np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 128, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147,
-                     148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167,
-                     168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187,
-                     188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
-                     208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227,
-                     228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247,
-                     248, 249, 250, 251, 252, 253, 254, 255, -1, -1, -1, -1])),
-          (260, 2,
-           np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 128, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([256, 257, 258, 259])),
-          (260, 1,
-           np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([128, 128, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           np.array([-1, -1, -1, -1])))
-    @unpack
-    def test_get_slots(self, token_num, scp_rank, rank_computed_blocks, sp_tokens, golden_slots):
-        infer_context = MagicMock()
-        infer_context.block_size = 128
-        cp_size = 2
-        scp_size = 16
-        scp_rank = scp_rank
-        prefix_cache_preprocess = PrefixCachePreprocess(infer_context, cp_size, scp_size, scp_rank)
-        all_rank_slots = np.arange(token_num)
-        # 构造的例子不能超过 scp_size 个 block。
-        block_num = int(math.ceil(token_num / infer_context.block_size))
-        for i in range(block_num):
-            if i == scp_rank:
-                continue
-            all_rank_slots[i * infer_context.block_size: (i + 1) * infer_context.block_size] = -1
-        slots = prefix_cache_preprocess.get_slots(all_rank_slots, rank_computed_blocks, sp_tokens)
-        self.assertTrue((slots == golden_slots).all())
-
     @data((1,
            np.array([1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
@@ -152,7 +108,6 @@ class TestSplitFusePreprocess(unittest.TestCase):
 
     @data((np.array([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                      1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           [[0], [0, 1, 2]],
            np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                      21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
                      41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
@@ -186,7 +141,6 @@ class TestSplitFusePreprocess(unittest.TestCase):
                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                      1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                      1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
-           [[0], [0, 1, 2, 3], [], [0, 1], [0, 1, 2, 3]],
            np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
                      21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
                      41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
@@ -269,8 +223,7 @@ class TestSplitFusePreprocess(unittest.TestCase):
                      1760, 1761, 1762, 1763, 1764, 1765, 1766, 1767, 1768, 1769, 1770, 1771, 1772, 1773, 1774, 1775,
                      1776, 1777, 1778, 1779, 1780, 1781, 1782, 1783, 1784, 1785, 1786, 1787, 1788, 1789, 1790, 1791])))
     @unpack
-    def test_get_scp_computed_slots_order(
-            self, scp_rank_computed_blocks, batch_computed_blocks, golden_scp_computed_slots_order):
+    def test_get_scp_computed_slots_order(self, scp_rank_computed_blocks, golden_scp_computed_slots_order):
         infer_context = MagicMock()        
         infer_context.block_size = 128
         cp_size = 2
@@ -279,7 +232,7 @@ class TestSplitFusePreprocess(unittest.TestCase):
         prefix_cache_preprocess = PrefixCachePreprocess(infer_context, cp_size, scp_size, scp_rank)
         scp_rank_computed_blocks = scp_rank_computed_blocks.reshape(-1, scp_size)
         scp_computed_slots_order = \
-            prefix_cache_preprocess.get_scp_computed_slots_order(scp_rank_computed_blocks, batch_computed_blocks)
+            prefix_cache_preprocess.get_scp_computed_slots_order(scp_rank_computed_blocks)
 
         self.assertTrue((scp_computed_slots_order == golden_scp_computed_slots_order).all())
 

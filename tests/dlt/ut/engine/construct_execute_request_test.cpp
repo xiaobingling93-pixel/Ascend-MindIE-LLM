@@ -71,7 +71,6 @@ TEST(ConstructExecuteRequestTest, ConstructPullKVRequest_SerializesSrcDstRepeate
     // Make prefill serialization paths safe (non-empty arrays).
     meta.promptLens_ = {4};
     meta.tokenIds_ = {11, 12, 13, 14};
-    meta.computedBlocksOrder_ = {0};
     meta.computedLens_ = {0};
     meta.remoteComputedLens_ = {0};
 

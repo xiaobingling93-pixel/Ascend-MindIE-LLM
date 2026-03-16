@@ -72,7 +72,6 @@ class Request:
         # prefix cache
         self.remote_computed_blocks = 0
         self.computed_blocks = 0
-        self.computed_block_order = [] # spcp
 
         # mix
         self.split_start_position = 0

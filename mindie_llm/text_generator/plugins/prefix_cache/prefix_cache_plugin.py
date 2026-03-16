@@ -150,10 +150,10 @@ class PrefixCachePlugin(Plugin):
                       f'#batchsize: {batch_size}, '
                       f'#batched-tokens: {input_metadata.total_seq_num}, '
                       f'#local cached-tokens: {local_matched_token_num}, '
-                      f'#local cache hit rate: {round(local_cache_hit_rate, 3)}%, '
+                      f'#local cached hit rate: {round(local_cache_hit_rate, 3)}%, '
                       f'#remote cached-tokens: {remote_matched_token_num}, '
-                      f'#remote cache hit rate: {round(remote_cache_hit_rate, 3)}%, '
-                      f'#cache hit rate: {round(local_cache_hit_rate + remote_cache_hit_rate, 3)}%')
+                      f'#remote cached hit rate: {round(remote_cache_hit_rate, 3)}%, '
+                      f'#cached hit rate: {round(local_cache_hit_rate + remote_cache_hit_rate, 3)}%')
             print_log(self.rank, logger.info, f'Prefix Cache Global Reporter: '
                       f'#total prefill tokens: {self.total_token_num}, '
                       f'#total local matched tokens: {self.total_local_matched_token_num}, '

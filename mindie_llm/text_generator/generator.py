@@ -1230,13 +1230,10 @@ class Generator(PDInterface):
         if self.scp_size > 1:
             warmup_blocks = [0] * self.scp_size
             warmup_blocks[0] = 1
-            warmup_order = [0]
         else:
             warmup_blocks = 1
-            warmup_order = []
 
         for dp_rank in range(self.dp_size):
             req = prefill_reqs[dp_rank * request_num_per_dp]
             req.computed_blocks = warmup_blocks
             req.remote_computed_blocks = warmup_blocks
-            req.computed_block_order = warmup_order

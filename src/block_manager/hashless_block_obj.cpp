@@ -79,8 +79,6 @@ BlockId HashLessBlockObj::GetBlockId() const { return blockId_; }
 
 size_t HashLessBlockObj::GetRankIdx() const { return rankIdx_; }
 
-size_t HashLessBlockObj::GetAllocateOrder() { return blockAllocateOrder_; }
-
 // not used in HashLessBlock
 HashValue HashLessBlockObj::GetHashValue() { return INVALID_HASH_VALUE; }
 

@@ -559,6 +559,38 @@ class TGInferContextStore:
             cumulative_idx += seq_len
         return input_ids, position_ids, all_tokens_kv_slots, seq_lengths, prefill_head_indices
 
+    def _gen_scp_slots(self, start_idx, seq_sp_tokens, slots: Optional[np.ndarray], block_tables) -> np.ndarray:
+        sp_start_idx = start_idx + self.spcp_parallel_info.scp_rank * self.block_size
+        sp_len = seq_sp_tokens[self.spcp_parallel_info.scp_rank]
+        for block_table in block_tables:
+            if block_table == -1 or sp_len <= 0:
+                break
+            sp_len_i = min(sp_len, self.block_size)
+            slots[sp_start_idx: sp_start_idx + sp_len_i] = \
+                self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+            sp_len -= self.block_size
+            sp_start_idx += self.spcp_parallel_info.scp_size * self.block_size
+        return slots
+
+    def _gen_scp_slots_last_rank(
+            self, start_idx, seq_sp_tokens, slots: Optional[np.ndarray], block_tables) -> np.ndarray:
+        sp_start_idx = start_idx + self.spcp_parallel_info.scp_rank * self.block_size
+        sp_len = seq_sp_tokens[self.spcp_parallel_info.scp_rank]
+        seq_len = np.sum(seq_sp_tokens)
+        for block_table in block_tables:
+            if block_table == -1 or sp_len <= 0:
+                break
+            sp_len_i = min(sp_len, self.block_size)
+            if sp_len <= self.block_size:
+                slots[start_idx + seq_len - sp_len_i: start_idx + seq_len] = \
+                    self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+            else:
+                slots[sp_start_idx: sp_start_idx + sp_len_i] = \
+                    self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+            sp_len -= self.block_size
+            sp_start_idx += self.spcp_parallel_info.scp_size * self.block_size
+        return slots
+
     def _prepare_seq_kv_slots(
         self,
         block_table: np.ndarray,
@@ -575,14 +607,13 @@ class TGInferContextStore:
                 all_tokens_kv_slots[start_idx:end_idx] = -1
             return
         if self.spcp_parallel_info.scp_size > 1:
-            sp_start_idx = start_idx
-            # only fill kv slots idx for its own rank, add prefix sum in seq_sp_chunk_lens to avoid loop !!!
-            for sp_rank, sp_chunk_len in enumerate(seq_sp_chunk_lens):  # come from gen sp slots
-                if sp_rank == self.spcp_parallel_info.scp_rank:
-                    all_tokens_kv_slots[sp_start_idx:sp_start_idx + sp_chunk_len] = (
-                        self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_chunk_len]
-                    )
-                sp_start_idx += sp_chunk_len
+            if self.spcp_parallel_info.scp_rank == self.spcp_parallel_info.scp_size - 1:
+                all_tokens_kv_slots = \
+                    self._gen_scp_slots_last_rank(start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table)
+            else:
+                all_tokens_kv_slots = \
+                    self._gen_scp_slots(start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table)
+
         else:
             all_tokens_kv_slots[start_idx:end_idx] = self._batch_context.block_table_to_slots(block_table).reshape(-1)[
                 : end_idx - start_idx

@@ -39,8 +39,6 @@ public:
 
     HashValue GetHashValue() override;
 
-    size_t GetAllocateOrder() override;
-
 private:
     size_t blockSize_ = 0;
 
@@ -49,8 +47,6 @@ private:
     HashValue extraHash_ = INVALID_HASH_VALUE;
 
     size_t numTokensTotal_ = 0;
-
-    size_t blockAllocateOrder_ = 0;
 
     void UpdateNumTokensTotal();
 

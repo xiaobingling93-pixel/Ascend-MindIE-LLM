@@ -52,8 +52,6 @@ struct SequenceGroupMetaData {
 
     std::vector<size_t> remoteComputedLens_;
 
-    std::vector<size_t> computedBlocksOrder_;  // prefill阶段prefix cache使用的已经计算过的blcok 分配顺序信息
-
     std::optional<bool> skipSpecialTokens_;
 
     std::optional<bool> ignoreEos_;

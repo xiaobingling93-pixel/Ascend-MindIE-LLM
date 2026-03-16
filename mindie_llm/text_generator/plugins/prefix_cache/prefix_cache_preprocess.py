@@ -99,11 +99,9 @@ class PrefixCachePreprocess:
                     no_cache_blocks
                 ).reshape(-1)[split_start_position_i:position_end_idx]
             elif self.scp_size > 1:
-                new_slots[input_start_idx:input_start_idx + seq_len] = self.get_slots(
-                    model_inputs.slots[slots_start_idx: slots_start_idx + model_inputs.context_length[i]],
-                    batch_computed_blocks[i],
-                    model_inputs.sp_tokens[i]
-                    )
+                new_slots[input_start_idx:input_start_idx + seq_len] = \
+                    model_inputs.slots[slots_start_idx + model_inputs.context_length[i] - seq_len:
+                                       slots_start_idx + model_inputs.context_length[i]]
             else:
                 new_slots[input_start_idx:input_start_idx + seq_len] = \
                     self.infer_context.block_table_to_slots(no_cache_blocks).reshape(-1)[:seq_len]
@@ -115,7 +113,7 @@ class PrefixCachePreprocess:
                 new_prefill_head_indices[i] = new_total_seq_num - 1
             input_start_idx += seq_len
             slots_start_idx += model_inputs.context_length[i]
-            if self.scp_size > 1:
+            if self.cp_size > 1:
                 model_inputs.context_length[i] -= computed_blocks[i] * self.block_size
 
         # 最后根据最新的长度做截断
@@ -125,7 +123,7 @@ class PrefixCachePreprocess:
 
         sp_computed_slots_padding_idx = self.get_sp_computed_slots_padding_idx(batch_computed_blocks)
         sp_computed_slots_order = \
-            self.get_scp_computed_slots_order(batch_computed_blocks, metadata.batch_computed_block_order)
+            self.get_scp_computed_slots_order(batch_computed_blocks)
         all_rank_prefix_lens = self.get_all_rank_prefix_lens(batch_computed_blocks)
         per_rank_prefix_lens = self.get_per_rank_prefix_lens(batch_computed_blocks)
 
@@ -150,16 +148,6 @@ class PrefixCachePreprocess:
                                       per_rank_prefix_lens=per_rank_prefix_lens)
         return model_inputs_new
 
-    def get_slots(self, all_rank_slots, rank_computed_blocks, sp_tokens):
-        idx = 0
-
-        all_rank_slots = all_rank_slots.tolist()
-        for i, sp_token in enumerate(sp_tokens):
-            all_rank_slots = all_rank_slots[: idx] + all_rank_slots[idx + rank_computed_blocks[i] * self.block_size:]
-            idx += (sp_token - rank_computed_blocks[i] * self.block_size)
-        all_rank_slots = np.array(all_rank_slots, dtype=np.int64)
-        return all_rank_slots
-
     def get_sp_computed_slots_padding_idx(self, batch_computed_blocks):
         if batch_computed_blocks is None:
             return None
@@ -171,9 +159,24 @@ class PrefixCachePreprocess:
         ]).reshape(-1)
         return sp_computed_slots_padding_idx
         
-    def get_scp_computed_slots_order(self, scp_rank_computed_blocks, computed_block_order):
-        if scp_rank_computed_blocks is None or computed_block_order is None:
+    def gen_computed_block_order(self, scp_rank_computed_blocks):
+
+        computed_block_order = []
+        for _, c_blocks in enumerate(scp_rank_computed_blocks):
+            temp = []
+            for rank_id, rank_c_blocks in enumerate(c_blocks):
+                for block_id in range(rank_c_blocks):
+                    temp.append(rank_id + block_id * self.scp_size)
+
+            computed_block_order.append(temp)
+
+        return computed_block_order
+
+    def get_scp_computed_slots_order(self, scp_rank_computed_blocks):
+        if scp_rank_computed_blocks is None:
             return None
+
+        computed_block_order = self.gen_computed_block_order(scp_rank_computed_blocks)
         batch_size = scp_rank_computed_blocks.shape[0]
         computed_blocks_total_num = scp_rank_computed_blocks.sum()
         pre_sum = 0

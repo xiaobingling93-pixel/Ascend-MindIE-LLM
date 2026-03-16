@@ -173,8 +173,6 @@ public:
 
     virtual size_t GetLocalDPRank() const = 0;
 
-    virtual std::vector<size_t> GetPrefixBlockOrder(SequenceId seqId, std::vector<size_t> &computedBlocksNum) const = 0;
-
     virtual void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank) = 0;
 
     virtual void LwdGetCloudRankedBlockIds(SequenceId seqId,

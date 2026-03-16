@@ -99,7 +99,6 @@ class InputMetadata:
     # attributes for prefixcache
     computed_blocks: Optional[np.ndarray] = None
     remote_computed_blocks: Optional[np.ndarray] = None
-    batch_computed_block_order: Optional[List[List[Any]]] = None # [[0],[],[],[]]
 
     # attributes for features
     split_start_position: Optional[np.ndarray] = None
@@ -223,7 +222,6 @@ class InputMetadata:
         # prefix cache
         batch_computed_blocks = None
         batch_remote_computed_blocks = None
-        computed_block_orders = [req.computed_block_order for req in llm_requests]
 
         batch_dp_rank_ids = None
         batch_sampling_params = None
@@ -373,6 +371,5 @@ class InputMetadata:
             batch_response_format=batch_response_format,
             batch_is_prefill=batch_is_prefill,
             computed_blocks=np.asarray(batch_computed_blocks) if batch_computed_blocks else None,
-            remote_computed_blocks=np.asarray(batch_remote_computed_blocks) if batch_remote_computed_blocks else None,
-            batch_computed_block_order=computed_block_orders
+            remote_computed_blocks=np.asarray(batch_remote_computed_blocks) if batch_remote_computed_blocks else None
         )
