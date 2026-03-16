@@ -8,6 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 from typing import Dict, Iterable, List, Optional, Union
+from enum import Enum
 import os
 import json
 import time
@@ -69,6 +70,12 @@ PREALLOC_SUPPORTED_QUANT_TYPES = {
 
 # Allow tensor initialization and casting with internal format(e.g., NZ)
 torch.npu.config.allow_internal_format = True
+
+
+class TruncationSide(int, Enum):
+    DISABLE = 0
+    LEFT = 1
+    RIGHT = -1
 
 
 class ModelRunner:
@@ -213,6 +220,7 @@ class ModelRunner:
             (self.kv_cache_dtype != torch.int8)                 # KV cache is not int8 type
         )
         self.enable_nz = self.llm_config.llm.kv_cache_options.enable_nz
+        self.truncation_method = getattr(self.llm_config.models, "truncation", TruncationSide.RIGHT)
         
         if self.dtype not in [torch.float16, torch.bfloat16]:
             error_msg = "`torch_dtype` is only supported for type `float16` and" \
