@@ -98,8 +98,19 @@ void InferTokenizer::EncodeToken(std::string &prompt, std::vector<int64_t> &toke
     }
 }
 
+ std::string InferTokenizer::ExtractCoreErrorMessage(const std::string& originalError)
+{
+    std::regex coreErrorRegex(R"(Original error: (.*?)\n\nAt:)");
+    std::smatch match;
+    if (std::regex_search(originalError, match, coreErrorRegex) && match.size() > 1) {
+        return match.str(1);
+    }
+        
+    return "Token encoding failed: invalid chat template syntax 33333";
+}
+
 void InferTokenizer::EncodeChatToken(std::string &prompt, std::optional<bool> enableThinking,
-    std::vector<int64_t> &tokenIds)
+    std::optional<std::string> chatTemplate, std::vector<int64_t> &tokenIds)
 {
     try {
         auto inputText = prompt.substr(0, GetMaxTextLength());
@@ -111,11 +122,15 @@ void InferTokenizer::EncodeChatToken(std::string &prompt, std::optional<bool> en
         if (enableThinking.has_value()) {
             kwargs["enable_thinking"] = enableThinking.value();
         }
+        if (chatTemplate.has_value()) {
+            kwargs["chat_template"] = chatTemplate.value();
+        }
 
         pybind11::list originalTokenIds = autoTokenizer->attr("encode_chat")(inputText, kwargs);
         ProcessTokenIds(originalTokenIds, tokenIds);
     } catch (const std::exception &e) {
-        // ULOG has been disabled in subprocess
+        std::string coreError = ExtractCoreErrorMessage(e.what());
+        throw std::runtime_error("[Tokenizer] encode failed. " + coreError);
     } catch (...) {
         // ULOG has been disabled in subprocess
     }
@@ -631,7 +646,7 @@ time_t TokenizerProcessPool::GetEncodeTimeout() const
 }
 
 Status TokenizerProcessPool::Encode(const std::string &prompt, std::vector<int64_t> &tokenIds, HeadFlag flag,
-    uint64_t &timestamp, std::optional<bool> enableThinking)
+    uint64_t &timestamp, std::optional<bool> enableThinking, std::optional<std::string> chatTemplate)
 {
     uint32_t maxTextLength = GetMaxTextLength();
     uint32_t maxTokenLength = maxTextLength / sizeof(int64_t);
@@ -650,6 +665,13 @@ Status TokenizerProcessPool::Encode(const std::string &prompt, std::vector<int64
     if (enableThinking != std::nullopt && enableThinking.has_value()) {
         header->enableThinking = enableThinking;
     }
+    if (chatTemplate != std::nullopt && chatTemplate.has_value()) {
+        size_t copy_size = std::min(chatTemplate.value().size(),
+            sizeof(header->chatTemplate) - 1);
+        chatTemplate.value().copy(header->chatTemplate, copy_size, 0);
+        header->chatTemplate[copy_size] = '\0';
+    }
+
     header->flag = flag;
     header->size = prompt.length();
     header->timestamp = timestamp;
@@ -697,7 +719,12 @@ Status TokenizerProcessPool::Encode(const std::string &prompt, std::vector<int64
         ReturnPid(pid);
         return Status(Error::Code::ERROR, "Invalid output token length " + std::to_string(tokenIdSize));
     }
-
+    std::string response = std::string(header->chatTemplate);
+    if (!response.empty()) {
+        header->chatTemplate[0] = '\0';
+        ReturnPid(pid);
+        return Status(Error::Code::ERROR, response);
+    }
     // read buffer
     tokenIds.clear();
     int64_t *outBuf = reinterpret_cast<int64_t *>(header->buffer);
@@ -718,6 +745,7 @@ Status TokenizerProcessPool::Encode(const std::string &prompt, std::vector<int64
     }
     // reset status
     header->enableThinking = std::nullopt;
+    header->chatTemplate[0] = '\0';
     header->reqEnableReasoning = std::nullopt;
     ReturnPid(pid);
     ULOG_DEBUG(SUBMODLE_NAME_TOKENIZER, "Encode prompt returns " << tokenIds.size() << " tokens.");
@@ -1043,6 +1071,7 @@ bool TokenizerProcessPool::ProcessEncode(SharedMemoryHeader *header, const std::
     uint64_t timestamp = header->timestamp;
 
     std::vector<int64_t> tokenIds;
+    std::optional<std::string> chatTemplate = std::nullopt;
     std::string errMsg;
     auto ret = tokenizer->DownloadUrl(prompt, timestamp, errMsg);
     if (!ret) {
@@ -1053,7 +1082,22 @@ bool TokenizerProcessPool::ProcessEncode(SharedMemoryHeader *header, const std::
         return false;
     }
     if (flag == ENCODE_CHAT_FLAG) {
-        tokenizer->EncodeChatToken(prompt, header->enableThinking, tokenIds);
+        if (header->chatTemplate != nullptr && strlen(header->chatTemplate) > 0) {
+            chatTemplate = std::string(header->chatTemplate);
+            header->chatTemplate[0] = '\0';
+        } else {
+            chatTemplate = std::nullopt;
+        }
+        try {
+            tokenizer->EncodeChatToken(prompt, header->enableThinking, chatTemplate, tokenIds);
+        } catch (const std::exception &e) {
+        strncpy_s(header->chatTemplate, sizeof(header->chatTemplate),
+            e.what() ? e.what() : "Unknown exception while tokenize",
+            sizeof(header->chatTemplate) - 1);
+        header->chatTemplate[sizeof(header->chatTemplate) - 1] = '\0';
+        } catch (...) {
+            // ULOG has been disabled in subprocess;
+        }
     } else {
         tokenizer->EncodeToken(prompt, tokenIds);
     }

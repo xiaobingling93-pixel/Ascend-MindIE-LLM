@@ -61,8 +61,6 @@ public:
 
     virtual void SetLastAccessed(TimeStamp lastAccess) = 0;
 
-    virtual size_t GetAllocateOrder() = 0;
-
     virtual HashValue GetHashValue() = 0;
 
     virtual HashValue ExtraHash() = 0; // 用于Lora

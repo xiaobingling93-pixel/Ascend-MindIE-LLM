@@ -62,7 +62,8 @@ PREALLOC_SUPPORTED_QUANT_TYPES = {
     QuantType.W8A8,
     QuantType.W8A8_DYNAMIC,
     QuantType.W8A8_PDMIX,
-    QuantType.W8A8_MIX
+    QuantType.W8A8_MIX,
+    QuantType.W8A8SC
 }
 
 

@@ -14,3 +14,10 @@ class BackendType(str, Enum):
     ATB = 'atb'
     MS = 'ms'
     TORCH = 'torch'
+
+    @classmethod
+    def from_string(cls, value: str, default: "BackendType" = None) -> "BackendType":
+        try:
+            return cls(value)
+        except ValueError:
+            return default if default is not None else cls.TORCH

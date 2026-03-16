@@ -429,6 +429,9 @@ std::map<std::string, std::vector<std::string>> GetDeepseekV2ModelInTensorCandid
         {"prefixcache_cp", {
             "in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx", "in_kv_cache_len"
         }},
+        {"prefixcache_sp", {
+            "in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx"
+        }},
         {"prefixcache_c8", {"in_history_compressed_kv_int"}},
         {"dense_tp", {
             "in_dense_tp_padding_idx_model", "in_dense_tp_mlp_out_idx_model",
@@ -475,6 +478,8 @@ void DecoderModel::ConstructInTensorMap()
         }
         if (param.mapping.Get(base::ATTN_CP).IsEnabled()) {
             atb_speed::common::AssignTensorIdx(deepseekV2ModelInTensorCandidates, "prefixcache_cp", this->inTensorMap);
+        } else if (param.mapping.Get(base::ATTN_INNER_SP).IsEnabled()) {
+            atb_speed::common::AssignTensorIdx(deepseekV2ModelInTensorCandidates, "prefixcache_sp", this->inTensorMap);
         }
     }
     if (param.enableDenseTp) {
@@ -1265,6 +1270,18 @@ atb::Status DecoderModel::AddPrefixCacheCpHostWeight(atb_speed::Model::Node &lay
     return atb::NO_ERROR;
 }
 
+atb::Status DecoderModel::AddPrefixCacheSpHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId)
+{
+    if (param.enablePrefixCache && param.mapping.Get(base::ATTN_INNER_SP).IsEnabled() \
+        && (!param.mapping.Get(base::ATTN_CP).IsEnabled())) {
+        layerNode.inTensors.at(inTensorId++) = &graph_.inTensors.at(
+            atb_speed::common::GetTensorIdx(this->inTensorMap, "in_kv_cache_padding_idx"));
+        layerNode.inTensors.at(inTensorId++) = &graph_.inTensors.at(
+            atb_speed::common::GetTensorIdx(this->inTensorMap, "in_kv_cache_unpadding_idx"));
+    }
+    return atb::NO_ERROR;
+}
+
 atb::Status DecoderModel::AddParallelHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId)
 {
     layerNode.inTensors.at(inTensorId++) = &graph_.inTensors.at(
@@ -1369,6 +1386,7 @@ atb::Status DecoderModel::AddLayerHostWeight(atb_speed::Model::Node &layerNode, 
     AddParallelHostWeight(layerNode, inTensorId);
     AddPrefixCacheHostWeight(layerNode, inTensorId);
     AddPrefixCacheCpHostWeight(layerNode, inTensorId);
+    AddPrefixCacheSpHostWeight(layerNode, inTensorId);
     AddDenseTpHostWeight(layerNode, inTensorId, layerId);
     // new inTensors please add here before
     AddExpertHostWeight(layerNode, inTensorId);

@@ -58,18 +58,19 @@ class MFModelWrapper(ModelWrapper):
             kwargs[ms_name] = kwargs[old_name]
             del kwargs[old_name]
         try:
-            logits = self.model_runner.forward(input_ids=input_ids,
-                                               valid_length_each_example=valid_length_each_example,
-                                               block_tables=model_inputs.block_tables,
-                                               slot_mapping=slots,
-                                               prefill=model_inputs.is_prefill,
-                                               position_ids=model_inputs.position_ids,
-                                           adapter_ids=model_inputs.adapter_ids,
-                                           prefill_head_indices=model_inputs.prefill_head_indices,
-                                           key_cache=key_cache,
-                                           value_cache=value_cache,
-                                           **kwargs
-                                           )
+            logits = self.model_runner.forward(
+                input_ids=input_ids,
+                valid_length_each_example=valid_length_each_example,
+                block_tables=model_inputs.block_tables,
+                slot_mapping=slots,
+                prefill=model_inputs.is_prefill,
+                position_ids=model_inputs.position_ids,
+                adapter_ids=model_inputs.adapter_ids,
+                prefill_head_indices=model_inputs.prefill_head_indices,
+                key_cache=key_cache,
+                value_cache=value_cache,
+                **kwargs
+            )
         except Exception as e:
             logger.error(f"Error in forward: {e}")
             raise e

@@ -309,22 +309,6 @@ std::vector<HashValue> SelfAttnBlockManager::GetSeqHashValues(SequenceId seqId) 
     return seqHashValues;
 }
 
-// rankedBlockIds 第一维度是rank 第二维度是block 分配顺序
-std::vector<size_t> SelfAttnBlockManager::GetPrefixBlockOrder(SequenceId seqId,
-    std::vector<size_t> &computedBlocksNum) const
-{
-    std::vector<size_t> prefixBlockOrder;
-    std::vector<std::vector<size_t>> rankedPrefixBlockOrder;
-    seqId2BlockTable_.at(seqId).GetRankedPrefixBlockOrder(rankedPrefixBlockOrder);
-
-    for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
-        prefixBlockOrder.insert(prefixBlockOrder.end(),
-            rankedPrefixBlockOrder[rankIdx].begin(),
-            rankedPrefixBlockOrder[rankIdx].begin() + computedBlocksNum[rankIdx]);
-    }
-    return prefixBlockOrder;
-}
-
 void SelfAttnBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float accessTime)
 {
     if (enableCaching_) {
@@ -336,36 +320,38 @@ void SelfAttnBlockManager::MarkBlocksAsComputed() { blockAllocator_->MarkBlocksA
 
 std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs)
 {
+    size_t maxCachedBlocksPreRank = 0;
     std::vector<std::vector<std::vector<BlockId>>> rankedComputedSeqBlockIds;  /// rank_size, seq_num, block_num
     for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
         std::vector<std::vector<BlockId>> computedSeqBlockIds;
         for (const auto &seq : seqs) {
             std::vector<std::vector<HashValue>> rankedHashValues = GetRankedHashValues(seq->seqId_);
 
-            const std::vector<BlockId> &allBlocks = seqId2BlockTable_.at(seq->seqId_).GetBlockIds();
+            std::vector<BlockId> allBlocks = seqId2BlockTable_.at(seq->seqId_).GetRankedBlockIds(rankIdx);
             size_t numCachedBlocks = seqsBlockComputedTracker_.GetCachedTokensNum(
                 seq, rankIdx, rankedHashValues[rankIdx], seq->IsPrefill()) / blockSize_;
             std::vector<BlockId> computedBlockIds(allBlocks.begin(), allBlocks.begin() + numCachedBlocks);
             computedSeqBlockIds.push_back(computedBlockIds);
+            maxCachedBlocksPreRank = std::max(maxCachedBlocksPreRank, allBlocks.size());
         }
         rankedComputedSeqBlockIds.push_back(computedSeqBlockIds);
     }
-    std::vector<size_t> allrankComputedBlockNum =
+    std::vector<size_t> allRankComputedBlockNum =
         blockAllocator_->GetAllRankCommonComputedBlockNum(rankedComputedSeqBlockIds);
-    size_t maxCachedBlocksPreRank = std::min(allrankComputedBlockNum.back() + 1, allrankComputedBlockNum.front());
-    bool falg = true;
-    if (maxCachedBlocksPreRank == 0) {
-        falg = false;
+    for (auto &computedBlockNum : allRankComputedBlockNum) {
+        maxCachedBlocksPreRank = std::min(maxCachedBlocksPreRank, computedBlockNum);
     }
-    for (auto& computedBlockNum: allrankComputedBlockNum) {
-        if (falg && computedBlockNum < maxCachedBlocksPreRank) {
-            falg = false;
-            maxCachedBlocksPreRank--;
+    bool flag = true;
+    for (auto& computedBlockNum: allRankComputedBlockNum) {
+        if (flag && computedBlockNum > maxCachedBlocksPreRank) {
+            computedBlockNum = maxCachedBlocksPreRank + 1;
+        } else {
+            flag = false;
+            computedBlockNum = maxCachedBlocksPreRank;
         }
-        computedBlockNum = maxCachedBlocksPreRank;
     }
 
-    return allrankComputedBlockNum;
+    return allRankComputedBlockNum;
 }
 
 std::vector<BlockId> SelfAttnBlockManager::GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs)

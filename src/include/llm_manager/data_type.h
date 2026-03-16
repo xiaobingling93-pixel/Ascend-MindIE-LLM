@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include "utils/concurrent_deque.h"
 
 namespace mindie_llm {
 
@@ -93,7 +94,8 @@ enum FaultRecoveryCmd: int32_t {
     CMD_UNKNOWN = -1,
     CMD_PAUSE_ENGINE = 0,
     CMD_REINIT_NPU = 1,
-    CMD_START_ENGINE = 2
+    CMD_START_ENGINE = 2,
+    CMD_PAUSE_ENGINE_ROCE = 3
 };
 
 struct NPUExecutionResult {
@@ -104,7 +106,7 @@ struct NPUExecutionResult {
 
 struct RecoverCommandInfo {
     std::string command;
-    std::vector<NPUExecutionResult> results;
+    ConcurrentDeque<NPUExecutionResult> results;
     explicit RecoverCommandInfo(std::string command) : command(command) {}
 };
 

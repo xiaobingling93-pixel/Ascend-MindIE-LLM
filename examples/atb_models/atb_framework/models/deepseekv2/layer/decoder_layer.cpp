@@ -128,6 +128,9 @@ std::map<std::string, std::vector<std::string>> GetDeepseekV2LayerInTensorCandid
         {"prefixcache_cp", {
             "in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx", "in_kv_cache_len"
         }},
+        {"prefixcache_sp", {
+            "in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx"
+        }},
         {"prefixcache_c8", {"in_history_compressed_kv_int"}},
         {"dense_tp", {
             "in_dense_tp_padding_idx", "in_dense_tp_mlp_out_idx",
@@ -230,6 +233,8 @@ std::vector<std::string> ConstructIntensorList(const DecoderLayerParam &param)
         }
         if (param.mapping.Get(base::ATTN_CP).IsEnabled()) {
             atb_speed::common::AddTensorToList(deepseekV2InTensorCandidates, "prefixcache_cp", inTensorList);
+        } else if (param.mapping.Get(base::ATTN_INNER_SP).IsEnabled()) {
+            atb_speed::common::AddTensorToList(deepseekV2InTensorCandidates, "prefixcache_sp", inTensorList);
         }
     }
     if (param.hasDenseTp) {
@@ -407,7 +412,7 @@ void SetAttnCpParam(
     atb_speed::common::LatentAttentionParam<atb::infer::RmsNormParam> &latentAttentionParam,
     const DecoderLayerParam &param)
 {
-    if (param.mapping.Get(base::ATTN_CP).IsEnabled()) {
+    if (param.mapping.Get(base::ATTN_CP).IsEnabled() || param.mapping.Get(base::ATTN_INNER_SP).IsEnabled()) {
         latentAttentionParam.contextParallelInfo = param.mapping.Get(base::ATTN_CP);
         latentAttentionParam.ringMLAParam.headNum = param.numAttentionHeadsPerRank;
         latentAttentionParam.ringMLAParam.kvHeadNum = param.numAttentionHeadsPerRank;
@@ -567,6 +572,9 @@ int64_t SetAttention(atb::GraphParam &opGraph, const DecoderLayerParam &param,
         if (param.mapping.Get(base::ATTN_CP).IsEnabled()) {
             atb_speed::common::AddTensorToList(
                 GetDeepseekV2LayerInTensorCandidates(), "prefixcache_cp", attnInTensorNames);
+        } else if (param.mapping.Get(base::ATTN_INNER_SP).IsEnabled()) {
+            atb_speed::common::AddTensorToList(
+                GetDeepseekV2LayerInTensorCandidates(), "prefixcache_sp", attnInTensorNames);
         }
     }
     if (param.enableFA3 && param.enableKvQuantLayer) {

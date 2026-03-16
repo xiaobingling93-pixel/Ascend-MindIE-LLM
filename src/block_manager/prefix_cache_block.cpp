@@ -27,11 +27,6 @@ void PrefixCachingBlockObj::InitBlockObj(const BlockObjSPtr prevBlock, const std
     HashLessBlockObj::InitBlockObj(prevBlock, tokenIds, blockSharedAttr, blockId, 0);
     blockSize_ = blockSharedAttr.blockSize;
     extraHash_ = extraHash;
-    if (prevBlock != nullptr) {
-        blockAllocateOrder_ = prevBlock->GetAllocateOrder() + 1;
-    } else {
-        blockAllocateOrder_ = 0;
-    }
     UpdateNumTokensTotal();
 }
 
@@ -74,8 +69,6 @@ bool PrefixCachingBlockObj::IsFull() const
 {
     return GetNumEmptySlots() == 0;
 }
-
-size_t PrefixCachingBlockObj::GetAllocateOrder() { return blockAllocateOrder_; }
 
 HashValue PrefixCachingBlockObj::GetHashValue() { return cachedPrefixHash_; }
 

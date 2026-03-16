@@ -40,7 +40,7 @@ HealthChecker::HealthChecker() : mRunning(false)
         {SERVICE_INIT, {SERVICE_NORMAL, SERVICE_BUSY}},
         {SERVICE_NORMAL, {SERVICE_PAUSE, SERVICE_ABNORMAL, SERVICE_BUSY}},
         {SERVICE_BUSY, {SERVICE_PAUSE, SERVICE_ABNORMAL, SERVICE_NORMAL}},
-        {SERVICE_PAUSE, {SERVICE_READY}},
+        {SERVICE_PAUSE, {SERVICE_READY, SERVICE_NORMAL}},
         {SERVICE_ABNORMAL, {SERVICE_NORMAL, SERVICE_BUSY}},
         {SERVICE_READY, {SERVICE_NORMAL, SERVICE_BUSY}},
         // other transfers are invalid
@@ -238,9 +238,15 @@ void HealthChecker::HandleHealthStatus()
 {
     // NORMAL、ABNORMAL和BUSY可以互相转换，无需检查状态转移
     ServiceStatus status = CheckSimulateTask();
+    std::string errCode;
     if (status == SERVICE_ABNORMAL) {
-        ErrorItem item(GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, STATUS_WARNING),
-            SUBMODLE_NAME_HEALTHCHECKER, std::chrono::system_clock::now());
+        errCode = GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, STATUS_WARNING);
+    } else if (status == SERVICE_NORMAL || status == SERVICE_BUSY) {
+        // normal和busy都当正常，统一上报071120
+        errCode = GenerateHealthCheckerErrCode(INFO, SUBMODLE_FEATURE_SECURE, SIMULATE_NORMAL);
+    }
+    if (!errCode.empty()) {
+        ErrorItem item(errCode, SUBMODLE_NAME_HEALTHCHECKER, std::chrono::system_clock::now());
         if (mErrorList.Size() >= maxErrorListSize) {
             ErrorItem itemToRemove;
             mErrorList.PopFront(itemToRemove);
@@ -517,6 +523,14 @@ void HealthChecker::EnqueueErrorMessage(const std::string &errCode, const std::s
         mErrorList.PopFront(itemToRemove);
     }
     mErrorList.PushBack(item);
+
+    if (mRecoverableErrCodes.find(errCode) != mRecoverableErrCodes.end()) {
+        ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
+            "HealthChecker: error code " << errCode << " is in the recoverable error code list, " <<
+            "do not update the status to SERVICE_ABNORMAL");
+        return;
+    }
+ 
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "HealthChecker: New error added. Error code: "
                                                << errCode << ", createdBy: " << createdBy);
 

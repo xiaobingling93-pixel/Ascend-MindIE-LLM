@@ -91,6 +91,11 @@ private:
     static constexpr int checkIntervalSeconds = 5;
     static constexpr int maxErrorListSize = 100;
 
+    std::set<std::string> mRecoverableErrCodes = {
+        "MIE05E01000A", // TEXT_GENERATOR_OUT_OF_MEMORY
+        "MIE05E01001B", // TEXT_GENERATOR_PD_PULL_KV_ERROR
+    };
+    
     void CheckServiceStatus();
     bool WaitForLlmEngineReady();
     void PerformPeriodicHealthCheck();

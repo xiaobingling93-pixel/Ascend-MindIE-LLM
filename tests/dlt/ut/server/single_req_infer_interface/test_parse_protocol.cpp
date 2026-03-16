@@ -686,6 +686,13 @@ TEST_F(ParseProtocolTest, DecodeFaultRecoveryCmd)
     ASSERT_EQ(cmdType, FaultRecoveryCmd::CMD_START_ENGINE);
     ASSERT_EQ(cmdStr, "CMD_START_ENGINE");
 
+    // Test valid JSON with CMD_PAUSE_ENGINE_ROCE
+    jsonStr = R"({"cmd": 3})";
+    ret = jsonParse.DecodeFaultRecoveryCmd(jsonStr, cmdType, cmdStr);
+    ASSERT_EQ(ret, EP_OK);
+    ASSERT_EQ(cmdType, FaultRecoveryCmd::CMD_PAUSE_ENGINE_ROCE);
+    ASSERT_EQ(cmdStr, "CMD_PAUSE_ENGINE_ROCE");
+
     // Test invalid JSON string
     jsonStr = R"({"cmd": invalid})";
     ret = jsonParse.DecodeFaultRecoveryCmd(jsonStr, cmdType, cmdStr);

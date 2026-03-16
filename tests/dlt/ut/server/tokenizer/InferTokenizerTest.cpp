@@ -438,7 +438,7 @@ class IbisTokenizer:
             // EncodeChat (chat=false)
             std::string prompt4 = "test4";
             std::vector<int64_t> tokenList4;
-            tokenizer->EncodeChatToken(prompt4, false, tokenList4);
+            tokenizer->EncodeChatToken(prompt4, false, "", tokenList4);
             EXPECT_EQ(tokenList4[0], 0);
         }
     };
@@ -579,7 +579,7 @@ class IbisTokenizer:
 
         std::vector<int64_t> ids;
         std::string chatMsg = "chat msg";
-        tokenizer->EncodeChatToken(chatMsg, /*isChat*/true, ids);
+        tokenizer->EncodeChatToken(chatMsg, /*isChat*/true, "", ids);
         EXPECT_FALSE(ids.empty());
     }
 

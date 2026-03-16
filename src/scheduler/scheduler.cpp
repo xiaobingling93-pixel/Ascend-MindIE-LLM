@@ -1257,11 +1257,6 @@ void Scheduler::AggregateComputedBlocksInfo(std::vector<SequenceGroupMetaData> &
         remoteComputedBlocksNum = computedBlocksNum;
     }
 
-    std::vector<size_t> prefixBlockOrder =
-        blockManager_->GetPrefixBlockOrder(runningSeqSPtrs[0]->seqId_, remoteComputedBlocksNum);
-
-    metaList[metaIndex].computedBlocksOrder_.insert(metaList[metaIndex].computedBlocksOrder_.end(),
-        prefixBlockOrder.begin(), prefixBlockOrder.end());
     metaList[metaIndex].computedLens_.insert(metaList[metaIndex].computedLens_.end(),
         computedBlocksNum.begin(), computedBlocksNum.end());
     metaList[metaIndex].remoteComputedLens_.insert(metaList[metaIndex].remoteComputedLens_.end(),
@@ -1757,8 +1752,9 @@ std::unordered_set<SequenceId> Scheduler::ClearAndReturnTerminatedSeqIds()
 SchedulerMetric Scheduler::CollectSchedulerMetric()
 {
     SchedulerMetric schedulerMetric{};
-    schedulerMetric.blockInfo.totalCpuBlockNum_ = schedulerConfig_->cpuBlockNum;
-    schedulerMetric.blockInfo.totalNpuBlockNum_ = schedulerConfig_->npuBlockNum;
+    uint32_t cspSize = schedulerConfig_->spSize * schedulerConfig_->cpSize;
+    schedulerMetric.blockInfo.totalCpuBlockNum_ = schedulerConfig_->cpuBlockNum * cspSize;
+    schedulerMetric.blockInfo.totalNpuBlockNum_ = schedulerConfig_->npuBlockNum * cspSize;
     schedulerMetric.blockInfo.freeNpuBlockNum_ = schedulerMetricsStatics_.freeNpuBlockNum_;
     schedulerMetric.blockInfo.freeCpuBlockNum_ = schedulerMetricsStatics_.freeCpuBlockNum_;
 

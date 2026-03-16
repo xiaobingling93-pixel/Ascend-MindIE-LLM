@@ -188,12 +188,9 @@ def make_dummy_input_metadata(execute_request, num_npu_blocks, model_config, lwd
         batch_stop_token_ids=[None],
         computed_blocks=None,
         remote_computed_blocks=None,
-        batch_computed_block_order=[[]],
         adapter_ids=[None],
         num_npu_blocks=num_npu_blocks,
         batch_dp_rank_ids=np.array([dp_rank_id], dtype=np.int64),
-        batch_tools=[],
-        batch_tool_choice=[],
         batch_ignore_eos=np.array([None]),
         batch_skip_special_tokens=np.array([None]),
         batch_include_stop=np.array([False]),
@@ -236,12 +233,9 @@ def make_dummy_input_metadata_dmi_decoder(source_input_metadata, num_npu_blocks,
         batch_stop_token_ids=[],
         computed_blocks=None,
         remote_computed_blocks=None,
-        batch_computed_block_order=[[]],
         adapter_ids=[None],
         num_npu_blocks=num_npu_blocks,
         batch_dp_rank_ids=source_input_metadata.batch_dp_rank_ids,
-        batch_tools=[],
-        batch_tool_choice=[],
         batch_ignore_eos=np.array([]),
         batch_skip_special_tokens=np.array([]),
         batch_include_stop=np.array([]),
@@ -320,8 +314,6 @@ def convert_execute_model_request_to_input_metadata_composite(
     batch_skip_special_tokens = []
     batch_include_stop = []
     adapter_ids = []
-    batch_tools = []
-    batch_tool_choice = []
     batch_seq_ids = []
     batch_logprobs = []
     batch_best_of = []
@@ -352,7 +344,6 @@ def convert_execute_model_request_to_input_metadata_composite(
     batch_response_format = None
     
     # prefix cache
-    batch_computed_block_order = None
     computed_blocks = None
     remote_computed_blocks = None
 
@@ -455,14 +446,18 @@ def convert_execute_model_request_to_input_metadata_composite(
     batch_block_rank_id = None
     if any(ibis_batch_sp_tokens):
         batch_sp_tokens = np.array(ibis_batch_sp_tokens)
-    if len(ibis_batch_sp_rank_id) > 0:
+    if ibis_batch_sp_rank_id:
         batch_sp_rank_id = np.array(ibis_batch_sp_rank_id)
-    if len(ibis_batch_is_append_block) > 0:
+    if ibis_batch_is_append_block:
         batch_is_append_block = np.array(ibis_batch_is_append_block)
-    if len(ibis_batch_prefill_block_rank_id) > 0:
-        batch_prefill_block_rank_id = np.array([np.pad(arr, (0, max(len(x) for x in ibis_batch_prefill_block_rank_id) - len(arr)), constant_values=-1) for arr in ibis_batch_prefill_block_rank_id])
-    if len(ibis_batch_block_rank_id) > 0:
-        batch_block_rank_id = np.array(ibis_batch_block_rank_id) 
+    if ibis_batch_prefill_block_rank_id:
+        max_len = max(len(x) for x in ibis_batch_prefill_block_rank_id)
+        batch_prefill_block_rank_id = np.array([
+            np.pad(arr, (0, max_len - len(arr)), constant_values=-1)
+            for arr in ibis_batch_prefill_block_rank_id
+        ])
+    if ibis_batch_block_rank_id:
+        batch_block_rank_id = np.array(ibis_batch_block_rank_id)
     if is_prefill:
         prefill_params = parse_para_is_prefill(request.seq_group_metadata_list, block_size, config)
         batch_sampling = prefill_params["batch_sampling"]
@@ -479,7 +474,6 @@ def convert_execute_model_request_to_input_metadata_composite(
         batch_reserved_seq_ids = prefill_params["batch_reserved_seq_ids"]
         batch_use_beam_search = prefill_params["batch_use_beam_search"]
         adapter_ids = prefill_params["adapter_ids"]
-        batch_computed_block_order = prefill_params["batch_computed_block_order"]
         computed_blocks = prefill_params["computed_blocks"]
         remote_computed_blocks = prefill_params["remote_computed_blocks"]
         batch_response_format = prefill_params["batch_response_format"]
@@ -530,12 +524,9 @@ def convert_execute_model_request_to_input_metadata_composite(
         batch_stop_token_ids=batch_stop_token_ids,
         computed_blocks=computed_blocks,
         remote_computed_blocks=remote_computed_blocks,
-        batch_computed_block_order=batch_computed_block_order,
         adapter_ids=adapter_ids,
         num_npu_blocks=num_npu_blocks,
         batch_dp_rank_ids=batch_dp_rank_ids,
-        batch_tools=batch_tools,
-        batch_tool_choice=batch_tool_choice,
         batch_ignore_eos=batch_ignore_eos,
         batch_skip_special_tokens=batch_skip_special_tokens,
         batch_include_stop=batch_include_stop,
@@ -587,8 +578,6 @@ def convert_pull_kv_request_to_input_metadata_composite(
         block_size,
         config=None
 ) -> InputMetadataComposite:
-    batch_tools = []
-    batch_tool_choice = []
     batch_req_ids = []
     batch_server_ids = []
     batch_seq_len = []
@@ -604,7 +593,6 @@ def convert_pull_kv_request_to_input_metadata_composite(
     is_cp_enable = False
 
     # prefix cache
-    batch_computed_block_order = None
     computed_blocks = None
     remote_computed_blocks = None
 
@@ -674,7 +662,6 @@ def convert_pull_kv_request_to_input_metadata_composite(
     batch_reserved_seq_ids = prefill_params["batch_reserved_seq_ids"]
     batch_use_beam_search = prefill_params["batch_use_beam_search"]
     adapter_ids = prefill_params["adapter_ids"]
-    batch_computed_block_order = prefill_params["batch_computed_block_order"]
     computed_blocks = prefill_params["computed_blocks"]
     remote_computed_blocks = prefill_params["remote_computed_blocks"]
 
@@ -699,12 +686,9 @@ def convert_pull_kv_request_to_input_metadata_composite(
         batch_stop_token_ids=batch_stop_token_ids,
         computed_blocks=computed_blocks,
         remote_computed_blocks=remote_computed_blocks,
-        batch_computed_block_order=batch_computed_block_order,
         adapter_ids=adapter_ids,
         num_npu_blocks=num_npu_blocks,
         batch_dp_rank_ids=batch_dp_rank_ids,
-        batch_tools=batch_tools,
-        batch_tool_choice=batch_tool_choice,
         batch_ignore_eos=batch_ignore_eos,
         batch_skip_special_tokens=batch_skip_special_tokens,
         batch_include_stop=batch_include_stop,
@@ -751,7 +735,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
     # prefix cache
     computed = []
     remote_computed = []
-    computed_block_order = []
+
     scp_size = 1
     cp_size = 1
     if config is not None:
@@ -826,11 +810,9 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
             if scp_size >= 1:
                 computed.extend([0] * scp_size)
                 remote_computed.extend([0] * scp_size)
-                computed_block_order.append([])
             continue
         
         seq_scp_size = len(seq_group_metadata.sp_rank_block_num)
-        computed_block_order_ = convert_bytes_to_list(seq_group_metadata.computed_block_order)
         computed_ = convert_bytes_to_list(seq_group_metadata.computed_block_lens)
         remote_computed_ = convert_bytes_to_list(seq_group_metadata.remote_computed_block_lens)
         
@@ -840,19 +822,16 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
                 computed_[sp_rank_id] -= 1
                 remote_computed_[sp_rank_id] -= 1
                 del_order_id = sum(remote_computed_[:sp_rank_id + 1])
-                computed_block_order_.pop(del_order_id)
             elif len(input_ids) == sum(remote_computed_) * block_size:
                 remote_computed_[sp_rank_id] -= 1
                 del_order_id = sum(remote_computed_[:sp_rank_id + 1])
-                computed_block_order_.pop(del_order_id)
 
-        computed_block_order.append(computed_block_order_)
         computed.extend(computed_)
         remote_computed.extend(remote_computed_)
 
     computed_blocks = None
     remote_computed_blocks = None
-    batch_computed_block_order = None
+
     lwd_multi_nodes_enable = getattr(config, 'model_config', {}).get('lwd_multi_nodes_enable', 'false') == 'true'
     if scp_size > 1 and not lwd_multi_nodes_enable:
         if computed:
@@ -863,8 +842,6 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
             remote_computed_blocks = np.array(remote_computed, dtype=np.int64).reshape(-1, scp_size)
             if np.count_nonzero(remote_computed_blocks) == 0:
                 remote_computed_blocks = None
-        if computed_block_order:
-            batch_computed_block_order = computed_block_order
     else:
         if computed:
             computed_blocks = np.array(computed, dtype=np.int64)
@@ -894,7 +871,6 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
         "batch_reserved_seq_ids": batch_reserved_seq_ids,
         "batch_use_beam_search": batch_use_beam_search,
         "adapter_ids": adapter_ids,
-        "batch_computed_block_order": batch_computed_block_order,
         "computed_blocks": computed_blocks,
         "remote_computed_blocks": remote_computed_blocks,
         "batch_response_format": batch_response_format,
@@ -927,7 +903,6 @@ def update_mix_metadata(input_metadata_composite, mix_params):
 
     # 相比PD竞争需要新增的参数
     metadata.is_mix = is_mix
-    metadata.mix_decode_bs = input_metadata_composite.decode_batch_size
     metadata.split_start_position = np.array(split_start_pos)
     metadata.split_end_position = np.array(split_end_pos)
     metadata.batch_last_prompt = np.array(is_req_last_chunk)
@@ -944,7 +919,7 @@ def update_mix_metadata(input_metadata_composite, mix_params):
 
 def get_attribute_info(link_request: PDLinkRequest):
     pd_link_info = link_request.pd_link_info[0]
-    # attribute_info，建链信息，shape=（1，5）
+    # attribute_info，建链信息，shape=(1,7)
     # 第一位表示设置成什么角色，1代表prefill，2代表decoder，其他为unknown
     # 第二位role是否需要切换，1表示需要切换，0表示不切换
     # 第三位：link_num

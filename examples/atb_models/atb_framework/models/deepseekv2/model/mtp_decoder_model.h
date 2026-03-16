@@ -39,6 +39,7 @@ private:
     atb::Status AddSingleLayer(uint32_t layerId) override;
     atb::Status AddParallelHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId);
     atb::Status AddPrefixCacheCpHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId);
+    atb::Status AddPrefixCacheSpHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId);
     atb::Status AddPrefixCacheHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId);
     atb::Status AddLayerHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId, int layerId);
     atb::Status AddDenseTpHostWeight(atb_speed::Model::Node &layerNode, size_t &inTensorId, int layerId);

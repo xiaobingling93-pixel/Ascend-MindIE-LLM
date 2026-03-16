@@ -60,9 +60,7 @@ public:
     size_t GetNumEmptySlots() const;
 
     bool IsFull() const override;
-
-    size_t GetAllocateOrder() override;
-    
+   
     bool IsComputed() const override; // not used in HashLessBlock
 
     float LastAccessed() const override; // not used in HashLessBlock
@@ -91,8 +89,6 @@ private:
     BlockId blockId_ = INVALID_BLOCKID;
 
     size_t rankIdx_ = 0;
-
-    size_t blockAllocateOrder_ = 0;
 };
 } // namespace mindie_llm
 

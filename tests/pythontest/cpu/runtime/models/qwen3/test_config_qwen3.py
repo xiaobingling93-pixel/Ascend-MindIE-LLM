@@ -8,6 +8,8 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import unittest
+
 from mindie_llm.runtime.models.qwen3.config_qwen3 import Qwen3Config
 
 
@@ -17,7 +19,11 @@ def test_qwen3_config_minimal():
         "num_key_value_heads": 8,
         "vocab_size": 151936,
         "max_position_embeddings": 8192,
-        "rms_norm_eps": 1e-6, 
+        "rms_norm_eps": 1e-6,
     })
     assert config.use_qk_norm is True
     assert config.is_reasoning_model is True
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -200,7 +200,7 @@ Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info)
     if (llmManagers_.empty()) {
         return Status(Error::Code::ERROR, "llmManagers_ is not initialized!");
     }
-    if (info.command == "CMD_PAUSE_ENGINE") {
+    if (info.command == "CMD_PAUSE_ENGINE" || info.command == "CMD_PAUSE_ENGINE_ROCE") {
         isPaused_.store(true);
     }
     for (auto &llmManager : llmManagers_) {
@@ -210,12 +210,12 @@ Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info)
         isPaused_.store(false);
     }
     bool allSuccess = true;
-    for (auto res : info.results) {
+    info.results.ForEach([&allSuccess](const mindie_llm::NPUExecutionResult &res) {
         if (res.commandResult != 0) {
             allSuccess = false;
-            break;
         }
-    }
+        },
+        info.results.Size());
     return allSuccess ? Status(Error::Code::OK, "Success") :
         Status(Error::Code::ERROR, "Some NPU execute command failed");
 }

@@ -1413,30 +1413,43 @@ class FlashDeepseekv2ForCausalLM(FlashForCausalLM):
 
                 self.ring_cur_seqlen = torch.stack([q_seqlen, q_seqlen]).pin_memory()
                 self.ring_cur_seqlen = self.ring_cur_seqlen.to(self.device, non_blocking=True)
-                self.ring_cache_seqlen = torch.stack([q_seqlen, prefix_seqlen]).pin_memory()
-                self.ring_cache_seqlen = self.ring_cache_seqlen.to(self.device, non_blocking=True)
-                self.acl_param = json.dumps({
-                    SEQUENCE_LENGTH: input_lens,
-                    Q_LEN: q_lens if q_lens is not None else [],
-                    "ringCurSeqlen": q_lens + q_lens,
-                    "ringCacheSeqlen": q_lens + self.prefix_lens,
-                })
+                if self.mapping.has_attn_inner_sp() and not self.mapping.has_attn_cp():
+                    prefix_sp_lens = [i - j for i, j in zip(input_lens, q_lens)]
+                    prefix_sp_seqlen = torch.from_numpy(np.array(prefix_sp_lens)).to(torch.int32)
+                    self.ring_cache_seqlen = torch.stack([q_seqlen, prefix_sp_seqlen]).pin_memory()
+                    self.ring_cache_seqlen = self.ring_cache_seqlen.to(self.device, non_blocking=True)
+                    self.acl_param = json.dumps({
+                        SEQUENCE_LENGTH: input_lens,
+                        Q_LEN: q_lens if q_lens is not None else [],
+                        "ringCurSeqlen": q_lens + q_lens,
+                        "ringCacheSeqlen": q_lens + prefix_sp_lens,
+                    })
+                else:
+                    self.ring_cache_seqlen = torch.stack([q_seqlen, prefix_seqlen]).pin_memory()
+                    self.ring_cache_seqlen = self.ring_cache_seqlen.to(self.device, non_blocking=True)
+                    self.acl_param = json.dumps({
+                        SEQUENCE_LENGTH: input_lens,
+                        Q_LEN: q_lens if q_lens is not None else [],
+                        "ringCurSeqlen": q_lens + q_lens,
+                        "ringCacheSeqlen": q_lens + self.prefix_lens,
+                    })
 
     def prepare_paddingidx_for_prefixcache_contextparallel(self, **kwargs):
         sp_computed_slots_padding_idx = kwargs.get("sp_computed_slots_padding_idx", None)
         computed_slots_order = kwargs.get("sp_computed_slots_order", None)
         self.kv_cache_padding_idx = sp_computed_slots_padding_idx
         self.kv_cache_unpadding_idx = computed_slots_order
-        acl_param = json.loads(self.acl_param)
-        q_lens = kwargs.get("q_lens", None)
-        chunk_lengths = [x // 2 for x in q_lens]
-        q_seqlen = torch.from_numpy(np.array(chunk_lengths)).to(torch.int32)  # new tokens
-        all_rank_prefix_lens = kwargs.get("all_rank_prefix_lens", None)
-        all_rank_prefix_seqlen = torch.from_numpy(np.array(all_rank_prefix_lens)).to(torch.int32)  # cache tokens
-        self.kv_cache_len = torch.stack([q_seqlen, all_rank_prefix_seqlen]).pin_memory()
-        self.kv_cache_len = self.kv_cache_len.to(self.device, non_blocking=True)
-        acl_param["kvCachelen"] = chunk_lengths + all_rank_prefix_lens
-        self.acl_param = json.dumps(acl_param)
+        if self.mapping.has_attn_cp():
+            acl_param = json.loads(self.acl_param)
+            q_lens = kwargs.get("q_lens", None)
+            chunk_lengths = [x // 2 for x in q_lens]
+            q_seqlen = torch.from_numpy(np.array(chunk_lengths)).to(torch.int32)  # new tokens
+            all_rank_prefix_lens = kwargs.get("all_rank_prefix_lens", None)
+            all_rank_prefix_seqlen = torch.from_numpy(np.array(all_rank_prefix_lens)).to(torch.int32)  # cache tokens
+            self.kv_cache_len = torch.stack([q_seqlen, all_rank_prefix_seqlen]).pin_memory()
+            self.kv_cache_len = self.kv_cache_len.to(self.device, non_blocking=True)
+            acl_param["kvCachelen"] = chunk_lengths + all_rank_prefix_lens
+            self.acl_param = json.dumps(acl_param)
 
     def prepare_paddingidx_for_contextparallel(self, input_ids):
         input_length = len(input_ids)  # The length of each sp_rank input sequence (batch*seq) is the same.
@@ -1822,7 +1835,7 @@ class FlashDeepseekv2ForCausalLM(FlashForCausalLM):
             if self.mapping.has_attn_cp():
                 self.prepare_cp_prefill_inputs(input_ids, input_lengths, q_lens)
 
-            if self.has_prefixcache and self.mapping.has_attn_cp():
+            if self.has_prefixcache and (self.mapping.has_attn_cp() or self.mapping.has_attn_inner_sp()):
                 self.prepare_paddingidx_for_prefixcache_contextparallel(**kwargs)
                 for b_i in range(block_tables.shape[0]):  # 存在部分命中， 没有block的 rank 要添加一个用于只读的无用块，否则pagegloadcache算子会报错
                     if block_tables[b_i][0] == -1:
@@ -1836,6 +1849,9 @@ class FlashDeepseekv2ForCausalLM(FlashForCausalLM):
             if self.has_prefixcache and self.mapping.has_attn_cp():
                 self.acl_encoder_operation_inputs.extend([self.kv_cache_padding_idx, \
                     self.kv_cache_unpadding_idx, self.kv_cache_len])
+            elif self.has_prefixcache and self.mapping.has_attn_inner_sp():
+                self.acl_encoder_operation_inputs.extend([self.kv_cache_padding_idx, \
+                    self.kv_cache_unpadding_idx])
             if self.mapping.enable_dense_tp:  # new padding idx please add here before
                 self.acl_encoder_operation_inputs.append(self.dense_tp_padding_idx)
                 self.acl_encoder_operation_inputs.append(self.dense_gather_mlpout_idx)

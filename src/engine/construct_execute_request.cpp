@@ -100,8 +100,6 @@ void ConstructExecuteRequest::ConstructPrefillData(const SequenceGroupMetaData &
     protoMeta.set_prompt_token_ids(metaData.tokenIds_.data(), metaData.tokenIds_.size() * sizeof(TokenId));
 
     // 构造computed block table
-    protoMeta.set_computed_block_order(metaData.computedBlocksOrder_.data(),
-                                       metaData.computedBlocksOrder_.size() * sizeof(int64_t));
     protoMeta.set_computed_block_lens(metaData.computedLens_.data(), metaData.computedLens_.size() * sizeof(int64_t));
     protoMeta.set_remote_computed_block_lens(metaData.remoteComputedLens_.data(),
                                              metaData.remoteComputedLens_.size() * sizeof(int64_t));

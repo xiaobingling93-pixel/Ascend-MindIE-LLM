@@ -74,6 +74,8 @@ std::map<std::string, std::vector<std::string>> GetLatentAttnInTensorCandidates(
         },
         {"prefixcache_cp", {"in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx", "in_kv_cache_len"}
         },
+        {"prefixcache_sp", {"in_kv_cache_padding_idx", "in_kv_cache_unpadding_idx"}
+        },
         {"prefixcache_c8", {"in_history_compressed_kv_int"}
         },
     };
@@ -140,6 +142,11 @@ std::map<std::string, std::vector<std::string>> GetLatentAttnIntermediateTensorC
             "temp_v_proj_b", "intermediate_k_nope_history", "rope_k_o_repeat_history",
             "intermediate_v_mha_history", "intermediate_history_kv_rope_concat_padding",
             "intermediate_history_kv_rope_concat_allgather_unpadding"}},
+        {"prefixcache_sp", {"intermediate_history_kv_rope_concat", "intermediate_history_kv_rope_concat_allgather",
+            "intermediate_kv_cp_history", "rope_k_o_cp_history", "intermediate_history_kv_rope_concat_padding",
+            "intermediate_history_kv_rope_concat_allgather_unpadding", "temp_v_proj_b", "intermediate_k_nope",
+            "intermediate_v_mha", "intermediate_k_nope_history", "rope_k_o_repeat_history",
+            "intermediate_v_mha_history", "rope_k_o_repeat", "cur_lse", "cache_lse"}}
     };
     return latentAttnIntermediateTensorCandidates;
 }
@@ -162,6 +169,8 @@ std::map<std::string, uint32_t> ConstructTensorMap(const LatentAttentionParam<No
         }
         if (param.contextParallelInfo.IsEnabled()) {
             AddTensorToList(latentAttnInTensorCandidates, "prefixcache_cp", inTensorList);
+        } else if (param.hasAttnInnerSp) {
+            AddTensorToList(latentAttnInTensorCandidates, "prefixcache_sp", inTensorList);
         }
     }
     if (EnableFA3Quant(param)) {  // 添加FA3特性的Tensor
@@ -198,6 +207,8 @@ std::map<std::string, uint32_t> ConstructTensorMap(const LatentAttentionParam<No
             if (param.enablePrefixCache) {
                 if (param.contextParallelInfo.IsEnabled()) {
                     AddTensorToList(latentAttnIntermediateTensorCandidates, "prefixcache_cp", intermediateTensorList);
+                } else if (param.hasAttnInnerSp) {
+                    AddTensorToList(latentAttnIntermediateTensorCandidates, "prefixcache_sp", intermediateTensorList);
                 } else {
                     AddTensorToList(latentAttnIntermediateTensorCandidates, "prefixcache", intermediateTensorList);
                 }
@@ -943,7 +954,8 @@ atb::Status AddLAttnKRopeRepeatHistoryNode(const LatentAttentionParam<NormParamT
         newShape.dims[1] = 1;
         newShape.dims[2] = oldShape.dims[1]; // 2:dim id
     };
-    if (param.enablePrefixCache && param.contextParallelInfo.IsEnabled() && param.isPrefill) {
+    if ((param.enablePrefixCache && param.contextParallelInfo.IsEnabled() && param.isPrefill) || \
+        (param.hasAttnInnerSp && param.enablePrefixCache)) {
         keyRepeatNode.inTensorIds[0] = GetTensorIdx(tensorMap, "rope_k_o_cp_history");
     }
     keyRepeatNode.operation = new atb_speed::common::RepeatOperation("RepeatNode", kvRepeatParam);
@@ -1117,7 +1129,8 @@ atb::Status AddLAttnKProjBHistoryNode(const LatentAttentionParam<NormParamType> 
         newShape.dims[0] = oldShape.dims[0] * oldShape.dims[1];
         newShape.dims[1] = oldShape.dims[2]; // 2: dim id
     };
-    if (param.contextParallelInfo.IsEnabled() && param.isPrefill) {
+    if ((param.contextParallelInfo.IsEnabled() && param.isPrefill) || \
+        (param.hasAttnInnerSp && param.enablePrefixCache)) {
         kProjBNode.inTensorIds[0] = GetTensorIdx(tensorMap, "intermediate_kv_cp_history");
     }
 
@@ -1224,7 +1237,8 @@ atb::Status AddLAttnVProjBHistoryNode(const LatentAttentionParam<NormParamType> 
         newShape.dims[0] = oldShape.dims[0] * oldShape.dims[1];
         newShape.dims[1] = oldShape.dims[2]; // 2: dim id
     };
-    if (param.contextParallelInfo.IsEnabled() && param.isPrefill) {
+    if ((param.contextParallelInfo.IsEnabled() && param.isPrefill) || \
+        (param.hasAttnInnerSp && param.enablePrefixCache)) {
         vProjBNode.inTensorIds[0] = GetTensorIdx(tensorMap, "intermediate_kv_cp_history");
     }
 
@@ -1617,7 +1631,7 @@ atb::Status PreprocessKV(const LatentAttentionParam<NormParamType> &param,
         if (EnableFA3Quant(param)) {
             CHECK_OPERATION_STATUS_RETURN(AddKVHistoryDequantNode(param, opGraph, tensorMap));
         }
-        if (param.contextParallelInfo.IsEnabled()) {
+        if (param.contextParallelInfo.IsEnabled() || param.hasAttnInnerSp) {
             CHECK_OPERATION_STATUS_RETURN(AddKAllGatherCpNode(param, opGraph, tensorMap, true));
         }
         CHECK_OPERATION_STATUS_RETURN(AddLAttnKProjBHistoryNode(param, opGraph, tensorMap));
@@ -1761,7 +1775,7 @@ atb::Status AddRingMLAEncoderNode(
     ringMLaParam.kvHeadNum = param.selfAttentionParam.kvHeadNum;
     ringMLaParam.qkScale = param.selfAttentionParam.qkScale;
     ringMLaParam.maskType = atb::infer::RingMLAParam::MaskType::MASK_TYPE_TRIU;
-    
+
     CHECK_OPERATION_STATUS_RETURN(atb::CreateOperation(ringMLaParam, &ringAttentionNode.operation));
     ringAttentionNode.inTensorIds = {
         GetTensorIdx(tensorMap, "nope_q"),

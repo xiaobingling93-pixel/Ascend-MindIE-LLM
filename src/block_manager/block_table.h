@@ -62,6 +62,8 @@ public:
 
     const std::vector<BlockId> &GetBlockIds() const;
 
+    std::vector<BlockId> GetRankedBlockIds(size_t rankIdx) const;
+
     std::vector<BlockObjSPtr> GetBlockObjs() const;
 
     size_t GetNumFullSlots() const;
@@ -73,7 +75,6 @@ public:
 
     size_t GetLatestAppendedRankId() const;
 
-    void GetRankedPrefixBlockOrder(std::vector<std::vector<size_t>> &rankedPrefixBlockOrder) const;
     size_t GetAppendedBlockRankId() const;
 
     bool IsAppendBlock() const;

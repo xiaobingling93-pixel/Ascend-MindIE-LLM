@@ -16,9 +16,8 @@ from typing import Tuple
 import acl
 import torch
 
-from ...modeling.backend_type import BackendType
-from ...utils.log.logging import logger
-from ...utils.tensor import npu
+from mindie_llm.modeling.backend_type import BackendType
+from mindie_llm.utils.log import logger
 
 
 # NZ排布的KVCache做了16位对齐

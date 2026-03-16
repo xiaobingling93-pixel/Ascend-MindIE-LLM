@@ -16,9 +16,13 @@ from mindie_llm.runtime.config.huggingface_config import HuggingFaceConfig, Gene
 from mindie_llm.runtime.config.configuration_utils import LLMConfig
 from mindie_llm.runtime.layers.quantization.quantization_config_base import QuantizationConfigBase
 from mindie_llm.runtime.layers.quantization.ms_model_slim.quantization_config import QuantizationConfig
+from mindie_llm.runtime.layers.quantization.ms_model_slim.quant_type import QuantType
+from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import (
+    get_weight_mapper_cls,
+    get_part_directory_for_rank,
+)
 from mindie_llm.runtime.utils.helpers.parameter_validators import ParameterValidator, IntParameterValidator, Field
 from mindie_llm.runtime.utils.helpers.safety.file import safe_open
-from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info
 from mindie_llm.utils.log.logging import logger
 
 
@@ -78,15 +82,31 @@ class MindIELLMConfig:
         # will be needed if multiple quantization types are added in the future.
         quant_cls = QuantizationConfig
 
+        # Get quantize type from hf_config (set by BaseRouter.config)
+        # No need to call is_w8a8sc_format anymore since quantize is already loaded
+        quantize = (getattr(self.hf_config, "quantize", None) or "").upper()
         config_files = []
         if Path(self.model_name_or_path).exists() and Path(self.model_name_or_path).is_dir():
             config_files = list(Path(self.model_name_or_path).glob("*.json"))
+            if quantize in [QuantType.W8A8SC]:
+                part_dir = get_part_directory_for_rank(self.model_name_or_path)
+                config_files = list(part_dir.glob("*.json"))
             config_files = [str(file) for file in config_files]
         quant_config_files = []
+        old_format_warned = False
+    
         for file_name in quant_cls.get_config_filenames():
             for actual_file_path in config_files:
                 if actual_file_path.endswith(file_name):
                     quant_config_files.append(actual_file_path)
+
+                    if file_name != "quant_model_description.json" and not old_format_warned:
+                        logger.info(
+                            f"Using old format quantization config file: {file_name}. "
+                            f"After 2026/06/30, the existing quantization weight will be degraded. "
+                            f"To generate the latest version, please upgrade MindStudio ModelSlim."
+                        )
+                        old_format_warned = True
         if len(quant_config_files) == 0:
             logger.warning(f"Cannot find the config file for `QuantizationConfig`. "
                         f"Try to load weights in the floating points instead.")
@@ -96,9 +116,21 @@ class MindIELLMConfig:
                 f"Found multiple config files for `QuantizationConfig`: "
                 f"{quant_config_files}"
             )
-
+        
         quant_descs = {}
         with safe_open(quant_config_files[0], 'r', check_link=False) as f:
             quant_descs = json.load(f)
+
+        if quantize in [QuantType.W8A8SC]:
+            mapped_quant_descs = {}
+            mapper_cls = get_weight_mapper_cls(self.hf_config)
+            if not mapper_cls:
+                raise NotImplementedError(f"This model type has not implemented W8A8SC quant method yet.")
+            for key, value in quant_descs.items():
+                mapped_keys = mapper_cls.map_weight_to_model(key)
+                for mapped_key in mapped_keys:
+                    mapped_quant_descs[mapped_key] = value
+                mapped_quant_descs[key] = value
+            quant_descs = mapped_quant_descs
 
         return quant_cls.from_config(quant_descs)

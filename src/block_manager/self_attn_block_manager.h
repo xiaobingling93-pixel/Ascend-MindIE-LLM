@@ -118,7 +118,6 @@ public:
 
     size_t GetLatestAppendedRankId(SequenceId seqId) const override;
 
-    std::vector<size_t> GetPrefixBlockOrder(SequenceId seqId, std::vector<size_t> &computedBlocksNum) const override;
     size_t GetAppendedBlockRankId(SequenceId seqId) const override;
 
     void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank = 0) override {};

@@ -65,6 +65,12 @@ class ExecuteResponseBuilder:
         return proto_response_binary
 
     @staticmethod
+    def build_from_err_msg(err_msg: str = "") -> ExecuteResponse:
+        proto_response = ExecuteResponse(msg_type=ExecuteType.EXECUTE_ERROR)
+        proto_response.execute_model_response.err_msg = err_msg if isinstance(err_msg, str) else ""
+        return proto_response
+
+    @staticmethod
     def build_from_generate_output(generate_output, event_type) -> ExecuteResponse:
 
         if generate_output is None:
@@ -132,6 +138,8 @@ class ExecuteResponseBuilder:
     def build_from_recover_command_result(responses_dict: str, command: str):
         if command == "CMD_PAUSE_ENGINE":
             msg_type = ExecuteType.PAUSE_COMMAND_EXEC
+        elif command == "CMD_PAUSE_ENGINE_ROCE":
+            msg_type = ExecuteType.PAUSE_COMMAND_EXEC_ROCE
         elif command == "CMD_CLEAR_TRANSER":
             msg_type = ExecuteType.CLEAR_COMMAND_EXEC
         elif command == "CMD_REINIT_NPU":

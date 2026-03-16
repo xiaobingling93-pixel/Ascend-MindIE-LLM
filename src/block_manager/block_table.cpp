@@ -145,17 +145,14 @@ void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashVa
             currentSpRank_ = (currentSpRank_ + 1) % rankSize_;
             numEmptySlots = GetNumEmptySlots(currentSpRank_);
         }
-        if (numEmptySlots < 1 + numLookaheadSlots) {
+        if (numEmptySlots < 1) {
             auto &rankBlockObjs = blockObjs_[currentSpRank_];
-            size_t numBlocksToAllocate = CeilDiv(1 + numLookaheadSlots - numEmptySlots, blockSize_);
-            for (size_t i = 0; i < numBlocksToAllocate; ++i) {
-                std::vector<TokenId> emptyTokenIds;
-                BlockObjSPtr newBlockObj = blockAllocator_->AllocateMutableBlock(
-                    DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(), extraHash,
-                    currentSpRank_);
-                rankBlockObjs.push_back(newBlockObj);
-                blockIds_.push_back(newBlockObj->GetBlockId());
-            }
+            std::vector<TokenId> emptyTokenIds;
+            BlockObjSPtr newBlockObj = blockAllocator_->AllocateMutableBlock(
+                DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(), extraHash,
+                currentSpRank_);
+            rankBlockObjs.push_back(newBlockObj);
+            blockIds_.push_back(newBlockObj->GetBlockId());
         }
         std::vector<TokenId> currentSpToken{newTokenIds.back()};
         // append token
@@ -311,17 +308,15 @@ void BlockTable::Free()
 
 const std::vector<BlockId> &BlockTable::GetBlockIds() const { return blockIds_; }
 
-void BlockTable::GetRankedPrefixBlockOrder(std::vector<std::vector<size_t>> &rankedPrefixBlockOrder) const
+std::vector<BlockId> BlockTable::GetRankedBlockIds(size_t rankIdx) const
 {
-    rankedPrefixBlockOrder.resize(rankSize_);
-    for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
-        for (auto &blockObj: blockObjs_[rankIdx]) {
-            rankedPrefixBlockOrder[rankIdx].push_back(blockObj->GetAllocateOrder());
-        }
+    std::vector<BlockId> rankedBlockIds;
+    for (auto &blockObj : blockObjs_[rankIdx]) {
+        rankedBlockIds.push_back(blockObj->GetBlockId());
     }
+    return rankedBlockIds;
 }
 
-// std::vector<BlockObjSPtr> &BlockTable::GetBlockObjs() { return blockObjs_; }
 // 合并所有rank的blockObjs并返回
 std::vector<BlockObjSPtr> BlockTable::GetBlockObjs() const
 {

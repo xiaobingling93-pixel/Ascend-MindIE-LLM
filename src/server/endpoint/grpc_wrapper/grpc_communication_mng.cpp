@@ -214,8 +214,8 @@ namespace mindie_llm {
 
         bool GrpcCommunicationMng::IsValidServerAddr(const std::string& ip, const std::string& port) const
         {
-            bool isIPv6 = (ip.find(':') != std::string::npos);
-            bool isIPv4 = (ip.find('.') != std::string::npos);
+            bool isIPv6 = IsIPv6(ip);
+            bool isIPv4 = IsIPv4(ip);
             if (!isIPv4 && !isIPv6) {
                 ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
                     CHECK_ERROR), "Invalid IP address format");

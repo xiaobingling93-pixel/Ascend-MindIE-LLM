@@ -80,7 +80,7 @@ protected:
     virtual void SendStreamResponse([[maybe_unused]] RespBodyQueue &jsonStrs){};
     bool GetTokensFromInput(const std::string &input, std::vector<std::int64_t> &requestTokens,
                             std::vector<std::int64_t> &responseTokens, std::string &errorMsg);
-    bool GetUniqueSequenceId(uint64_t &seqId);
+    bool GetUniqueSequenceId(uint64_t &seqId, bool needLog = true);
     bool DecodeSingleToken(std::vector<int64_t> &tokenIds, std::string &output,
         const uint32_t &prevDecodeIndex, const uint32_t &currentDecodeIndex, const bool &skipSpecialTokens);
     Status InsertPerfInfoIntoJson(nlohmann::ordered_json &body, const std::vector<int32_t> perfInfoTypeList,
@@ -90,6 +90,7 @@ protected:
     void ParseDetokenizedOutput(std::string &inferResult, const uint64_t &seqId, const bool &decodeOneToken);
     void ConvertTokenToMap(const std::vector<BestNTokens> &decodeResult);
     bool ParseChatTemplate(const nlohmann::ordered_json &jsonObj, std::string &error) const;
+    bool ParseChatTemplateRequest(const nlohmann::ordered_json &jsonObj, std::string &error) const;
     std::string BuildReComputeInput();
     // userInputId -> requestId_
     inline static ConcurrentMap<std::string, std::string> userInputIdMap_;

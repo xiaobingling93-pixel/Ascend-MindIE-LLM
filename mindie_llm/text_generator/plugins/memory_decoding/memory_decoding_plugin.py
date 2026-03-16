@@ -21,13 +21,12 @@ MIN_DECODING_LEN = 1
 
 
 class MemoryDecodingPlugin(Plugin):
-    def __init__(self, generator_backend, kvcache_settings, infer_context, output_filter, plugin_data_param, **kwargs):
+    def __init__(self, generator_backend, kvcache_settings, infer_context, plugin_data_param, **kwargs):
         super().__init__()
         self.generator_backend = generator_backend
         self.model_wrapper = self.generator_backend.model_wrapper
         self.kvcache_settings = kvcache_settings
         self.infer_context = infer_context
-        self.output_filter = output_filter
 
         self.plugin_data_param = plugin_data_param
 

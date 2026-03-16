@@ -8,9 +8,14 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 import math
+import gc
+from dataclasses import dataclass
+import contextlib
 import acl
-from ...utils.log.logging import logger, print_log
-from ...utils.tensor import npu
+
+from mindie_llm.utils.log.logging import logger, print_log
+from mindie_llm.utils.tensor import npu
+
 
 INT8_BYTES_SIZE = 1
 TOTAL_MEMORY = 60 * 1024 * 1024 * 1024
@@ -20,6 +25,134 @@ MM_LONG_SEQ_TOKENLEN = 4096
 
 # 显存预警阈值梯度
 THRESHOLD_GRAD = 0.05
+
+
+class WeightMemoryProfiler:
+    def __init__(self):
+        self.before_load_weight = 0
+        self.after_load_weight = 0
+        self.model_weight = 0
+
+    def __enter__(self):
+        self.before_load_weight = 0
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        gc.collect()
+        npu.empty_cache()
+        npu.reset_peak_memory_stats()
+        self.after_load_weight = npu.max_memory_allocated()
+        self.model_weight = self.after_load_weight - self.before_load_weight
+
+
+# MemorySnapshot, MemoryProfilingResult and memory_profiling are implemented with reference to vLLM.
+# https://github.com/vllm-project/vllm/blob/main/vllm/utils/mem_utils.py
+@dataclass
+class MemorySnapshot:
+
+    torch_peak: int = 0
+    free_memory: int = 0
+    total_memory: int = 0
+    npu_memory: int = 0
+    torch_memory: int = 0
+    non_torch_memory: int = 0
+
+    auto_measure: bool = True
+
+    def __post_init__(self) -> None:
+        if self.auto_measure:
+            self.measure()
+
+    def __sub__(self, other: "MemorySnapshot") -> "MemorySnapshot":
+        return MemorySnapshot(
+            torch_peak=self.torch_peak - other.torch_peak,
+            free_memory=self.free_memory - other.free_memory,
+            total_memory=self.total_memory - other.total_memory,
+            npu_memory=self.npu_memory - other.npu_memory,
+            torch_memory=self.torch_memory - other.torch_memory,
+            non_torch_memory=self.non_torch_memory - other.non_torch_memory,
+            auto_measure=False,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"torch_peak={gb(self.torch_peak):.2f}GiB, "
+            f"free_memory={gb(self.free_memory):.2f}GiB, "
+            f"total_memory={gb(self.total_memory):.2f}GiB, "
+            f"npu_memory={gb(self.npu_memory):.2f}GiB, "
+            f"torch_memory={gb(self.torch_memory):.2f}GiB, "
+            f"non_torch_memory={gb(self.non_torch_memory):.2f}GiB, "
+            f"auto_measure={self.auto_measure}."
+        )
+
+    def measure(self) -> None:
+        self.torch_peak = npu.max_memory_allocated()
+
+        self.free_memory, self.total_memory, _ = acl.rt.get_mem_info(1)
+
+        self.npu_memory = self.total_memory - self.free_memory
+
+        self.torch_memory = npu.memory_reserved()
+
+        self.non_torch_memory = self.npu_memory - self.torch_memory
+
+
+@dataclass
+class MemoryProfilingResult:
+    """Memory profiling result. All numbers are in bytes."""
+
+    non_kv_cache_memory: int = 0
+    torch_peak_increase: int = 0
+    non_torch_increase: int = 0
+    total_memory: int = 0
+
+    def __post_init__(self) -> None:
+        self.before_profile = MemorySnapshot(auto_measure=False)
+        self.after_profile = MemorySnapshot(auto_measure=False)
+
+    def __repr__(self) -> str:
+        return (
+            f"Total npu memory: "
+            f"{gb(self.total_memory):.2f} GiB; "
+            f"Total non KV cache memory: "
+            f"{gb(self.non_kv_cache_memory):.2f} GiB; "
+            f"torch peak memory increase: "
+            f"{gb(self.torch_peak_increase):.2f} GiB; "
+            f"non-torch forward increase memory: "
+            f"{gb(self.non_torch_increase):.2f} GiB."
+        )
+
+
+@contextlib.contextmanager
+def memory_profiling(
+    baseline_non_torch: int = 0,
+    weights_memory: int = 0,
+):
+    gc.collect()
+    npu.empty_cache()
+    npu.reset_peak_memory_stats()
+
+    result = MemoryProfilingResult()
+
+    result.before_profile.measure()
+
+    yield result
+
+    gc.collect()
+    npu.empty_cache()
+
+    result.after_profile.measure()
+
+    diff_profile = result.after_profile - result.before_profile
+    result.torch_peak_increase = diff_profile.torch_peak
+    result.non_torch_increase = result.after_profile.non_torch_memory - baseline_non_torch
+    result.total_memory = result.before_profile.total_memory
+
+    non_torch_memory = result.non_torch_increase
+    peak_activation_memory = result.torch_peak_increase
+    result.non_kv_cache_memory = (
+        non_torch_memory + peak_activation_memory + weights_memory
+    )
 
 
 def calc_block_mem(model_info, block_size, num_speculative_tokens=None):
@@ -113,6 +246,6 @@ class NpuMemoryWatcher:
                 peak_mem = 0
             return total_mem, peak_mem
 
-    def _set_warmup_mem_(self, warmup_mem):
+    def _set_warmup_mem(self, warmup_mem):
         self.warmup_mem = warmup_mem
         self.warmup = False
