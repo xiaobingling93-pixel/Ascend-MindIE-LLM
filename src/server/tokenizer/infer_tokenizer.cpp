@@ -924,7 +924,7 @@ Status TokenizerProcessPool::DoDecode(std::vector<int64_t> &tokenIds, std::strin
     // wait sub process done
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 60U;
+    ts.tv_sec += 120U; // wait for 120s
     int ret = sem_timedwait(&header->sems.produce, &ts);
     if (ret == -1) {
         ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
