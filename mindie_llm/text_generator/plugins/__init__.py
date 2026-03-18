@@ -29,7 +29,6 @@ def get_plugin(
             is_mix_model,
             plugin_list,
             model_role,
-            watcher,
             **plugin_config
         )
     else:
