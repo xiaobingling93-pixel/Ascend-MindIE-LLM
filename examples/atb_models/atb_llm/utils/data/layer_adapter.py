@@ -108,6 +108,8 @@ class ColumnParallelLinear(ColumnParallelLinearAdaptee, LayerSupportAtbGraph):
 
 class MergedColumnParallelLinear(MergedColumnParallelLinearAdaptee, ColumnParallelLinear):
     def __init__(self, *args, **kwargs):
+        # Set `sub_layer_cls` to the adapted version of ColumnParallelLinear to support atbgraph
+        MergedColumnParallelLinearAdaptee.sub_layer_cls = ColumnParallelLinear
         super().__init__(*args, **kwargs)
 
     def get_weights_for_atb_graph(
@@ -117,18 +119,47 @@ class MergedColumnParallelLinear(MergedColumnParallelLinearAdaptee, ColumnParall
     ) -> list[torch.Tensor]:
         if is_swiglu_quant_enabled:
             raise ValueError("Cannot set `is_swiglu_quant_enabled` to True in `MergedColumnParallelLinear`.")
-        weights = super().get_weights_for_atb_graph(padding=padding, quant_type=quant_type)
-        weights.extend([self._PLACEHOLDER] * 6)
+        # When MergedColumnParallelLinear has multiple linear_modules (different quant types per sub-layer),
+        # collect weights from each module
+        if len(self.linear_modules) > 1:
+            weights = []
+            for module in self.linear_modules:
+                weights_per_module = module.get_weights_for_atb_graph(padding=padding, quant_type=quant_type)
+                weights.extend(weights_per_module)
+        else:
+            # Single merged linear layer: use parent implementation and append placeholders
+            weights = super().get_weights_for_atb_graph(padding=padding, quant_type=quant_type)
+            weights.extend([self._PLACEHOLDER] * 6)
+        # Ensure total weight count does not exceed the limit (12)
+        if len(weights) > 12:
+            raise ValueError("Number of weights from `MergedColumnParallelLinear` should not exceed 12.")
         return weights
 
     def get_linear_descs(self) -> list[LinearTypeV2]:
-        linear_descs = super().get_linear_descs()
-        linear_descs.append(LinearTypeV2.INVALID)
+        # When MergedColumnParallelLinear has multiple linear_modules (different quant types per sub-layer),
+        # collect linear descs from each module
+        if len(self.linear_modules) > 1:
+            linear_descs = []
+            for module in self.linear_modules:
+                linear_descs.extend(module.get_linear_descs())
+        else:
+            # When MergedColumnParallelLinear is a merged linear layer,
+            # use parent implementation and append INVALID marker
+            linear_descs = super().get_linear_descs()
+            linear_descs.append(LinearTypeV2.INVALID)
         return linear_descs
 
     def get_weight_transpose_type(self) -> list[TransposeType]:
-        transpose_type = super().get_weight_transpose_type()
-        transpose_type.append(TransposeType.INVALID)
+        # When multiple linear_modules exist, collect transpose types from each module and concatenate
+        if len(self.linear_modules) > 1:
+            transpose_type = []
+            for module in self.linear_modules:
+                transpose_type.extend(module.get_weight_transpose_type())
+        else:
+            # When MergedColumnParallelLinear is a merged linear layer,
+            # use parent implementation and append INVALID marker
+            transpose_type = super().get_weight_transpose_type()
+            transpose_type.append(TransposeType.INVALID)
         return transpose_type
 
 

@@ -392,6 +392,7 @@ class ModelRunner:
 
         if self.prealloc_weight_mem_on_npu:
             from atb_llm.utils.data.quant_method_adapter import MethodSupportAtbGraph
+            from atb_llm.utils.data.layer_adapter import MergedColumnParallelLinear
             from mindie_llm.runtime.utils.loader.default_model_loader import DefaultModelLoader
             DefaultModelLoader().load_weights(self.model, self.model_name_or_path)
             # NOTE: Since `QuantizationMethodBase` objects are replaced with corresponding adapter objects,
@@ -401,6 +402,13 @@ class ModelRunner:
                 quant_method = getattr(module, "quant_method", None)
                 if isinstance(quant_method, MethodSupportAtbGraph):
                     quant_method.process_weights_after_loading(module)
+                # Handle MergedColumnParallelLinear with multiple linear_modules: when sub-layers have different
+                # quant types they are split into independent linear_modules, each requiring quant weight processing
+                if isinstance(module, MergedColumnParallelLinear) and len(module.linear_modules) > 1:
+                    for m in module.linear_modules:
+                        quant_method = getattr(m, "quant_method", None)
+                        if isinstance(quant_method, MethodSupportAtbGraph):
+                            quant_method.process_weights_after_loading(m)
             print_log(self.rank, logger.info, f"load weight done.")
         else:
             if weights_options is not None and not weights_options.low_cpu_memory_mode:

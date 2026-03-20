@@ -87,6 +87,7 @@ class TestLayerAdapter(unittest.TestCase):
         layer.quant_method.get_linear_descs.return_value = LinearTypeV2.FLOAT16
         layer.quant_method.get_weight_transpose_type.return_value = TransposeType.NOT_TRANSPOSE
         layer._PLACEHOLDER = torch.tensor([888], dtype=torch.float32, device='cpu')
+        layer.linear_modules = []
 
         weights = layer.get_weights_for_atb_graph(padding=True)
         self.assertEqual(len(weights), 7)

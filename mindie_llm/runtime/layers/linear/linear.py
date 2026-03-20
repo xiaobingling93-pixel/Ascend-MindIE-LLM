@@ -9,6 +9,7 @@
 # See the Mulan PSL v2 for more details.
 
 import torch
+from torch import nn
 import torch.distributed as dist
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelInfo
 from mindie_llm.runtime.layers.custom_layer import CustomLayer
@@ -399,9 +400,18 @@ class ColumnParallelLinear(LinearBase):
 
 class MergedColumnParallelLinear(ColumnParallelLinear):
     """
-    Merges multiple ColumnParallelLinear layers into a single layer for efficiency.
+    Merges multiple `sub_layer_cls` (default to ColumnParallelLinear) layers into a single layer for efficiency.
+
+    If the quantization types of the original layers are the same, the layers are merged into a single layer.
     The weight matrix is formed by concatenating the weights of the original layers.
+
+    If the quantization types of the original layers are different, the layers are split into separate linear_modules.
     """
+
+    # The sub-layer class to use for creating independent linear modules
+    # when the quantization types of the original layers are different
+    sub_layer_cls = ColumnParallelLinear
+
     def __init__(
         self,
         input_size: int,
@@ -430,19 +440,53 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
 
         self.output_sizes = output_sizes
 
-        super().__init__(
-            input_size,
-            sum(output_sizes),
-            bias=bias,
-            skip_bias_add=skip_bias_add,
-            return_bias=return_bias,
-            weight_dtype=weight_dtype,
-            bias_dtype=bias_dtype,
-            quant_config=quant_config,
-            prefix=prefix,
-            parallel_info=parallel_info,
-            gather_output=gather_output
-        )
+        # Initialize list of linear modules to store independently split linear layers
+        self.linear_modules = []
+        # Get the quantization type for each prefix
+        quant_type_per_linear = []
+        if isinstance(prefix, list) and len(prefix) > 1 and quant_config is not None:
+            for p in prefix:
+                quant_type_per_linear.append(quant_config.get_quant_type_by_weight_name(p, "weight"))
+        # When linear sub-layers have different quantization types, split them into separate linear_modules
+        # so each linear layer uses the correct quantization method for its weights
+        if len(set(quant_type_per_linear)) > 1:
+            # Create an independent linear module for each prefix and corresponding output size
+            for p, output_size in zip(prefix, output_sizes):
+                self.linear_modules.append(
+                    self.sub_layer_cls(
+                        input_size,
+                        output_size,
+                        bias=bias,
+                        skip_bias_add=skip_bias_add,
+                        return_bias=return_bias,
+                        weight_dtype=weight_dtype,
+                        bias_dtype=bias_dtype,
+                        quant_config=quant_config,
+                        prefix=p,
+                        parallel_info=parallel_info,
+                        gather_output=gather_output
+                    )
+                )
+            # Call nn.Module.__init__ directly instead of super().__init__ to avoid ColumnParallelLinear init,
+            # since we already created multiple independent linear modules without a merged weight matrix
+            nn.Module.__init__(self)
+            self.prefix = prefix
+            self.return_bias = return_bias
+        else:
+            # All linear sub-layers share the same quant type; initialize as a single ColumnParallelLinear layer
+            super().__init__(
+                input_size,
+                sum(output_sizes),
+                bias=bias,
+                skip_bias_add=skip_bias_add,
+                return_bias=return_bias,
+                weight_dtype=weight_dtype,
+                bias_dtype=bias_dtype,
+                quant_config=quant_config,
+                prefix=prefix,
+                parallel_info=parallel_info,
+                gather_output=gather_output
+            )
 
     def weight_loader(
         self,
@@ -478,6 +522,41 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
             )
         else:
             param.load_weight(loaded_weight=loaded_weight)
+
+    def forward(
+        self,
+        input_,
+    ) -> torch.Tensor | tuple[torch.Tensor, BaseParameter | None]:
+        # When multiple linear_modules exist, run forward on each and concatenate outputs along the last dim
+        if len(self.linear_modules) > 1:
+            outputs = []
+            if self.return_bias:
+                # When return_bias is True, get output and bias from each module, then concatenate outputs
+                for module in self.linear_modules:
+                    output, bias = module.forward(input_)
+                    outputs.append(output)
+                return torch.cat(outputs, dim=-1), bias
+            else:
+                # Return only outputs; concatenate outputs from all modules
+                for module in self.linear_modules:
+                    outputs.append(module.forward(input_))
+                return torch.cat(outputs, dim=-1)
+        else:
+            # Single merged linear layer: use parent's forward
+            return super().forward(input_)
+
+    def extra_repr(self) -> str:
+        # When multiple linear_modules exist, build representation from each module's extra_repr
+        if len(self.linear_modules) > 1:
+            s = ""
+            for module in self.linear_modules:
+                s += module.extra_repr()
+                s += ","
+            return s
+        else:
+            # Single merged linear layer: use parent's extra_repr
+            s = super().extra_repr()
+            return s
 
     def _post_init(self) -> None:
         for output_size in self.output_sizes:

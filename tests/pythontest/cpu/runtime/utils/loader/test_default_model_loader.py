@@ -16,6 +16,9 @@ from torch import nn
 from mindie_llm.runtime.utils.loader.default_model_loader import DefaultModelLoader
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE
 from mindie_llm.runtime.layers.quantization.quantization_method_base import QuantizationMethodBase
+from mindie_llm.runtime.layers.linear.linear import MergedColumnParallelLinear
+from mindie_llm.runtime.layers.quantization.ms_model_slim.quantization_config import QuantizationConfig
+from mindie_llm.runtime.layers.quantization.ms_model_slim.quant_type import QuantType
 from mindie_llm.runtime.utils.distributed import set_parallel_info_manager
 
 
@@ -178,6 +181,96 @@ class TestDefaultModelLoader(unittest.TestCase):
 
         # Should not call get_tensor for None param
         mock_weight_file_handler.get_tensor.assert_not_called()
+        mock_pbar.update.assert_called_once_with(1)
+
+    def test_load_modules_with_progress_value_error_without_prefix(self):
+        """Test _load_modules_with_progress with ValueError but no module prefix."""
+        mock_weight_file_handler = MagicMock()
+        self.loader._weight_file_handler = mock_weight_file_handler
+
+        mock_param = MagicMock()
+        mock_param.weight_loader = MagicMock()
+        mock_module = MagicMock()
+        mock_module.named_parameters.return_value = [("weight", mock_param)]
+        mock_module.prefix = None
+
+        modules_dict = {"test": mock_module}
+        mock_pbar = MagicMock()
+
+        # Raises ValueError
+        mock_weight_file_handler.get_tensor.side_effect = ValueError("Weight file was not found")
+
+        # Should raise the exception
+        with self.assertRaises(ValueError):
+            self.loader._load_modules_with_progress(modules_dict, mock_pbar)
+
+    def test_load_single_prefix_module_raises_on_non_weight_file_error(self):
+        """Test _load_single_prefix_module raises clear ValueError when get_tensor fails with non-weight-file error."""
+        mock_weight_file_handler = MagicMock()
+        self.loader._weight_file_handler = mock_weight_file_handler
+
+        mock_param = MagicMock()
+        mock_param.weight_loader = MagicMock()
+        mock_module = MagicMock()
+        mock_module.named_parameters.return_value = [("weight", mock_param)]
+        mock_module.prefix = "layer"
+
+        mock_weight_file_handler.get_tensor.side_effect = ValueError("Invalid tensor format")
+
+        with self.assertRaises(ValueError) as ctx:
+            self.loader._load_single_prefix_module(mock_module, "prefix")
+        self.assertIn("Cannot load weights of prefix.weight", str(ctx.exception))
+        self.assertIn("Invalid tensor format", str(ctx.exception.__cause__))
+
+    @patch('mindie_llm.runtime.utils.loader.default_model_loader.get_parallel_info_manager')
+    def test_load_modules_with_progress_merged_column_linear_multiple_modules(
+        self, mock_get_parallel_info_manager
+    ):
+        """Test _load_modules_with_progress loads weights and processes quant for MergedColumnParallelLinear with multiple linear_modules."""
+        mock_get_parallel_info_manager.return_value = MagicMock(rank=0, world_size=2)
+        mock_weight_file_handler = MagicMock()
+        self.loader._weight_file_handler = mock_weight_file_handler
+        # Return correctly shaped tensors: weight (128, 512) and bias (128) per partition
+
+        def get_tensor_side_effect(name):
+            if "weight" in name:
+                return torch.randn(128, 512)
+            return torch.randn(128)
+        mock_weight_file_handler.get_tensor.side_effect = get_tensor_side_effect
+
+        mock_parallel_info = MagicMock()
+        mock_parallel_info.rank = 0
+        mock_parallel_info.group_size = 2
+        mock_parallel_info.process_group = MagicMock()
+
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(side_effect=[
+            QuantType.W8A8,
+            QuantType.W8A8_DYNAMIC,
+        ])
+        mock_quant_method = MagicMock(spec=QuantizationMethodBase)
+        mock_quant_method.process_weights_after_loading = MagicMock()
+        mock_quant_config.get_quant_method = MagicMock(return_value=mock_quant_method)
+
+        merged_layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=mock_parallel_info,
+        )
+        self.assertEqual(len(merged_layer.linear_modules), 2)
+
+        modules_dict = {"mlp": merged_layer}
+        mock_pbar = MagicMock()
+        self.loader._load_modules_with_progress(modules_dict, mock_pbar)
+
+        # _load_single_prefix_module is invoked for each (prefix, linear_module) pair
+        self.assertGreaterEqual(mock_weight_file_handler.get_tensor.call_count, 4)  # 2 modules * (weight + bias)
+        # process_weights_after_loading should be called on each linear_module
+        self.assertEqual(mock_quant_method.process_weights_after_loading.call_count, 2)
+        mock_quant_method.process_weights_after_loading.assert_any_call(merged_layer.linear_modules[0])
+        mock_quant_method.process_weights_after_loading.assert_any_call(merged_layer.linear_modules[1])
         mock_pbar.update.assert_called_once_with(1)
 
     def test_load_modules_with_progress_fused_moe(self):

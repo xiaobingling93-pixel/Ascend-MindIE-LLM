@@ -821,6 +821,164 @@ class TestMergedColumnParallelLinear(unittest.TestCase):
         # Output should be partitioned
         self.assertEqual(output.shape, (2, 3, 256))
 
+    def test_init_with_different_quant_types(self):
+        """Test initialization when MergedColumnParallelLinear has multiple linear sub-layers with different quant types."""
+        self.mock_set_parallel_info_manager()
+
+        # Create mock quant config where two prefixes map to different quant types
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(side_effect=[
+            QuantType.W8A8,  # Quant type for first prefix
+            QuantType.W8A8_DYNAMIC,  # Quant type for second prefix
+        ])
+
+        layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=self.mock_parallel_info,
+        )
+
+        # Verify multiple independent linear_modules were created
+        self.assertEqual(len(layer.linear_modules), 2)
+        self.assertEqual(layer.prefix, ["gate", "up"])
+        self.assertFalse(layer.return_bias)
+        # Verify each linear_module has the correct output size
+        self.assertEqual(layer.linear_modules[0].output_size, 256)
+        self.assertEqual(layer.linear_modules[1].output_size, 256)
+
+    def test_init_with_same_quant_types(self):
+        """Test initialization when MergedColumnParallelLinear has multiple linear sub-layers with the same quant type."""
+        self.mock_set_parallel_info_manager()
+
+        # Create mock quant config where both prefixes map to the same quant type
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(return_value=QuantType.W8A8)
+
+        layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=self.mock_parallel_info,
+        )
+
+        # Verify no independent linear_modules; traditional merged init is used
+        self.assertEqual(len(layer.linear_modules), 0)
+        self.assertEqual(layer.output_size, 512)  # sum of output_sizes
+
+    @patch('torch.nn.functional.linear')
+    def test_forward_with_multiple_linear_modules(self, mock_linear):
+        """Test forward pass when MergedColumnParallelLinear has multiple linear_modules."""
+        self.mock_set_parallel_info_manager()
+
+        # Create mock quant config with different quant types per prefix
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(side_effect=[
+            QuantType.W8A8,
+            QuantType.W8A8_DYNAMIC,
+        ])
+
+        layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=self.mock_parallel_info,
+        )
+
+        # Verify multiple independent linear_modules were created
+        self.assertEqual(len(layer.linear_modules), 2)
+
+        # Create input
+        x = torch.randn(2, 3, 512)
+
+        # Mock forward of each linear_module
+        mock_output1 = torch.randn(2, 3, 256)
+        mock_output2 = torch.randn(2, 3, 256)
+        layer.linear_modules[0].forward = MagicMock(return_value=mock_output1)
+        layer.linear_modules[1].forward = MagicMock(return_value=mock_output2)
+
+        # Run forward
+        output = layer.forward(x)
+
+        # Verify output is the concatenation of sub-module outputs
+        expected_output = torch.cat([mock_output1, mock_output2], dim=-1)
+        torch.testing.assert_close(output, expected_output)
+        # Verify forward was called on each linear_module
+        layer.linear_modules[0].forward.assert_called_once_with(x)
+        layer.linear_modules[1].forward.assert_called_once_with(x)
+
+    @patch('torch.nn.functional.linear')
+    def test_forward_with_multiple_linear_modules_return_bias(self, mock_linear):
+        """Test forward when MergedColumnParallelLinear has multiple linear_modules and return_bias=True."""
+        self.mock_set_parallel_info_manager()
+
+        # Create mock quant config with different quant types per prefix
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(side_effect=[
+            QuantType.W8A8,
+            QuantType.W8A8_DYNAMIC,
+        ])
+
+        layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=self.mock_parallel_info,
+            return_bias=True,
+        )
+
+        # Create input
+        x = torch.randn(2, 3, 512)
+
+        # Mock forward of each linear_module to return (output, bias)
+        mock_output1 = torch.randn(2, 3, 256)
+        mock_output2 = torch.randn(2, 3, 256)
+        mock_bias = MagicMock()
+        layer.linear_modules[0].forward = MagicMock(return_value=(mock_output1, mock_bias))
+        layer.linear_modules[1].forward = MagicMock(return_value=(mock_output2, mock_bias))
+
+        # Run forward
+        output, bias = layer.forward(x)
+
+        # Verify output is concatenation and bias is returned
+        expected_output = torch.cat([mock_output1, mock_output2], dim=-1)
+        torch.testing.assert_close(output, expected_output)
+        self.assertEqual(bias, mock_bias)
+
+    def test_extra_repr_with_multiple_linear_modules(self):
+        """Test extra_repr when MergedColumnParallelLinear has multiple linear_modules."""
+        self.mock_set_parallel_info_manager()
+
+        # Create mock quant config with different quant types per prefix
+        mock_quant_config = MagicMock()
+        mock_quant_config.get_quant_type_by_weight_name = MagicMock(side_effect=[
+            QuantType.W8A8,
+            QuantType.W8A8_DYNAMIC,
+        ])
+
+        layer = MergedColumnParallelLinear(
+            input_size=512,
+            output_sizes=[256, 256],
+            prefix=["gate", "up"],
+            quant_config=mock_quant_config,
+            parallel_info=self.mock_parallel_info,
+        )
+
+        # Mock extra_repr of each linear_module
+        layer.linear_modules[0].extra_repr = MagicMock(return_value="module1_repr")
+        layer.linear_modules[1].extra_repr = MagicMock(return_value="module2_repr")
+
+        # Get string representation
+        repr_str = layer.extra_repr()
+
+        # Verify representation includes both modules
+        self.assertIn("module1_repr", repr_str)
+        self.assertIn("module2_repr", repr_str)
+
 
 class TestQKVParallelLinear(unittest.TestCase):
     """Test cases for QKVParallelLinear."""

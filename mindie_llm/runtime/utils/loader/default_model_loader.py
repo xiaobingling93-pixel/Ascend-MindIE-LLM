@@ -15,6 +15,7 @@ from torch import nn
 from tqdm.auto import tqdm
 
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE
+from mindie_llm.runtime.layers.linear.linear import MergedColumnParallelLinear
 from mindie_llm.runtime.utils.loader.weight_utils import WeightsFileHandler
 from mindie_llm.runtime.layers.quantization.ms_model_slim.quant_type import QuantType
 from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import get_weight_mapper_cls
@@ -95,6 +96,8 @@ class DefaultModelLoader:
                 if "Weight file was not found" in str(e) and hasattr(module, "prefix"):
                     full_param_name = f"{module.prefix}.{weight_suffix}"
                     loaded_weight = self._weight_file_handler.get_tensor(full_param_name)
+                else:
+                    raise ValueError(f"Cannot load weights of {full_param_name}.") from e
             param.weight_loader(param, loaded_weight)
             update_global_param_dict(full_param_name, param)
     
@@ -114,7 +117,10 @@ class DefaultModelLoader:
                     raise NotImplementedError(f"This model type has not implemented W8A8SC quant method yet.")
                 prefix = mapper_cls.map_model_to_weight(prefix)
             # Handling multi-prefix modules
-            if hasattr(module, "prefix") and isinstance(module.prefix, list) and quantize not in [QuantType.W8A8SC]:
+            if isinstance(module, MergedColumnParallelLinear) and len(module.linear_modules) > 1:
+                for p, m in zip(module.prefix, module.linear_modules):
+                    self._load_single_prefix_module(m, p)
+            elif hasattr(module, "prefix") and isinstance(module.prefix, list) and quantize not in [QuantType.W8A8SC]:
                 self._load_multi_prefix_module(module)
             elif isinstance(module, FusedMoE):
                 # Handle weights (and optionally scale/bias) for every local expert.
@@ -135,6 +141,12 @@ class DefaultModelLoader:
             quant_method = getattr(module, "quant_method", None)
             if isinstance(quant_method, QuantizationMethodBase):
                 quant_method.process_weights_after_loading(module)
+            # For MergedColumnParallelLinear with multiple linear_modules, process quant weights per sub-module
+            if isinstance(module, MergedColumnParallelLinear) and len(module.linear_modules) > 1:
+                for m in module.linear_modules:
+                    quant_method = getattr(m, "quant_method", None)
+                    if isinstance(quant_method, QuantizationMethodBase):
+                        quant_method.process_weights_after_loading(m)
 
             # Note: a common process_weights_after_loading method for module is needed.
             attn_impl = getattr(module, "impl", None)
