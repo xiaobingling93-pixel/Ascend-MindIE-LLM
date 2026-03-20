@@ -1,3 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024; NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
+# Copyright 2023 The vLLM team.
+# Copyright 2023 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Implement part of this file based on vllm-project/vllm
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 # MindIE is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -17,6 +29,7 @@ import torch.distributed as dist
 import torch_npu
 
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
+from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.singleton import Singleton
 from mindie_llm.runtime.utils.npu.device_utils import DeviceType, get_npu_node_info
 
@@ -114,7 +127,7 @@ class TokenDispatcherWithAllGather(Singleton, MoETokenDispatcher):
     def __init__(self):
         super().__init__()
         self.parallel_info = get_parallel_info_manager()
-        self.ep_size = self.parallel_info.moe_ep.group_size
+        self.ep_size = self.parallel_info.get(ParallelType.MOE_EP).group_size
 
     def token_dispatch(
         self,
@@ -174,7 +187,7 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
 
     def __init__(self):
         self.parallel_info = get_parallel_info_manager()
-        device_group = self.parallel_info.moe_ep_mc2.process_group
+        device_group = self.parallel_info.get(ParallelType.MOE_EP_MC2).process_group
         local_rank = dist.get_rank(group=device_group)
         backend = device_group._get_backend(torch.device("npu"))
         self.moe_all_to_all_group_name = backend.get_hccl_comm_name(local_rank)

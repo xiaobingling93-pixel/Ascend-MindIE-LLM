@@ -147,16 +147,41 @@ class AclGraphBackend:
         return hidden_state[:num_actual_tokens]
 
     @staticmethod
-    def _get_capture_sizes(max_num_tokens_per_batch: int) -> list[int]:
+    def _get_capture_sizes(max_num_tokens_per_batch: int, step: int = 8) -> list[int]:
         """Get list of capture sizes for graph compilation.
+        
+        Generates power-of-2 sizes for small batches, then linear steps for larger batches.
+        Always includes max_num_tokens_per_batch to ensure full coverage.
         
         Args:
             max_num_tokens_per_batch: Maximum number of tokens per batch.
+            step: Step size for large batches (default 8, aligned to NPU memory).
             
         Returns:
-            List of capture sizes: [1, 2, 4, 8, 16, ..., max_num_tokens_per_batch].
+            Sorted list of capture sizes, always ending with max_num_tokens_per_batch.
+            
+        Example:
+            >>> _get_capture_sizes(20)
+            [1, 2, 4, 8, 16, 20]
+            >>> _get_capture_sizes(9)
+            [1, 2, 4, 8, 9]
+            >>> _get_capture_sizes(5)
+            [1, 2, 4, 5]
         """
-        return [1, 2, 4] + list(range(8, max_num_tokens_per_batch + 8, 8))
+        if max_num_tokens_per_batch < 1:
+            raise ValueError(
+                f"max_num_tokens_per_batch must be >= 1, got {max_num_tokens_per_batch}"
+            )
+        
+        # Small sizes: powers of 2
+        small_sizes = [1, 2, 4]
+        
+        # Large sizes: linear steps (excludes max)
+        large_sizes = range(step, max_num_tokens_per_batch, step)
+        
+        # Merge, deduplicate, ensure max included, and sort
+        all_sizes = sorted({*small_sizes, *large_sizes, max_num_tokens_per_batch})
+        return [s for s in all_sizes if s <= max_num_tokens_per_batch]
 
     def get_padded_graph_size(self, x: int) -> int:
         """Get the padded graph size for a given number of tokens.

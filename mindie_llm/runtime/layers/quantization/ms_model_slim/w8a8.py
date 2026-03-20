@@ -1,3 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2024; NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
+# Copyright 2023 The vLLM team.
+# Copyright 2023 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Implement part of this file based on vllm-project/vllm
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 # MindIE is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -492,5 +504,33 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
     def process_weights_after_loading(self, layer):
         layer.gate_up_weight.data = layer.gate_up_weight.data.transpose(-2, -1).contiguous()
         layer.down_weight.data = layer.down_weight.data.transpose(-2, -1).contiguous()
-        layer.gate_up_weight_scale.data = layer.gate_up_weight_scale.data.squeeze(-1).to(torch.float32)
-        layer.down_weight_scale.data = layer.down_weight_scale.data.squeeze(-1)
+        layer.gate_up_weight_scale.data = layer.gate_up_weight_scale.data.view(
+            layer.gate_up_weight_scale.data.shape[0], -1).to(torch.float32)
+        layer.down_weight_scale.data = layer.down_weight_scale.data.view(
+            layer.down_weight_scale.data.shape[0], -1)
+        layer.register_parameter(
+            "fused_gate_up_weight_scale", 
+            ScalerParameter(scale_from_float_to_int64(layer.gate_up_weight_scale.data))
+        )
+        layer.register_parameter(
+            "fused_down_weight_scale", 
+            ScalerParameter(scale_from_float_to_int64(layer.down_weight_scale.data))
+        )
+
+        soc_name = get_npu_node_info().soc_name
+        if soc_name in SUPPORT_NZ_NPU_LIST:
+            layer.gate_up_weight.data = torch_npu.npu_format_cast(layer.gate_up_weight.data, 29)
+            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
+                       torch_npu.get_npu_format(layer.gate_up_weight.data))
+            layer.down_weight.data = torch_npu.npu_format_cast(layer.down_weight.data, 29)
+            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
+                       torch_npu.get_npu_format(layer.down_weight.data))
+
+
+def scale_from_float_to_int64(scale):
+    """Converts float32 tensor to int64"""
+    import numpy as np
+    scale = torch.from_numpy(
+        np.frombuffer(scale.cpu().to(torch.float32).numpy().tobytes(),
+                    dtype=np.int32).astype(np.int64)).to(scale.device)
+    return scale

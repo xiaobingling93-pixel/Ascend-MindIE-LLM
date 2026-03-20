@@ -58,7 +58,6 @@ class DeepseekV3Moe(nn.Module):
         self.expert_num = config.n_routed_experts
         self.expert_list = assign_experts(config.n_routed_experts,
             parallel_info.moe_ep.group_size)[parallel_info.moe_ep.rank]
-
         self.experts = FusedMoE(
             num_experts=config.n_routed_experts,
             topk_num=self.topk_num,

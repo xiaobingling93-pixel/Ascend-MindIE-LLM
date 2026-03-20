@@ -38,6 +38,7 @@ class ParallelType(str, Enum):
     LM_HEAD_TP = "lm_head_tp"
     MOE_TP = "moe_tp"
     MOE_EP = "moe_ep"
+    MOE_EP_MC2 = "moe_ep_mc2"
 
 
 @dataclass
@@ -147,6 +148,7 @@ class ParallelInfoManager:
             ParallelType.MOE_TP: self.moe_tp,
             ParallelType.MOE_EP: self.moe_ep,
             ParallelType.WORLD: self.world,
+            ParallelType.MOE_EP_MC2: self.moe_ep_mc2,
         }
 
     @staticmethod

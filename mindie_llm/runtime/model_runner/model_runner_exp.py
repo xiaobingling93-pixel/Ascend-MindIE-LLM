@@ -21,7 +21,7 @@ from mindie_llm.runtime.utils.cpu.affinity import bind_cpus
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_hbm_info
 from mindie_llm.runtime.models import get_router_ins
 from mindie_llm.runtime.model_runner.forward_context_exp import create_forward_context, set_forward_context, \
-    get_forward_context, BatchDescriptor, ForwardContext
+    get_forward_context, BatchDescriptor, ForwardContext, set_mc2_token_capacity
 from mindie_llm.runtime.model_runner.forward_metadata.attn_metadata import AttentionMetadata
 from mindie_llm.runtime.model_runner.forward_metadata.dp_metadata import DPMetadata
 from mindie_llm.runtime.utils.torch_utils import set_default_torch_dtype
@@ -193,6 +193,7 @@ class ModelRunnerExp:
         sampler_config = kwargs.get('sampler_config', None)
         if ENV_utils.async_inference:
             self.sampler = Sampler(sampler_config)
+        set_mc2_token_capacity(self._max_batch_size, self.num_speculative_tokens + 1)
 
     def load_weights(self) -> None:
         """Load model weights and initialize rotary embeddings."""

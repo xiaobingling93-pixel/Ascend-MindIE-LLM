@@ -12,6 +12,7 @@ import math
 from typing import List
 
 import torch
+import torch_npu
 import torch.distributed as dist
 
 from mindie_llm.runtime.layers.custom_layer import CustomLayer
@@ -31,6 +32,10 @@ from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.distributed.utils import even_divide
 from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+
+# Recommended value for fused operator output buffer size (in elements).
+# Determined empirically based on current npu_dispatch_ffn_combine operator constraints.
+MAX_OUTPUT_SIZE: int = 65536
 
 
 class FusedMoE(CustomLayer):
@@ -66,6 +71,11 @@ class FusedMoE(CustomLayer):
         self.activation = activation
         self.num_experts = num_experts
         self.topk = topk_num
+        # Max receivable tokens per device.
+        # Formula is MAX_OUTPUT_SIZE / load_balance_factor / topk
+        # Note: load_balance_factor=2 is recommended by the fused operator spec 
+        #       to account for load balancing skew (reserves 2x the average per-card capacity).
+        self.max_num_tokens_per_device = MAX_OUTPUT_SIZE // 2 // self.topk
         self.expert_list = assign_experts(self.num_experts, self.moe_ep_size)[self.moe_ep_rank]
         self.num_local_experts = len(self.expert_list)
         self.expert_map = torch.full(size=(self.num_experts,), fill_value=-1, device='npu')
@@ -75,6 +85,9 @@ class FusedMoE(CustomLayer):
         else:
             # Get moe quant method through gate proj weights of expert 0
             self.quant_method = self.quant_config.get_quant_method(self, prefix=f"{self.prefix}.0.{self.suffix[0]}")
+        # Only created when MC2 used fused op
+        self._moe_ep_group = None
+
         self._create_weights()
         self._post_init()
 
@@ -110,8 +123,28 @@ class FusedMoE(CustomLayer):
             topk_ids: torch.Tensor,
     ) -> torch.Tensor:
         moe_comm_type = select_moe_comm_method(
-            quant_type=None
+            quant_type=None,
+            max_num_tokens_per_device=self.max_num_tokens_per_device
         )
+
+        if moe_comm_type == MoECommType.FUSED_MC2:
+            import mie_ops
+            # FUSED_MC2 mode: Directly invoke the fused dispatch + FFN + combine operator
+            self._create_moe_ep_group()
+            final_hidden_states = torch.empty_like(hidden_states)
+            torch.ops.mie_ops.npu_dispatch_ffn_combine(
+                x=hidden_states,
+                weight1=[self.gate_up_weight],
+                weight2=[self.down_weight],
+                expert_idx=topk_ids,
+                scale1=[self.fused_gate_up_weight_scale],
+                scale2=[self.fused_down_weight_scale],
+                probs=topk_weights.to(self.weight_dtype).to(torch.float32),
+                group=self._moe_ep_group,
+                max_output_size=MAX_OUTPUT_SIZE,
+                out=final_hidden_states,
+            )
+            return final_hidden_states
 
         dispatcher = get_cached_dispatcher(moe_comm_type=moe_comm_type)
 
@@ -199,6 +232,15 @@ class FusedMoE(CustomLayer):
             bias_dtype=self.weight_dtype,
             weight_loader=None,
         )
+
+    def _create_moe_ep_group(self):
+        if self._moe_ep_group is not None:
+            return
+        parallel_info_manager = get_parallel_info_manager()
+        device_group = parallel_info_manager.get(ParallelType.MOE_EP_MC2).process_group
+        local_rank = dist.get_rank(group=device_group)
+        backend = device_group._get_backend(torch.device("npu"))
+        self._moe_ep_group = backend.get_hccl_comm_name(local_rank)
 
 
 def assign_experts(expert_count, world_size):

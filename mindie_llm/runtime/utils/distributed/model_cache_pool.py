@@ -264,13 +264,13 @@ class ModelCachePool:
                     logger.error(
                         f"Npu out of memory, OOM.\n"
                         f"The calculated num_blocks is a negative number: {num_blocks}.\n" 
-                        f"Please check if: 1) the available GPU memory is sufficient or the mem_allocate_ratio is \
+                        f"Please check if: 1) the available NPU memory is sufficient or the mem_allocate_ratio is \
                             appropriate, 2) the max_batch_size is appropriate."
                     )
                     raise RuntimeError(
                         f"Npu out of memory, OOM.\n"
                         f"The calculated num_blocks is a negative number: {num_blocks}.\n" 
-                        f"Please check if: 1) the available GPU memory is sufficient or the mem_allocate_ratio is \
+                        f"Please check if: 1) the available NPU memory is sufficient or the mem_allocate_ratio is \
                             appropriate, 2) the max_batch_size is appropriate."
                     )
                 self._groups[group].num_blocks = num_blocks

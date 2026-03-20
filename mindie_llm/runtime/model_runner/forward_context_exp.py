@@ -20,6 +20,23 @@ from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 
 
+_MC2_TOKEN_CAPACITY = None
+MAX_MC2_OPERATOR_CAPACITY = 512
+
+
+def set_mc2_token_capacity(max_num_reqs, uniform_decode_query_len):
+    max_num_tokens = max_num_reqs * uniform_decode_query_len
+    tp_size = get_parallel_info_manager().get(ParallelType.ATTN_TP).group_size
+    # Use integer arithmetic for ceiling division.
+    num_tokens_per_tp_rank = min((max_num_tokens + tp_size - 1) // tp_size, MAX_MC2_OPERATOR_CAPACITY)
+    global _MC2_TOKEN_CAPACITY
+    _MC2_TOKEN_CAPACITY = num_tokens_per_tp_rank * tp_size
+
+
+def get_mc2_token_capacity():
+    return _MC2_TOKEN_CAPACITY
+
+
 class BatchDescriptor(NamedTuple):
     """Descriptor for batch information.
     

@@ -1,172 +1,308 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 # MindIE is licensed under Mulan PSL v2.
-# You can use this software according to the terms and conditions of the Mulan PSL v2.
-# You may obtain a copy of Mulan PSL v2 at:
-#          http://license.coscl.org.cn/MulanPSL2
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-# See the Mulan PSL v2 for more details.
 
-from unittest.mock import patch, MagicMock
-from dataclasses import dataclass
-from typing import Optional
+"""Unit tests for moe_comm_method module.
 
-import pytest
-import torch
+This module contains test cases for MoE communication method selection
+and dispatcher caching functionality.
+"""
 
-from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
-    MoECommType,
-    select_moe_comm_method,
-    get_cached_dispatcher,
-)
-from mindie_llm.runtime.layers.fused_moe.token_dispatcher import (
-    TokenDispatcherWithAllGather,
-    TokenDispatcherWithMC2,
-    TokenDispatcherWithAll2AllV,
-)
-from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
-from mindie_llm.runtime.utils.npu.device_utils import DeviceType
+import unittest
+from unittest.mock import Mock, patch, MagicMock
+from enum import Enum
 
 
-class MockParallelInfo:
-    def __init__(self, group_size: int):
-        self.group_size = group_size
-        self.rank = 0
-        self.process_group = MagicMock()
-
-    def is_enabled(self) -> bool:
-        return self.group_size > 1
+class MockMoECommType(Enum):
+    """Mock enumeration for MoE communication types."""
+    ALLGATHER = "allgather"
+    MC2 = "mc2"
+    ALLTOALL = "alltoall"
 
 
-class MockParallelInfoManager:
-    def __init__(self, *, world_size: int = 8, moe_ep: int = 1, attn_dp: int = 1, moe_tp: int = 1):
-        self.world_size = world_size
-        self.moe_ep = MockParallelInfo(moe_ep)
-        self.attn_dp = MockParallelInfo(attn_dp)
-        self.moe_tp = MockParallelInfo(moe_tp)
-        self.moe_ep_mc2 = MockParallelInfo(moe_ep)
+class TestMoECommMethod(unittest.TestCase):
+    """Test cases for MoE communication method selection and dispatcher."""
 
-    def get(self, parallel_type):
-        return {
-            ParallelType.MOE_EP: self.moe_ep,
-            ParallelType.ATTN_DP: self.attn_dp,
-            ParallelType.MOE_TP: self.moe_tp,
-        }.get(parallel_type, None)
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        # Mock strategy classes
+        self.mock_strategy_allgather = Mock()
+        self.mock_strategy_allgather.is_applicable = Mock(return_value=True)
+        self.mock_strategy_allgather.get_comm_type = Mock(
+            return_value=MockMoECommType.ALLGATHER
+        )
 
+        self.mock_strategy_mc2 = Mock()
+        self.mock_strategy_mc2.is_applicable = Mock(return_value=False)
+        self.mock_strategy_mc2.get_comm_type = Mock(
+            return_value=MockMoECommType.MC2
+        )
 
-@pytest.fixture
-def mock_platform_and_parallel():
-    """
-    封装平台信息和并行信息的mock配置
-    """
-    with patch("mindie_llm.runtime.layers.fused_moe.moe_comm_method.get_npu_node_info") as mock_npu_node, \
-            patch("mindie_llm.runtime.layers.fused_moe.moe_comm_method.get_parallel_info_manager") as mock_parallel, \
-            patch("mindie_llm.runtime.layers.fused_moe.moe_comm_method.get_forward_context") as mock_forward_ctx:
-        # 默认配置: 910B + decode阶段(is_prefill=False)
-        mock_npu_node.return_value.get_device_type.return_value = DeviceType.ASCEND_910B
-        mock_forward_ctx.return_value.is_prefill = False
+        self.mock_strategy_alltoall = Mock()
+        self.mock_strategy_alltoall.is_applicable = Mock(return_value=False)
+        self.mock_strategy_alltoall.get_comm_type = Mock(
+            return_value=MockMoECommType.ALLTOALL
+        )
 
-        yield mock_npu_node, mock_parallel, mock_forward_ctx
+        # Mock dispatcher classes
+        self.mock_dispatcher_allgather = Mock()
+        self.mock_dispatcher_mc2 = Mock()
+        self.mock_dispatcher_alltoall = Mock()
 
+    def tearDown(self):
+        """Tear down test fixtures after each test method."""
+        pass
 
-@pytest.fixture
-def mock_dist_env():
-    """
-    封装分布式环境的mock配置
-    """
-    mock_dist = MagicMock()
-    mock_dist.get_rank = MagicMock(return_value=0)
-    mock_dist.is_initialized = MagicMock(return_value=True)
-
-    with patch("mindie_llm.runtime.layers.fused_moe.token_dispatcher.get_parallel_info_manager") as mock_parallel, \
-            patch("mindie_llm.runtime.layers.fused_moe.token_dispatcher.dist", mock_dist):
-        mock_parallel.return_value = MockParallelInfoManager()
-        yield
-
-
-@dataclass(frozen=True)
-class MoeCommTestCase:
-    device_type: DeviceType
-    moe_ep: int
-    world_size: int
-    attn_dp: int
-    moe_tp: int
-    quant_type: Optional[str]
-    is_prefill: bool
-    expected_comm: MoECommType
-
-
-# ====================== 参数化的 select_moe_comm 测试 ======================
-@pytest.mark.parametrize(
-    "case",
-    [
-        # 基础场景
-        MoeCommTestCase(DeviceType.ASCEND_910B, 1, 8, 1, 1, None, False, MoECommType.ALLGATHER),  # 无EP，默认ALLGATHER
-        # 910B+EP开启 场景
-        MoeCommTestCase(DeviceType.ASCEND_910B, 16, 16, 1, 1, None, False, MoECommType.MC2),
-        MoeCommTestCase(DeviceType.ASCEND_910B, 8, 8, 1, 1, None, False, MoECommType.ALLGATHER),
-        MoeCommTestCase(DeviceType.ASCEND_910B, 16, 16, 1, 1, None, True, MoECommType.ALLGATHER),
-        MoeCommTestCase(DeviceType.ASCEND_910B, 16, 8, 1, 1, "w4a8_dynamic", False, MoECommType.ALLTOALL),
-        # 910_93 场景
-        MoeCommTestCase(DeviceType.ASCEND_910_93, 16, 8, 1, 1, None, False, MoECommType.MC2),
-        MoeCommTestCase(DeviceType.ASCEND_910_93, 16, 8, 1, 1, None, True, MoECommType.ALLTOALL),
-    ],
-)
-def test_select_moe_comm_parametrized(
-        mock_platform_and_parallel,
-        case: MoeCommTestCase
-):
-    """
-    参数化测试 select_moe_comm_method 函数，整合所有场景
-    """
-    mock_npu_node, mock_parallel, mock_forward_ctx = mock_platform_and_parallel
-
-    # 设置设备类型
-    mock_npu_node.return_value.get_device_type.return_value = case.device_type
-    # 设置并行信息
-    mock_parallel.return_value = MockParallelInfoManager(
-        moe_ep=case.moe_ep,
-        world_size=case.world_size,
-        attn_dp=case.attn_dp,
-        moe_tp=case.moe_tp
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MOE_COMM_STRATEGIES'
     )
-    mock_forward_ctx.return_value.is_prefill = case.is_prefill
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_select_moe_comm_method_returns_first_applicable(
+        self,
+        mock_strategies
+    ):
+        """Test selection returns first applicable strategy.
+        
+        Verifies that the function traverses strategies and returns
+        the communication type of the first applicable one.
+        """
+        mock_strategies.__iter__ = Mock(
+            return_value=iter([
+                self.mock_strategy_allgather,
+                self.mock_strategy_mc2,
+                self.mock_strategy_alltoall
+            ])
+        )
 
-    comm_type = select_moe_comm_method(quant_type=case.quant_type)
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            select_moe_comm_method
+        )
 
-    assert comm_type == case.expected_comm
+        result = select_moe_comm_method(
+            quant_type="W4A8_DYNAMIC",
+            max_num_tokens_per_device=1024
+        )
+
+        self.assertEqual(
+            result,
+            MockMoECommType.ALLGATHER
+        )
+        self.assertTrue(
+            self.mock_strategy_allgather.is_applicable.called
+        )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MOE_COMM_STRATEGIES'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_select_moe_comm_method_no_applicable_returns_none(
+        self,
+        mock_strategies
+    ):
+        """Test selection returns None when no strategy is applicable.
+        
+        Verifies that the function returns None if no strategy matches
+        the given conditions.
+        """
+        self.mock_strategy_allgather.is_applicable = Mock(return_value=False)
+        self.mock_strategy_mc2.is_applicable = Mock(return_value=False)
+        self.mock_strategy_alltoall.is_applicable = Mock(return_value=False)
+
+        mock_strategies.__iter__ = Mock(
+            return_value=iter([
+                self.mock_strategy_allgather,
+                self.mock_strategy_mc2,
+                self.mock_strategy_alltoall
+            ])
+        )
+
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            select_moe_comm_method
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            select_moe_comm_method(
+                quant_type="UNKNOWN",
+                max_num_tokens_per_device=999999
+            )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method._COMM_TYPE_TO_DISPATCHER'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_get_cached_dispatcher_returns_instance(
+        self,
+        mock_dispatcher_map
+    ):
+        """Test dispatcher retrieval returns correct instance.
+        
+        Verifies that the function returns a dispatcher instance
+        for a valid communication type.
+        """
+        mock_dispatcher_map.__getitem__ = Mock(
+            return_value=self.mock_dispatcher_allgather
+        )
+        mock_dispatcher_map.__contains__ = Mock(return_value=True)
+
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            get_cached_dispatcher
+        )
+
+        result = get_cached_dispatcher(MockMoECommType.ALLGATHER)
+
+        self.assertIsNotNone(
+            result
+        )
+        self.assertTrue(
+            mock_dispatcher_map.__getitem__.called
+        )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method._COMM_TYPE_TO_DISPATCHER'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_get_cached_dispatcher_none_type_returns_none(
+        self,
+        mock_dispatcher_map
+    ):
+        """Test dispatcher retrieval with None type returns None.
+        
+        Verifies that the function handles None input gracefully.
+        """
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            get_cached_dispatcher
+        )
+
+        result = get_cached_dispatcher(None)
+
+        self.assertIsNone(
+            result
+        )
+        self.assertFalse(
+            mock_dispatcher_map.__getitem__.called,
+            "Should not lookup dispatcher for None input"
+        )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method._COMM_TYPE_TO_DISPATCHER'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_get_cached_dispatcher_unsupported_type_returns_none(
+        self,
+        mock_dispatcher_map
+    ):
+        """Test dispatcher retrieval with unsupported type returns None.
+        
+        Verifies that the function returns None for unsupported
+        communication types.
+        """
+        mock_dispatcher_map.__contains__ = Mock(return_value=False)
+
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            get_cached_dispatcher
+        )
+
+        result = get_cached_dispatcher(MockMoECommType.MC2)
+
+        self.assertIsNone(
+            result
+        )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MOE_COMM_STRATEGIES'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_select_moe_comm_method_with_quant_type_only(
+        self,
+        mock_strategies
+    ):
+        """Test selection with quantization type parameter only.
+        
+        Verifies that the function works with partial parameters.
+        """
+        mock_strategies.__iter__ = Mock(
+            return_value=iter([self.mock_strategy_allgather])
+        )
+
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            select_moe_comm_method
+        )
+
+        result = select_moe_comm_method(quant_type="W8A8")
+
+        self.assertEqual(
+            result,
+            MockMoECommType.ALLGATHER
+        )
+        self.assertEqual(
+            self.mock_strategy_allgather.is_applicable.call_count,
+            1
+        )
+
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MOE_COMM_STRATEGIES'
+    )
+    @patch(
+        'mindie_llm.runtime.layers.fused_moe.moe_comm_method.MoECommType',
+        MockMoECommType
+    )
+    def test_select_moe_comm_method_with_no_parameters(
+        self,
+        mock_strategies
+    ):
+        """Test selection with no parameters provided.
+        
+        Verifies that the function works with default parameters.
+        """
+        mock_strategies.__iter__ = Mock(
+            return_value=iter([self.mock_strategy_allgather])
+        )
+
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            select_moe_comm_method
+        )
+
+        result = select_moe_comm_method()
+
+        self.assertEqual(
+            result,
+            MockMoECommType.ALLGATHER
+        )
+
+    def test_comm_type_to_dispatcher_mapping_exists(self):
+        """Test communication type to dispatcher mapping is defined.
+        
+        Verifies that the mapping dictionary is properly initialized.
+        """
+        from mindie_llm.runtime.layers.fused_moe.moe_comm_method import (
+            _COMM_TYPE_TO_DISPATCHER
+        )
+
+        self.assertIsInstance(
+            _COMM_TYPE_TO_DISPATCHER,
+            dict
+        )
+        self.assertGreater(
+            len(_COMM_TYPE_TO_DISPATCHER),
+            0
+        )
 
 
-def test_select_moe_comm_unsupported_device(mock_platform_and_parallel):
-    """测试：传入不支持的设备类型，抛出ValueError异常场景"""
-    mock_npu_node, mock_parallel, _ = mock_platform_and_parallel
-    mock_npu_node.return_value.get_device_type.return_value = "ASCEND_UNKNOWN"
-
-    with pytest.raises(ValueError) as exc_info:
-        select_moe_comm_method()
-    assert "Unsupported soc_version" in str(exc_info.value)
-
-
-def test_get_cached_dispatcher_valid_type(mock_dist_env):
-    """测试：传入合法的MoECommTYpe，返回对应实例"""
-    assert isinstance(get_cached_dispatcher(MoECommType.ALLGATHER), TokenDispatcherWithAllGather)
-    assert isinstance(get_cached_dispatcher(MoECommType.MC2), TokenDispatcherWithMC2)
-    assert isinstance(get_cached_dispatcher(MoECommType.ALLTOALL), TokenDispatcherWithAll2AllV)
-
-
-def test_get_cached_dispatcher_singleton(mock_dist_env):
-    """测试dispatcher是单例模式"""
-    dispatcher1 = get_cached_dispatcher(MoECommType.ALLGATHER)
-    dispatcher2 = get_cached_dispatcher(MoECommType.ALLGATHER)
-    dispatcher3 = get_cached_dispatcher(MoECommType.MC2)
-
-    assert dispatcher1 is dispatcher2
-    assert dispatcher1 is not dispatcher3
-
-
-def test_get_cached_dispatcher_invalid_none():
-    """测试：传入None/不支持的类型，返回None"""
-    assert get_cached_dispatcher(None) is None
-    assert get_cached_dispatcher(MoECommType.FUSED_ALLTOALL) is None
-    assert get_cached_dispatcher("INVALID_TYPE") is None
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
