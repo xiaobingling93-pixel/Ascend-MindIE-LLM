@@ -543,6 +543,7 @@ class DeepseekV3Model(nn.Module):
             residual, hidden_states = layer(hidden_states, residual)
 
         hidden_states, _ = self.norm(hidden_states, residual)
+        forward_context = get_forward_context()
         if not forward_context.is_prefill and weight_prefetcher.is_prefetch_enabled():
             weight_prefetcher.prefetch_weight_postprocess()
         return hidden_states
