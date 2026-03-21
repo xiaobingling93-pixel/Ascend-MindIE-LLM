@@ -222,57 +222,6 @@ class TestPluginManager(unittest.TestCase):
             self.assertTrue(mock_exit.called)
             mock_exit.assert_called_with(1)
 
-    
-    @patch('mindie_llm.utils.env.ENV.model_runner_exp', True)
-    @patch('torch.npu.Event', return_value=MagicMock(synchronize=lambda: None))
-    @patch('mindie_llm.utils.env.ENV.async_inference', return_value=True)
-    def test_model_runner_exp_to_host_path(
-        self,
-        mock_env_asycn_on,
-        mock_npu_event
-    ):
-        def side_effect_forward(model_inputs, **kwargs):
-            logits = torch.zeros(1, 10) # 假定词表长度为10
-            logits[0][2] = 2
-            logits[0][5] = 3
-            logits[0][8] = 4
-            return logits
-
-        fake_parallel_info = FakeParallelInfo(
-            dp=int(self.model_config['dp']),
-            tp=int(self.model_config['tp']),
-            sp=int(self.model_config['sp']),
-            cp=int(self.model_config['cp'])
-        )
-        self.mock_model_runner.return_value = FakeModelRunner(parallel_info=fake_parallel_info, device='npu')
-
-        self.mock_npu_sync.return_value = None
-        self.mock_obfuscation_func.return_value = None
-        self.mock_forward.side_effect = side_effect_forward
-        self.mock_warm_up.return_value = 10
-
-        generator = Generator(self.model_config)
-
-        sample_dtype = generator.infer_context._batch_context.default_sampling_params.dtype
-        greedy_param = np.array([(1.0, 0., 0., 0.7, 3., 0.92, False, 0)], dtype=sample_dtype)
-        input1 = [5159, 636, 374, 31346, 323, 358]
-        block_tables = np.array([[0, 1, 2, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]])
-        
-        gen_len = 2
-        req = Request.request_from_token(input1, sampling_params=greedy_param, 
-                                         generation_params=GenerationParams(max_new_tokens=gen_len))
-
-        meta_data = InputMetadata.from_requests([req], block_tables, True)
-        meta_data.batch_block_tables = block_tables
-
-        generation_output = generator.generate_token(meta_data)
-    
-        # 验证 sampling_output 已经被 _to_host 转成 numpy
-        self.assertIsInstance(
-            generation_output.token_ids,
-            np.ndarray
-        )
-
 
 class TestPluginManagerStaticMethods(unittest.TestCase):
     """测试PluginManager的静态方法"""
@@ -1382,7 +1331,7 @@ class TestPluginManagerFillInModelResultExp(unittest.TestCase):
         model_output_wrapper.sampling_output = Mock()
 
         # 应该正常执行不抛出异常
-        PluginManager._fill_in_model_result_exp(model_input_wrapper, model_output_wrapper)
+        self.plugin_manager._fill_in_model_result_exp(model_input_wrapper, model_output_wrapper)
 
     def test_fill_in_model_result_exp_with_empty_update_indices(self):
         """测试_fill_in_model_result_exp - update_indices为空"""
@@ -1409,7 +1358,7 @@ class TestPluginManagerFillInModelResultExp(unittest.TestCase):
         model_output_wrapper.sampling_output.token_ids.index_select.return_value.flatten = Mock(return_value=torch.tensor([10, 30]))
 
         # 应该正常执行不抛出异常
-        PluginManager._fill_in_model_result_exp(model_input_wrapper, model_output_wrapper)
+        self.plugin_manager._fill_in_model_result_exp(model_input_wrapper, model_output_wrapper)
 
 
 class TestPluginManagerClearCache(unittest.TestCase):

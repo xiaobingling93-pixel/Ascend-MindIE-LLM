@@ -226,3 +226,11 @@ class AclGraphBackend:
             Processed hidden states tensor.
         """
         return self.model.maybe_pad_and_gather_cross_dp_and_unpad(hidden_states)
+
+    def set_eager_mode_with_padding(self, is_eager_mode_with_padding: bool):
+        """A method to control whether run in eager mode or graph mode
+        
+        Args:
+            is_eager_mode_with_padding: bool, whether to enable eager mode with padding
+        """
+        self._run_eager_mode_with_padding = is_eager_mode_with_padding

@@ -139,12 +139,12 @@ class AclGraphModelWrapperExp(ModelWrapper):
         Returns:
             Logits tensor, or tuple of (logits, hidden_states) if speculative tokens enabled.
         """
-        model_inputs = self.prepare_model_inputs(model_inputs)
+        model_inputs, kwargs = self.prepare_model_inputs(model_inputs, **kwargs)
         result = self.forward_from_model_inputs(
-            npu_cache, model_inputs.input_ids, model_inputs.position_ids, model_inputs.forward_context)
+            npu_cache, model_inputs.input_ids, model_inputs.position_ids, model_inputs.forward_context, **kwargs)
         return result
 
-    def prepare_model_inputs(self, model_inputs: ModelInput) -> ModelInput:
+    def prepare_model_inputs(self, model_inputs: ModelInput, **kwargs) -> ModelInput:
         """Prepare model inputs for forward pass.
         
         Performs H2D (Host to Device) operations and builds forward context.
@@ -162,19 +162,58 @@ class AclGraphModelWrapperExp(ModelWrapper):
         model_inputs.input_ids = torch.tensor(model_inputs.input_ids, dtype=torch.int64, device=self.device)
         model_inputs.position_ids = torch.tensor(model_inputs.position_ids, dtype=torch.int64, device=self.device)
         model_inputs.block_tables_array = model_inputs.block_tables
-        forward_context = self.model_runner.build_forward_context(model_inputs)
+
+        q_lens = kwargs.get("q_lens", None)
+        if q_lens is not None:
+            model_inputs.q_lens = torch.tensor(q_lens).to(self.device)
+            kwargs["q_lens"] = model_inputs.q_lens
+        mtp_logits_gather_indices = kwargs.get('mtp_logits_gather_indices', None)
+        if mtp_logits_gather_indices is not None:
+            kwargs["mtp_logits_gather_indices"] = mtp_logits_gather_indices.to(self.device)
+        shard_effective_token_indices = kwargs.get("shard_effective_token_indices", None)
+        if shard_effective_token_indices is not None:
+            kwargs["shard_effective_token_indices"] = torch.tensor(shard_effective_token_indices).to(self.device)
+        lm_head_local_dp = kwargs.get("lm_head_local_dp", None)
+        if lm_head_local_dp is not None:
+            kwargs["lm_head_local_dp"] = torch.tensor(lm_head_local_dp).to(self.device)
+
+        sub_model_inputs = kwargs.get("sub_model_inputs", None)
+        if sub_model_inputs is not None:
+            sub_input_ids = torch.tensor(sub_model_inputs.input_ids).to(self.device)
+            sub_position_ids = torch.tensor(sub_model_inputs.position_ids, dtype=torch.int64).to(self.device)
+            sub_slots = torch.tensor(sub_model_inputs.slots).to(self.device)
+            sub_input_lengths = torch.tensor(sub_model_inputs.context_length).to(self.device)
+            sub_lm_head_indices = torch.tensor(
+                sub_model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device) \
+                if sub_model_inputs.prefill_head_indices is not None else None
+            sub_block_tables = torch.tensor(sub_model_inputs.block_tables, dtype=torch.int32).to(self.device)
+            sub_model_inputs.input_ids = sub_input_ids
+            sub_model_inputs.position_ids = sub_position_ids
+            sub_model_inputs.slots = sub_slots
+            sub_model_inputs.context_length = sub_input_lengths
+            sub_model_inputs.prefill_head_indices = sub_lm_head_indices
+            sub_model_inputs.block_tables = sub_block_tables
+            kwargs["sub_model_inputs"] = sub_model_inputs
+
+        hidden_states = kwargs.get("hidden_states", None)
+        if hidden_states is not None:
+            model_inputs.last_hidden_states = hidden_states.to(self.device)
+            kwargs["hidden_states"] = model_inputs.last_hidden_states
+
+        forward_context = self.model_runner.build_forward_context(model_inputs, **kwargs)
         # NOTE: `PluginManager` will modify `model_inputs.input_lengths`.
         # Assign `forward_context.seq_lens` to `model_inputs.input_lengths` so that they can share same address.
         model_inputs.input_lengths = forward_context.attn_metadata.seq_lens
         model_inputs.forward_context = forward_context
-        return model_inputs
+        return model_inputs, kwargs
 
     def forward_from_model_inputs(
         self,
         npu_cache: Optional[Any] = None,
         input_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        forward_context: Optional[ForwardContext] = None
+        forward_context: Optional[ForwardContext] = None,
+        **kwargs
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Perform forward pass from prepared model inputs.
         
@@ -195,7 +234,7 @@ class AclGraphModelWrapperExp(ModelWrapper):
                 npu_cache,
                 input_ids,
                 position_ids,
-                forward_context,
+                forward_context
             )
         except Exception as e:
             logger.error(f"Error in `forward_tensor`: {e}")

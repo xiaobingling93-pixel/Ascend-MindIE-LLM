@@ -546,5 +546,393 @@ class TestMTP(unittest.TestCase):
             f"Output does not match expected.\nOutput:\n{input_ids_pad.cpu()}\nExpected:\n{expected.cpu()}"
         )
 
+    def test_prepare_masks_for_filling(self):
+        # 1. 准备输入数据
+        model_inputs = MagicMock()
+        # 模拟 block_tables_array [batch_size, num_blocks]
+        model_inputs.block_tables_array = np.array([[0], [1], [2]]) 
+        
+        current_dp_sequence_ids = np.array([10, 11, 12])
+        current_all_sequence_ids = np.array([10, 11, 12])
+        # 模拟只有 10 和 11 在上一轮中存在（即 hit）
+        last_all_sequence_ids = np.array([11, 10, 99]) 
+
+        masks = self.mtp_plugin.prepare_masks_for_filling(
+            model_inputs, 
+            current_dp_sequence_ids, 
+            current_all_sequence_ids, 
+            last_all_sequence_ids
+        )
+
+        # 3. 断言验证
+        self.assertIn('hit_mask', masks)
+        # current_dp_ids[0]=10 在 last 中, [1]=11 在 last 中, [2]=12 不在
+        np.testing.assert_array_equal(masks['hit_mask'], [True, True, False])
+        self.assertIn('hit_indices', masks)
+        # 10 在 last 的索引 1, 11 在 last 的索引 0
+        np.testing.assert_array_equal(masks['hit_indices'], [1, 0])
+        self.assertIn('candidate_slots', masks)
+        # 验证返回的是否为 tensor
+        self.assertTrue(torch.is_tensor(masks['candidate_slots']))
+
+    def test_fill_in_model_result_with_hit(self):
+        # 1. 构造 Mock 对象和数据
+        spec_len = self.mtp_plugin.num_speculative_tokens + 1 # 1 + 1 = 2
+        batch_size = 2
+        
+        input_metadata = MagicMock()
+        cache_ids = [101, 102]
+        
+        # 模拟 model_inputs
+        model_inputs = MagicMock()
+        model_inputs.position_ids = torch.zeros(batch_size * spec_len, device=self.device)
+        model_inputs.context_length = np.array([10, 20])
+        model_inputs.input_lengths = torch.tensor([10, 20], device=self.device)
+        model_inputs.input_ids = torch.zeros(batch_size * spec_len, dtype=torch.long, device=self.device)
+        model_inputs.slots = torch.full((batch_size * spec_len,), -1, dtype=torch.long, device=self.device)
+
+        # 模拟 sub_model (MTP) 的输入
+        mtp_inputs = MagicMock()
+        mtp_inputs.input_ids = torch.zeros(batch_size * spec_len, dtype=torch.long, device=self.device)
+        mtp_inputs.prefill_head_indices = torch.tensor([5, 5], device=self.device)
+        
+        model_kwargs = {
+            'sub_model_inputs': mtp_inputs,
+            'hidden_states': torch.zeros((batch_size * spec_len, 128), device=self.device),
+            'lm_head_local_dp': None
+        }
+
+        # 模拟 model_output
+        model_output_wrapper = MagicMock()
+        model_output_wrapper.model_output.hidden_states = torch.randn(
+            (batch_size * spec_len, 128), device=self.device)
+        
+        sampling_output = MagicMock()
+        # 假设 hit 了两个请求，每个请求生成了 2 个 token
+        sampling_output.token_ids = np.array([[100, 101], [200, 201]])
+        sampling_output.num_new_tokens = np.array([2, 2])
+        model_output_wrapper.sampling_output = sampling_output
+
+        # 2. 构造 filling_masks (手动模拟 prepare_masks_for_filling 的输出)
+        filling_masks = {
+            'hit_mask': np.array([True, True]),
+            'hit_mask_tensor': torch.tensor([True, True], device=self.device),
+            'hit_indices': np.array([0, 1]),
+            'all_hit_indices': np.array([0, 1]),
+            'all_hit_mask_tensor': torch.tensor([True, True], device=self.device),
+            'hit_mask_per_token_tensor': torch.tensor([True] * (batch_size * spec_len), device=self.device),
+            'hit_indices_per_token_tensor': torch.arange(batch_size * spec_len, device=self.device),
+            'hit_speculative_length': np.array([spec_len, spec_len]),
+            'hit_arange_tensor': torch.arange(batch_size, device=self.device),
+            'hit_mask_mod': torch.tensor([False, True, False, True], device=self.device), # 取模不为0的位
+            'hit_increments': torch.tensor([0, 1, 0, 1], device=self.device),
+            'candidate_slots': torch.arange(100, 100 + batch_size * 128, device=self.device).reshape(batch_size, 128),
+            'hit_block_indices': torch.tensor([0, 0, 1, 1], device=self.device)
+        }
+
+        # 3. 执行测试
+        self.mtp_plugin.fill_in_model_result(
+            input_metadata, model_inputs, model_kwargs, model_output_wrapper, filling_masks, cache_ids
+        )
+
+        # 4. 验证核心逻辑
+        # 验证 context_length 是否增加了 num_new_tokens (10+2, 20+2)
+        np.testing.assert_array_equal(model_inputs.context_length, [12, 22])
+        
+        # 验证 MTP 的输入 ids 是否被填入 (sampling_output 的 token_ids)
+        expected_ids = torch.tensor([100, 101, 200, 201], device=self.device)
+        self.assertTrue(torch.equal(mtp_inputs.input_ids, expected_ids))
+
+        # 验证 prefill_head_indices 修正 (5 - (2-2)) = 5
+        self.assertEqual(mtp_inputs.prefill_head_indices[0].item(), 5)
+
+    def test_fill_in_model_result_no_hit(self):
+        # 测试 hit_mask 为 None 时不执行任何逻辑
+        model_inputs = MagicMock()
+        model_inputs.context_length = np.array([10])
+        filling_masks = {'hit_mask': None}
+        
+        self.mtp_plugin.fill_in_model_result(None, model_inputs, {}, None, filling_masks, None)
+        
+        # 验证数据未被修改
+        self.assertEqual(model_inputs.context_length[0], 10)
+
+    def test_prepare_masks_for_filling_exp_hit(self):
+        """测试 prepare_masks_for_filling_exp 在有命中（hit）情况下的逻辑"""
+        # 1. 准备 Mock 数据
+        speculative_tokens = self.mtp_plugin.num_speculative_tokens
+        spec_len = speculative_tokens + 1 # 1 + 1 = 2
+        
+        model_inputs = MagicMock()
+        # 假设 batch_size 为 3, 只有前两个命中
+        model_inputs.block_tables_array = np.array([[0], [1], [2]]) 
+        
+        current_dp_ids = np.array([100, 101, 102])
+        current_all_ids = np.array([100, 101, 102])
+        # 100 对应 last 索引 1, 101 对应 last 索引 0
+        last_all_ids = np.array([101, 100, 999]) 
+
+        # 2. 执行测试
+        masks = self.mtp_plugin.prepare_masks_for_filling_exp(
+            model_inputs,
+            current_dp_ids,
+            current_all_ids,
+            last_all_ids
+        )
+
+        # 3. 验证掩码字典内容
+        self.assertIn('hit_mask', masks)
+        self.assertIn('hit_mask_local_tensor', masks)
+        self.assertIn('all_hit_mask_tensor', masks) # 这是 masked_select 的结果
+        
+        # 验证 hit_mask 内容: [True, True, False]
+        np.testing.assert_array_equal(masks['hit_mask'], [True, True, False])
+        
+        # 验证 hit_indices: 100 在 last 的 1, 101 在 last 的 0
+        np.testing.assert_array_equal(masks['hit_indices'], [1, 0])
+        
+        # 验证 hit_mask_local_tensor (torch.masked_select 应该返回命中的原始下标 [0, 1])
+        expected_local_indices = torch.tensor([0, 1], device=self.device)
+        self.assertTrue(torch.equal(masks['hit_mask_local_tensor'], expected_local_indices))
+
+        # 验证 hit_mask_per_token_mod_tensor
+        # 当 spec_len = 2 时，per_token 长度为 6 (3*2)
+        # 只有命中请求的起始 token 会被保留在 mod_tensor 中 (即 index 0 和 2)
+        expected_mod_indices = torch.tensor([0, 2], device=self.device)
+        self.assertTrue(torch.equal(masks['hit_mask_per_token_mod_tensor'], expected_mod_indices))
+
+        # 验证 Tensor 设备
+        self.assertEqual(masks['hit_dp_speculative_length'].device.type, self.device)
+        self.assertEqual(masks['all_hit_indices'].device.type, self.device)
+
+    def test_prepare_masks_for_filling_exp_no_hit(self):
+        """测试 prepare_masks_for_filling_exp 在完全没有命中的情况"""
+        model_inputs = MagicMock()
+        current_dp_ids = np.array([1, 2])
+        current_all_ids = np.array([1, 2])
+        last_all_ids = np.array([3, 4]) # 无交集
+
+        masks = self.mtp_plugin.prepare_masks_for_filling_exp(
+            model_inputs, current_dp_ids, current_all_ids, last_all_ids
+        )
+
+        # 应该返回空字典，因为没有元素满足 hit_mask.any() 或 all_hit_mask.any()
+        self.assertEqual(masks, {})
+
+    def test_prepare_masks_for_filling_exp_none_last(self):
+        """测试 last_all_sequence_ids 为 None 的情况"""
+        masks = self.mtp_plugin.prepare_masks_for_filling_exp(
+            MagicMock(), np.array([1]), np.array([1]), None
+        )
+        self.assertEqual(masks, {})
+
+    def test_fill_in_model_result_exp_hit(self):
+        """测试 fill_in_model_result_exp 在有命中情况下的全流程填充逻辑"""
+        # 1. 基础参数设置
+        spec_len = self.mtp_plugin.num_speculative_tokens + 1 # 2
+        batch_size = 2
+        hidden_dim = 128
+        
+        # 2. 构造 model_inputs (模拟模型运行时的输入张量)
+        model_inputs = MagicMock()
+        model_inputs.position_ids = torch.zeros(batch_size * spec_len, dtype=torch.long, device=self.device)
+        model_inputs.context_length = np.array([10, 20])
+        model_inputs.input_lengths = torch.zeros(batch_size * spec_len, dtype=torch.int32, device=self.device)
+        model_inputs.input_ids = torch.zeros(batch_size * spec_len, dtype=torch.long, device=self.device)
+        model_inputs.max_seq_len = 0
+        
+        # 模拟 forward_context
+        model_inputs.forward_context.attn_metadata.slot_mapping = torch.zeros(
+            batch_size * spec_len, device=self.device)
+        model_inputs.forward_context.attn_metadata.max_seq_len = 0
+
+        # 3. 构造 model_kwargs
+        mtp_inputs = MagicMock()
+        mtp_inputs.input_ids = torch.zeros(batch_size * spec_len, dtype=torch.long, device=self.device)
+        mtp_inputs.prefill_head_indices = torch.tensor([10, 10], dtype=torch.int32, device=self.device)
+        
+        model_kwargs = {
+            'sub_model_inputs': mtp_inputs,
+            'hidden_states': torch.zeros((batch_size * spec_len, hidden_dim), device=self.device),
+            'input_lengths_sp': None
+        }
+
+        # 4. 模拟模型输出 (Sampling Output)
+        model_output_wrapper = MagicMock()
+        model_output_wrapper.input_metadata.is_prefill = False
+        model_output_wrapper.model_output.hidden_states = torch.ones(
+            (batch_size * spec_len, hidden_dim), device=self.device)
+        
+        sampling_output = MagicMock()
+        # token_ids: batch=2, tokens=2
+        sampling_output.token_ids = torch.tensor([[101, 102], [201, 202]], device=self.device)
+        sampling_output.num_new_tokens = torch.tensor([2, 2], device=self.device)
+        sampling_output.num_new_tokens_numpy = np.array([2, 2])
+        model_output_wrapper.sampling_output = sampling_output
+
+        # 5. 构造 filling_masks (对应 prepare_masks_for_filling_exp 的输出)
+        filling_masks = {
+            'hit_mask': np.array([True, True]),
+            'all_hit_mask': np.array([True, True]),
+            'all_hit_indices': torch.tensor([0, 1], device=self.device),
+            'hit_speculative_length': torch.tensor([spec_len, spec_len], device=self.device),
+            'all_hit_mask_tensor': torch.tensor([0, 1], device=self.device),
+            'hit_indices': np.array([0, 1]),
+            'hit_indices_tensor': torch.tensor([0, 1], device=self.device),
+            'hit_indices_per_token_tensor': torch.arange(batch_size * spec_len, device=self.device),
+            'hit_local_indices_per_token_tensor': torch.arange(batch_size * spec_len, device=self.device),
+            'hit_arange_tensor': torch.tensor([0, 1], device=self.device),
+            'hit_mask_local_tensor': torch.tensor([0, 2], device=self.device), # 假设对应 batch 索引
+            'hit_dp_speculative_length': torch.tensor([spec_len, spec_len], device=self.device),
+            'hit_increments': torch.tensor([0, 1, 0, 1], device=self.device),
+            'candidate_slots': torch.ones((batch_size, 256), device=self.device), # 模拟 slot 池
+            'hit_block_indices': torch.tensor([0, 0, 1, 1], device=self.device),
+            'hit_mask_per_token_mod_tensor': torch.tensor([0, 2], device=self.device)
+        }
+
+        # 6. 执行调用
+        input_metadata = MagicMock()
+        input_metadata.is_dummy_batch = False
+        
+        self.mtp_plugin.fill_in_model_result_exp(
+            input_metadata, model_inputs, model_kwargs, model_output_wrapper, filling_masks, cache_ids=[0, 1]
+        )
+
+        # 7. 断言验证
+        # 验证 MTP 输入 ID 填充 (通过 scatter_)
+        expected_mtp_ids = torch.tensor([101, 102, 201, 202], device=self.device)
+        self.assertTrue(torch.equal(mtp_inputs.input_ids, expected_mtp_ids))
+
+        # 验证 context_length 更新 (10+2, 20+2)
+        np.testing.assert_array_equal(model_inputs.context_length, [12, 22])
+
+        # 验证 scatter_add_ 操作 (prefill_head_indices)
+        # subtrahend = 2 - 2 = 0 -> 10 + 0 = 10
+        self.assertEqual(mtp_inputs.prefill_head_indices[0], 10)
+
+        # 验证 hidden_states 是否被 scatter 填充 (全 1)
+        self.assertEqual(model_kwargs['hidden_states'].sum().item(), batch_size * spec_len * hidden_dim)
+
+        # 验证 max_seq_len 是否更新
+        self.assertEqual(model_inputs.max_seq_len, 22)
+
+    def test_fill_in_model_result_exp_empty_mask(self):
+        """验证当 mask 为空时不进行任何操作"""
+        model_inputs = MagicMock()
+        model_inputs.context_length = np.array([10])
+        
+        # 没有任何 hit 的 mask
+        filling_masks = {'hit_mask': None, 'all_hit_mask': None}
+        
+        self.mtp_plugin.fill_in_model_result_exp(
+            MagicMock(), model_inputs, {}, MagicMock(), filling_masks, []
+        )
+        
+        self.assertEqual(model_inputs.context_length[0], 10)
+
+    def test_sample_preprocess_exp(self):
+        """测试采样预处理，验证 logits 提取和参数更新"""
+        # 1. 模拟数据
+        logits_in = torch.randn(2, 100)
+        result_tuple = (logits_in, None, torch.tensor([1, 2]))
+        sampling_metadata = MagicMock()
+        sampling_metadata.is_prefill = False
+        input_metadata = MagicMock()
+
+        # 2. 执行调用
+        out_logits = self.mtp_plugin.sample_preprocess_exp(
+            None, result_tuple, sampling_metadata, input_metadata
+        )
+
+        # 3. 断言验证
+        self.assertTrue(torch.equal(out_logits, logits_in))
+        self.assertEqual(self.mtp_plugin.input_metadata, input_metadata)
+        self.assertEqual(self.mtp_plugin.decoding_policy.sampling_param, sampling_metadata)
+
+    def test_compose_model_inputs_exp(self):
+        """测试输入组装，验证序列 ID 的重复展开逻辑"""
+        # 1. 模拟数据 (batch_size=2, num_speculative_tokens=1 -> spec_len=2)
+        sampling_metadata = MagicMock()
+        sampling_metadata.all_sequence_ids = [10, 20]
+        self.mtp_plugin.num_speculative_tokens = 1
+
+        # 2. 执行调用
+        updated_metadata = self.mtp_plugin.compose_model_inputs_exp(sampling_metadata)
+
+        # 3. 断言验证: 每个 ID 应该重复 spec_len 次
+        expected_ids = [10, 10, 20, 20]
+        np.testing.assert_array_equal(updated_metadata.all_sequence_ids, expected_ids)
+        np.testing.assert_array_equal(updated_metadata.parent_sequence_ids, expected_ids)
+
+    def test_plugin_verify_exp_hit_logic(self):
+        """测试插件验证逻辑：模拟投机 Token 命中和不命中的过滤"""
+        # 1. 设置参数 (num_speculative_tokens=2, spec_len=3)
+        self.mtp_plugin.num_speculative_tokens = 2
+        self.mtp_plugin.pad_token_id = 0
+        self.mtp_plugin.token_range = torch.arange(5, device=self.device)
+        
+        # 模拟 decoding 阶段
+        self.mtp_plugin.input_metadata = MagicMock()
+        self.mtp_plugin.input_metadata.is_prefill = False
+        
+        # 2. 构造采样输出
+        sampling_output = MagicMock()
+        # 假设 batch_size=2，每个请求 3 个 token (总共 6 个)
+        # 请求0: [10, 20, 30]
+        # 请求1: [40, 50, 60]
+        sampling_output.token_ids = torch.tensor([10, 20, 30, 40, 50, 60], device=self.device)
+        sampling_output.logprobs = torch.zeros(6, device=self.device)
+        sampling_output.top_token_ids = torch.zeros((6, 0), device=self.device) # 模拟 k=0 情况
+        
+        # 模拟 ID 属性
+        sampling_output.sequence_ids = [100, 100, 100, 200, 200, 200]
+        sampling_output.parent_sequence_ids = [0, 0, 0, 1, 1, 1]
+
+        # 3. 构造 result 包含的 draft_tokens (verify_guess_all)
+        # 每个请求有 2 个投机 token
+        # 请求0: 投机 [10, 20] -> 全中
+        # 请求1: 投机 [40, 99] -> 第一个中，第二个错
+        draft_tokens = torch.tensor([[10, 20], [40, 99]], device=self.device)
+        result = (None, None, draft_tokens)
+
+        # 4. 执行调用
+        self.mtp_plugin.plugin_verify_exp(sampling_output, cache_ids=[0, 1], result=result)
+
+        # 5. 断言验证
+        # 请求0 匹配 [10, 20], indices_counts = 2(匹配数) + 1 = 3
+        # 请求1 匹配 [40], 99!=50, indices_counts = 1(匹配数) + 1 = 2
+        expected_counts = torch.tensor([3, 2], device=self.device)
+        self.assertTrue(torch.equal(sampling_output.num_new_tokens, expected_counts))
+
+        # 验证 Token ID 过滤后的结果
+        # 重新 view 为 (batch, spec_len) 后：
+        # 请求0: [10, 20, 30] (全保留)
+        # 请求1: [40, 50, 0] (因为 indices_counts=2，第3个token即 index 2 被 mask 掉)
+        res_tokens = sampling_output.token_ids.view(2, 3)
+        self.assertEqual(res_tokens[0, 2].item(), 30)
+        self.assertEqual(res_tokens[1, 2].item(), 0) # 被 padding
+
+        # 验证 Logprobs 过滤
+        res_logprobs = sampling_output.logprobs.view(2, 3)
+        self.assertEqual(res_logprobs[1, 2].item(), -9999.0)
+
+        # 验证 sequence_ids 重新映射 (取每个 batch 的第一个)
+        np.testing.assert_array_equal(sampling_output.sequence_ids, [100, 200])
+
+    def test_plugin_verify_exp_prefill(self):
+        """测试 prefill 阶段直接返回，不进行校验逻辑"""
+        self.mtp_plugin.input_metadata = MagicMock()
+        self.mtp_plugin.input_metadata.is_prefill = True
+        
+        sampling_output = MagicMock()
+        sampling_output.token_ids = torch.tensor([1, 2, 3])
+        
+        # 如果 is_prefill 为 True，函数应在处理 draft_token 之前 return
+        self.mtp_plugin.plugin_verify_exp(sampling_output, [0], result=None)
+        
+        # 验证逻辑：由于 prefill 直接 return，repeating_indices 应该被赋值但 token_ids 不变
+        self.assertTrue(hasattr(sampling_output, 'repeating_indices'))
+        self.assertTrue(torch.equal(sampling_output.token_ids, torch.tensor([1, 2, 3])))
+
 if __name__ == "__main__":
     unittest.main()

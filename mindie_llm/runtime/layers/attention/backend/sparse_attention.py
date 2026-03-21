@@ -199,8 +199,10 @@ class SfaMetadata(AttentionMetadata):
     # NOTE: This class is used for building attention metadata in the future.
     actual_seq_lengths_kv: torch.Tensor | None = None
     actual_seq_lengths_query: torch.Tensor | None = None
+    seq_lens_list: np.ndarray = None
     cp_input_dict: Dict | None = None
     num_speculative_tokens: int = 0
+    num_actual_tokens: int = 0
     mc2_mask: torch.Tensor | None = None
 
     @staticmethod
@@ -208,7 +210,11 @@ class SfaMetadata(AttentionMetadata):
         if model_inputs.is_prefill:
             actual_seq_lengths_kv = torch.tensor(model_inputs.context_length, dtype=torch.int32)
         else:
-            actual_seq_lengths_kv = torch.tensor([1] * model_inputs.block_tables.shape[0], dtype=torch.int32)
+            actual_seq_lengths_kv = (
+                torch.tensor(model_inputs.q_lens, dtype=torch.int32)
+                if num_speculative_tokens > 0
+                else torch.tensor([1] * model_inputs.block_tables.shape[0], dtype=torch.int32)
+            )
         actual_seq_lengths_query = torch.cumsum(actual_seq_lengths_kv, dim=0, dtype=torch.int32)
         
         cp_size = get_parallel_info_manager().attn_cp.group_size
@@ -221,15 +227,18 @@ class SfaMetadata(AttentionMetadata):
                 actual_seq_lengths_query,
                 actual_seq_lengths_kv
             )
+
         return SfaMetadata(
             seq_lens=model_inputs.context_length,
+            seq_lens_list=model_inputs.context_length,
             slot_mapping=model_inputs.slots,
             block_tables=model_inputs.block_tables,
             attn_mask=mask,
             actual_seq_lengths_kv=actual_seq_lengths_kv,
             actual_seq_lengths_query=actual_seq_lengths_query,
             num_speculative_tokens=num_speculative_tokens,
-            cp_input_dict=cp_input_dict
+            cp_input_dict=cp_input_dict,
+            num_actual_tokens=len(model_inputs.input_ids)
         )
 
     @staticmethod
@@ -245,17 +254,22 @@ class SfaMetadata(AttentionMetadata):
     def to_device(self, device):
         self.block_tables = torch.tensor(self.block_tables, dtype=torch.int32).to(device)
         self.slot_mapping = torch.tensor(self.slot_mapping, dtype=torch.int32).to(device)
-        self.seq_lens_list = self.seq_lens
         self.seq_lens = torch.tensor(self.seq_lens, dtype=torch.int32).to(device)
 
         self.actual_seq_lengths_kv = torch.tensor(self.actual_seq_lengths_kv, dtype=torch.int32).to(device)
         self.actual_seq_lengths_query = torch.tensor(self.actual_seq_lengths_query, dtype=torch.int32).to(device)
-        
+
+        mapping = get_parallel_info_manager()
+        tp_size = mapping.attn_tp.group_size
+        tp_rank = mapping.attn_tp.rank
+        num_padded_tokens = self.num_tokens + (tp_size - self.num_tokens % tp_size) % tp_size
+        unit_size = num_padded_tokens // tp_size
+        all_mask = [1] * self.num_actual_tokens + [0] * (num_padded_tokens - self.num_actual_tokens)
+        self.mc2_mask = torch.tensor(all_mask[unit_size * tp_rank:unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
 
     def copy(self, num_actual_tokens, num_tokens):
         # NOTE: only D2D operation is allowed, should be refactored later
-
-        max_len = self.seq_lens.max().item()
+        max_len = self.seq_lens.max()
         max_seq_pages = (max_len + 128 - 1) // 128
         num_reqs = num_actual_tokens // (self.num_speculative_tokens + 1)
 
@@ -267,7 +281,7 @@ class SfaMetadata(AttentionMetadata):
                                                                     num_actual_tokens=self.num_speculative_tokens + 1)
         reqs_padding_length = actual_len - self.actual_seq_lengths_kv.shape[0]
         
-        seq_lens_pad = torch.tensor([0] * reqs_padding_length, dtype=torch.int32).npu()
+        seq_lens_pad = torch.tensor([0] * reqs_padding_length, dtype=torch.int32, device="npu")
         self.seq_lens = torch.cat([self.seq_lens, seq_lens_pad])
         input_buffer_seq_lens = input_buffer.get("seq_lens")
         input_buffer_seq_lens[:actual_len].copy_(self.seq_lens[:actual_len])
@@ -277,12 +291,12 @@ class SfaMetadata(AttentionMetadata):
             self.seq_lens_list = self.seq_lens_list.tolist() + [0] * (actual_len - num_actual_tokens)
 
         actual_seq_lengths_kv_pad = torch.tensor(
-            [self.num_speculative_tokens + 1] * reqs_padding_length, dtype=torch.int32).npu()
+            [self.num_speculative_tokens + 1] * reqs_padding_length, dtype=torch.int32, device="npu")
 
         self.actual_seq_lengths_kv = torch.cat([self.actual_seq_lengths_kv, actual_seq_lengths_kv_pad])
         if last_req_tokens > 0:
             self.actual_seq_lengths_kv[-1] = last_req_tokens
-        self.actual_seq_lengths_query = torch.cumsum(self.actual_seq_lengths_kv, dim=0, dtype=torch.int32).npu()
+        self.actual_seq_lengths_query = torch.cumsum(self.actual_seq_lengths_kv, dim=0, dtype=torch.int32)
 
         input_buffer_actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")
         input_buffer_actual_seq_lengths_kv[:actual_len].copy_(self.actual_seq_lengths_kv[:actual_len])
@@ -293,30 +307,30 @@ class SfaMetadata(AttentionMetadata):
         self.actual_seq_lengths_query = input_buffer_actual_seq_lengths_query[:actual_len]
 
         input_buffer_block_tables = input_buffer.get("block_tables")
+        input_buffer_block_tables.fill_(0)
         input_buffer_block_tables[:num_reqs, :self.block_tables.shape[-1]].copy_(self.block_tables)
-        input_buffer_block_tables[:num_reqs, max_seq_pages:].fill_(0)
-        input_buffer_block_tables[num_reqs:, :].fill_(0)
         self.block_tables = input_buffer_block_tables[:actual_len, :]
 
-        self.mapping = get_parallel_info_manager()
-        tp_size = self.mapping.attn_tp.group_size
-        tp_rank = self.mapping.attn_tp.rank
-        num_padded_tokens = num_tokens + (tp_size - num_tokens % tp_size) % tp_size
-        unit_size = num_padded_tokens // tp_size
-        all_mask = [1] * num_actual_tokens + [0] * (num_padded_tokens - num_actual_tokens)
-        mc2_mask = torch.tensor(all_mask[unit_size * tp_rank:unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
-
+        unit_size = len(self.mc2_mask)
         input_buffer_mc2_mask = input_buffer.get("mc2_mask")
-        input_buffer_mc2_mask[:unit_size].copy_(mc2_mask[:unit_size])
+        input_buffer_mc2_mask[:unit_size].copy_(self.mc2_mask)
         self.mc2_mask = input_buffer_mc2_mask[:unit_size]
 
-
-    def prepare_dummy_input(self, num_tokens):                      
-        reqs_padding_length, _ = get_speculative_reqs_padding_length(num_tokens=num_tokens, 
-                                                                    num_actual_tokens=self.num_speculative_tokens + 1) 
-        self.seq_lens = self.seq_lens[:reqs_padding_length] 
-        self.block_tables = self.block_tables[:reqs_padding_length, :] 
-        self.actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")[:reqs_padding_length] 
+    def prepare_dummy_input(self, num_tokens):
+        num_actual_tokens = self.num_speculative_tokens + 1
+        reqs_padding_length, _ = get_speculative_reqs_padding_length(num_tokens=num_tokens,
+                                                                    num_actual_tokens=self.num_speculative_tokens + 1)
+        self.seq_lens = self.seq_lens[:reqs_padding_length]
+        self.block_tables = self.block_tables[:reqs_padding_length, :]
+        self.actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")[:reqs_padding_length]
+        actual_seq_lengths_query = torch.arange(
+            num_actual_tokens,
+            reqs_padding_length * num_actual_tokens + 1,
+            num_actual_tokens,
+            dtype=torch.int32,
+            device=self.seq_lens.device
+        )
+        input_buffer.get("actual_seq_lengths_query")[:reqs_padding_length].copy_(actual_seq_lengths_query)
         self.actual_seq_lengths_query = input_buffer.get("actual_seq_lengths_query")[:reqs_padding_length]
 
 

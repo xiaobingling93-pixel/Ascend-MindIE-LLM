@@ -224,6 +224,67 @@ class TestOutputFilter(unittest.TestCase):
         self.assertTrue(np.array_equal(actual_call[0][3], expected_filter_ids))
         self.assertTrue(np.array_equal(actual_call[0][4], end_reason))
 
+    def test_filter_by_length_various_limits(self):
+        self.output_filter.cache_config.max_seq_len = 100
+        self.output_filter.cache_config.max_gen_len = 50
+        self.output_filter.cache_config.eos_token_id = [2]
+        self.output_filter.cache_config.ignore_eos = False
+        
+        cache_ids = np.array([10, 11, 12])
+        batch_max_output_lens = np.array([20, 20, 20])
+
+        self.output_filter.tg_infer_context.get_output_len_count.return_value = np.array([10, 19, 5])
+        self.output_filter.tg_infer_context.get_seq_lens.return_value = np.array([99, 50, 20])
+        
+        sampling_output = MagicMock()
+        sampling_output.num_new_tokens = np.array([1, 1, 1])
+        
+        filter_ids_arr = np.array([], dtype=np.int64)
+        end_reason = np.zeros(3, dtype=np.int64)
+
+        result_filter_ids = self.output_filter.filter_by_length(
+            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason
+        )
+
+        self.assertIn(0, result_filter_ids)
+        self.assertIn(1, result_filter_ids)
+        self.assertNotIn(2, result_filter_ids)
+
+        self.assertEqual(end_reason[0], ResponseConfig.REACH_MAX_SEQ_LEN)
+        self.assertEqual(end_reason[1], ResponseConfig.REACH_MAX_OUTPUT_LEN)
+        self.assertEqual(end_reason[2], 0)
+
+        sampling_output.num_new_tokens = np.array([10, 10, 10])
+        self.output_filter.filter_by_length(
+            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason
+        )
+        self.assertTrue(np.all(sampling_output.num_new_tokens <= 50))
+        self.output_filter.cache_config = MagicMock()
+
+    def test_filter_by_length_global_limit(self):
+        self.output_filter.cache_config.max_seq_len = 100
+        self.output_filter.cache_config.eos_token_id = [2]
+        self.output_filter.cache_config.ignore_eos = False
+        self.output_filter.cache_config.max_gen_len = 10
+        cache_ids = np.array([100])
+        batch_max_output_lens = np.array([100])
+        
+        self.output_filter.tg_infer_context.get_output_len_count.return_value = np.array([9])
+        self.output_filter.tg_infer_context.get_seq_lens.return_value = np.array([20])
+        
+        sampling_output = MagicMock()
+        sampling_output.num_new_tokens = np.array([1])
+        
+        filter_ids_arr = np.array([], dtype=np.int64)
+        end_reason = np.zeros(1, dtype=np.int64)
+
+        result = self.output_filter.filter_by_length(
+            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason
+        )
+
+        self.assertIn(0, result)
+        self.assertEqual(end_reason[0], ResponseConfig.REACH_MAX_OUTPUT_LEN)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -93,7 +93,7 @@ class Sampler:
     def greedy_select_on_device(logits: torch.Tensor, metadata: SamplingMetadata):
         batch_size = len(logits)
         token_ids = logits.argmax(dim=-1).to(torch.int64)
-        logprobs = torch.full((batch_size,), -9999.0, dtype=torch.float32)
+        logprobs = torch.full((batch_size,), -9999.0, dtype=torch.float32, device="npu")
         top_token_ids = torch.zeros((batch_size, 0), dtype=torch.int64)
         top_logprobs = torch.zeros((batch_size, 0), dtype=torch.float32)
         sampling_output = SamplingOutput(
@@ -106,7 +106,8 @@ class Sampler:
             top_token_ids=top_token_ids,
             top_logprobs=top_logprobs,
             cumulative_logprobs=torch.zeros(batch_size, dtype=torch.float32),
-            num_new_tokens=torch.ones(batch_size, dtype=torch.int64),
+            num_new_tokens=torch.ones(batch_size, dtype=torch.int64, device="npu"),
+            num_new_tokens_numpy=np.ones(batch_size, dtype=np.int64),
             num_top_tokens=metadata.num_top_tokens if metadata is not None else None
         )
         return sampling_output

@@ -17,6 +17,7 @@ from .config import ResponseConfig, CacheConfig
 from .input_metadata import InputMetadata
 from .sampling_output import SamplingOutput
 from .tg_decode_util import decode_one
+from ...utils.env import ENV
 
 
 @njit
@@ -86,15 +87,37 @@ class OutputFilter:
         end_reason[eos_idx] = ResponseConfig.EOS
         return filter_ids_arr
 
-    def filter_by_length(self, cache_ids, batch_max_output_lens, num_new_tokens, filter_ids_arr, end_reason):
+    def filter_by_length(self, cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason):
+        def adjust_num_new_tokens(cached_lens, num_new_tokens, max_seq_len):
+            """
+            调整 num_new_tokens 的值，确保 cached_seq_lens + num_new_tokens <= max_seq_len。
+            
+            参数:
+                cached_seq_lens (np.ndarray): 已缓存的序列长度数组。
+                num_new_tokens (np.ndarray): 新的 token 数量数组。
+                max_seq_len (int): 最大序列长度。
+            
+            返回:
+                np.ndarray: 调整后的 num_new_tokens。
+            """
+            available_tokens = max_seq_len - cached_lens
+            adjusted_num_new_tokens = np.minimum(num_new_tokens, available_tokens)
+            return adjusted_num_new_tokens
         output_len_count = self.tg_infer_context.get_output_len_count(cache_ids)
         cached_seq_lens = self.tg_infer_context.get_seq_lens(cache_ids)
+        if ENV.model_runner_exp:
+            sampling_output.num_new_tokens = adjust_num_new_tokens(
+                cached_seq_lens, sampling_output.num_new_tokens, self.cache_config.max_seq_len)
+            sampling_output.num_new_tokens = adjust_num_new_tokens(
+                output_len_count, sampling_output.num_new_tokens, batch_max_output_lens)
+            sampling_output.num_new_tokens = adjust_num_new_tokens(
+                output_len_count, sampling_output.num_new_tokens, self.cache_config.max_gen_len)
         exceed_seq_limit_idx = np.nonzero(
-            cached_seq_lens + num_new_tokens >= self.cache_config.max_seq_len)[0]
+            cached_seq_lens + sampling_output.num_new_tokens >= self.cache_config.max_seq_len)[0]
         exceed_user_output_limit_idx = np.nonzero(
-            output_len_count + num_new_tokens >= batch_max_output_lens)[0]
+            output_len_count + sampling_output.num_new_tokens >= batch_max_output_lens)[0]
         exceed_global_output_limit_idx = np.nonzero(
-            output_len_count + num_new_tokens >= self.cache_config.max_gen_len)[0]
+            output_len_count + sampling_output.num_new_tokens >= self.cache_config.max_gen_len)[0]
 
         if exceed_seq_limit_idx.size != 0:
             filter_ids_arr = np.union1d(filter_ids_arr, exceed_seq_limit_idx)
@@ -168,6 +191,9 @@ class OutputFilter:
         metadata: InputMetadata,
         sampling_output: SamplingOutput
     ):
+        if ENV.model_runner_exp:
+            for eos in self.eos_token_id:
+                sampling_output.truncate_after_eos(eos)
         filter_ids_arr = np.array([], dtype=np.int32)
         if sampling_output.repeating_indices is not None:
             cache_ids = cache_ids[sampling_output.repeating_indices]
@@ -184,7 +210,7 @@ class OutputFilter:
         filter_ids_arr, truncation_indices = self.filter_by_stop(
             cache_ids, sampling_output.token_ids, sampling_output.num_new_tokens, filter_ids_arr, end_reason)
         filter_ids_arr = self.filter_by_length(
-            cache_ids, batch_max_output_lens, sampling_output.num_new_tokens, filter_ids_arr, end_reason)
+            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason)
 
         # 对于没有完成prefill的req，不可以清除后处理参数
         if metadata.is_mix is not None:

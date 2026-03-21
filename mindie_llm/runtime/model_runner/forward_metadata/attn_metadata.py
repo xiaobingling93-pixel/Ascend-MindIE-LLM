@@ -14,6 +14,7 @@ from typing import Optional, List
 import torch
 
 from mindie_llm.runtime.model_runner.forward_metadata.module_metadata import ModuleMetadata
+from mindie_llm.runtime.layers.attention import get_global_attn_dict
 
 
 @dataclass
@@ -36,3 +37,24 @@ class AttentionMetadata(ModuleMetadata):
     attn_mask: torch.Tensor
     seq_lens_list: Optional[List[int]] = None
     max_seq_len: int = 0
+    num_tokens: int = 0
+
+
+def build_layerwise_attn_metadata(
+    attn_metadata: AttentionMetadata
+) -> dict[str, AttentionMetadata]:
+    """Build layerwise attention metadata dictionary.
+    
+    NOTE: extra_metadata is to input new attribute.
+    
+    Args:
+        attn_metadata: Attention metadata.
+        
+    Returns:
+        Dictionary mapping layer prefixes to attention metadata.
+    """
+    attns = get_global_attn_dict()
+    attn_metadata_dict = {}
+    for prefix in attns:
+        attn_metadata_dict[prefix] = attn_metadata
+    return attn_metadata_dict

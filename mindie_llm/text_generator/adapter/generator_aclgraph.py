@@ -141,12 +141,12 @@ class GeneratorAclGraph(GeneratorBackend):
             logger.error(error_msg, ErrorCode.TEXT_GENERATOR_INTERNAL_ERROR)
             raise AssertionError(error_msg)
         self._prepare_model_inputs(model_input, kwargs)
-        model_input = self.model_wrapper.prepare_model_inputs(model_input)
+        model_input, kwargs = self.model_wrapper.prepare_model_inputs(model_input, **kwargs)
         return model_input, kwargs
 
     def forward_from_model_inputs(self, model_input: ModelInput, **kwargs):
         result = self.model_wrapper.forward_from_model_inputs(self.cache_pool.npu_cache,
-            model_input.input_ids, model_input.position_ids, model_input.forward_context)
+            model_input.input_ids, model_input.position_ids, model_input.forward_context, **kwargs)
 
         if isinstance(result, tuple):
             if len(result) == 2:
@@ -187,6 +187,9 @@ class GeneratorAclGraph(GeneratorBackend):
         self._prepare_model_inputs(model_inputs, kwargs)  # NOTE：to remove after mixPD server support dp in dp out.
         logits = self.model_wrapper.forward(model_inputs, self.cache_pool.npu_cache, **kwargs)
         return logits
+
+    def compile(self):
+        self.model_wrapper.model_runner.compile(self.cache_pool.npu_cache)
 
     def update_cache_policy(self, kvcache_settings, sepd_worker=None):
         self.cache_pool = KVCachePool(kvcache_settings, self.device, enable_kv_pool=self.enable_kv_pool)
@@ -569,7 +572,7 @@ class GeneratorAclGraph(GeneratorBackend):
                 np.zeros(input_length_padding, dtype=np.int32)
             ]).reshape(-1)
 
-        if self.mapping.attn_o_proj_tp.group_size > 1:
+        if self.mapping.has_attn_o_proj_tp():
             gather_prenorm_idx = np.arange(atom_dp_size, dtype=np.int32)
         else:
             gather_prenorm_idx = \

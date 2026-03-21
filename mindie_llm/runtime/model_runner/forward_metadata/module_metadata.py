@@ -90,3 +90,24 @@ class ModuleMetadata:
             num_tokens: Total number of tokens (including padding).
         """
         pass
+
+    def record_stream(self, stream: torch.npu.Stream) -> None:
+        """Record the stream for metadata tensors.
+
+        Subclasses are not allowed to have nested structures.
+        
+        Args:
+            stream: NPU stream to record.
+        """
+        def _record(obj):
+            if isinstance(obj, torch.Tensor) and obj.is_npu:
+                obj.record_stream(stream)
+            elif isinstance(obj, list) or isinstance(obj, tuple):
+                for item in obj:
+                    _record(item)
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    _record(v)
+
+        for value in self.__dict__.values():
+            _record(value)

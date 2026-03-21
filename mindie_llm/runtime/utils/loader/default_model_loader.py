@@ -42,8 +42,8 @@ class DefaultModelLoader:
     def load_weights(self, model: nn.Module, model_path: str) -> None:
         """Load model weights from checkpoint."""
         self._counter_before_loading_weights = time.perf_counter()
-        quantize = model.config.quantize
-         # Traverse module and map to corresponding weight
+        quantize = getattr(model.config, "quantize", None)
+        # Traverse module and map to corresponding weight
         self._weight_file_handler = WeightsFileHandler(model_path, ".safetensors", quantize)
         self._load_modules(model)
         self._weight_file_handler.release_file_handler()

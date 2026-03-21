@@ -238,6 +238,8 @@ class Generator(PDInterface):
         self.inference_mode = model_config['inference_mode']
 
         self.backend_type = parse_config(model_config, 'backend_type', required=True, default_value='atb')
+        if self.backend_type == "torch":
+            ENV.model_runner_exp = True
         self.rank = parse_config(model_config, 'rank', required=True, parse_type=ParseType.TO_INT)
         self.world_size = parse_config(model_config, 'world_size', required=True, parse_type=ParseType.TO_INT)
         self.local_rank = parse_config(model_config, 'local_rank', required=True, parse_type=ParseType.TO_INT)
@@ -374,7 +376,10 @@ class Generator(PDInterface):
                 max_prefill_tokens = min(max_prefill_tokens, LWD_MAX_CHUNK_SIZE)
                 max_seq_len = min(max_seq_len, LWD_MAX_CHUNK_SIZE)
                 max_input_len = min(max_input_len, LWD_MAX_CHUNK_SIZE)
-                
+
+            if self.backend_type == "torch":
+                self.generator_backend.model_wrapper.model_runner.set_eager_mode_with_padding(True)
+
             warmup_param = WarmupParams(max_prefill_tokens, max_seq_len, max_input_len, max_iter_times)
             npu_mem = self.warm_up(warmup_param)
 
@@ -386,6 +391,10 @@ class Generator(PDInterface):
         self.watcher._set_warmup_mem(warmup_mem)
 
         self._init_plugin_manager(self.kvcache_settings, plugin_list, plugin_config)
+
+        if self.backend_type == "torch":
+            self.generator_backend.model_wrapper.model_runner.set_eager_mode_with_padding(False)
+            self.generator_backend.compile()
 
         if (
             self.pd_config.model_role == DmiModeNodeRole.DECODER
@@ -446,7 +455,7 @@ class Generator(PDInterface):
             input_metadata: The input metadata constructed by the `BatchScheduler` includes request data such as input
                 ids, post-processing parameters, etc.
         """
-        if self.backend_type == 'atb' and not warmup and input_metadata.batch_seq_len.any():
+        if not warmup and input_metadata.batch_seq_len.any():
             cur_dp_rank_id_mask = self.model_wrapper.mapping.attn_dp.rank
             mask = input_metadata.batch_dp_rank_ids == cur_dp_rank_id_mask
             if len(input_metadata.batch_seq_len) != len(input_metadata.batch_dp_rank_ids): 
@@ -617,7 +626,8 @@ class Generator(PDInterface):
 
             with memory_profiling(
                 baseline_non_torch=0,
-                weights_memory=self.model_memory_usage
+                weights_memory=self.model_memory_usage,
+                backend_type=self.backend_type
             ) as profile_result:
                 if self.pd_config.model_role in {STANDARD_TAG, DmiModeNodeRole.FLEX}:
                     self._warmup_standard(warmup_params)
@@ -786,7 +796,7 @@ class Generator(PDInterface):
         try:
             if dap:
                 self.generator_backend.enable_dap = False
-            if async_inference:
+            if async_inference and not self.backend_type == "torch":
                 self.async_inference = False
             yield
         finally:
@@ -948,14 +958,17 @@ class Generator(PDInterface):
             self._auto_warmup(warmup_params, do_prefix_cache_warmup=True)
 
     def _warmup_specified(self, warmup_params: WarmupParams):
-        prefill_reqs = self._get_warm_up_reqs(warmup_params)
+        if ENV.model_runner_exp:
+            self._auto_warmup(warmup_params)
+        else:
+            prefill_reqs = self._get_warm_up_reqs(warmup_params)
 
-        _ = self._execute_warm_up(
-            requests=prefill_reqs,
-            is_prefill=True
-        )
+            _ = self._execute_warm_up(
+                requests=prefill_reqs,
+                is_prefill=True
+            )
 
-        self.watcher.watch_npu_mem(self.rank, 'warmup specified success', self.is_multimodal, self.max_input_len)
+            self.watcher.watch_npu_mem(self.rank, 'warmup specified success', self.is_multimodal, self.max_input_len)
 
     def _update_kvcache_settings(self, npu_mem):
         kvcache_settings = KVCacheSettings(
@@ -1061,7 +1074,7 @@ class Generator(PDInterface):
             is_prefill=False
         )
         remaining_reqs, _ = self._filter_end_reqs(decode_reqs, generation_output)
-        if remaining_reqs:
+        if remaining_reqs and self.backend_type != "torch":
             raise RuntimeError(
                 f"Decode warmup did not finish all requests: {len(remaining_reqs)} remaining."
             )

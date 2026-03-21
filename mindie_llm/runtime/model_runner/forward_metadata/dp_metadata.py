@@ -29,6 +29,23 @@ class DPMetadata(ModuleMetadata):
     """
     num_tokens_across_dp_cpu: torch.Tensor
     num_actual_tokens_across_dp_cpu: torch.Tensor
+    max_tokens_across_dp_cpu: int
+
+    def __post_init__(self) -> None:
+        """Get and update number of tokens across data parallel groups.
+        This method performs an all-reduce operation to gather token counts
+        from all data parallel ranks and updates the internal state.
+        """
+        num_token_cur_dp = self.num_tokens_across_dp_cpu
+        dp_para_info = get_parallel_info_manager().get(ParallelType.ATTN_DP)
+        num_token_tensor = torch.tensor([
+                num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)
+            ], dtype=torch.int32, device="npu")
+        if dp_para_info.is_enabled():
+            torch_dist.all_reduce(num_token_tensor, group=dp_para_info.preprocess_group)
+        self.num_tokens_across_dp_cpu = num_token_tensor.cpu()
+        self.max_tokens_across_dp_cpu = max(self.num_tokens_across_dp_cpu).item()
+        self.num_actual_tokens_across_dp_cpu = self.num_tokens_across_dp_cpu
 
     @staticmethod
     def from_model_input(model_input: Any) -> 'DPMetadata':
@@ -43,7 +60,8 @@ class DPMetadata(ModuleMetadata):
         num_actual_tokens = model_input.input_ids.shape[0]
         return DPMetadata(
             num_tokens_across_dp_cpu=num_actual_tokens,
-            num_actual_tokens_across_dp_cpu=num_actual_tokens
+            num_actual_tokens_across_dp_cpu=num_actual_tokens,
+            max_tokens_across_dp_cpu=0
         )
 
     @staticmethod
@@ -82,20 +100,3 @@ class DPMetadata(ModuleMetadata):
         """
         self.num_tokens_across_dp_cpu = torch.tensor(
             [num_tokens] * get_parallel_info_manager().get(ParallelType.ATTN_DP).group_size)
-
-    def get_num_tokens_across_dp_cpu(self) -> None:
-        """Get and update number of tokens across data parallel groups.
-        
-        This method performs an all-reduce operation to gather token counts
-        from all data parallel ranks and updates the internal state.
-        """
-        num_token_cur_dp = self.num_tokens_across_dp_cpu
-        dp_para_info = get_parallel_info_manager().get(ParallelType.ATTN_DP)
-        num_token_tensor = torch.tensor([
-                num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)
-            ], dtype=torch.int32, device="npu")
-        if dp_para_info.is_enabled():
-            # NOTE: need to be fixed, acutually it is npu tensor.
-            torch_dist.all_reduce(num_token_tensor, group=dp_para_info.preprocess_group)
-        self.num_tokens_across_dp_cpu = num_token_tensor.cpu()
-        self.num_actual_tokens_across_dp_cpu = self.num_tokens_across_dp_cpu

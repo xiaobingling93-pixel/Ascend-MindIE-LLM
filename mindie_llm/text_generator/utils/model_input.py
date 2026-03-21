@@ -57,6 +57,8 @@ class ModelInput:
     kwargs: Optional[Dict[str, Any]] = None
     layerwise_disaggregated_exe_stage = None
 
+    q_lens: Optional[BackendTensor] = None
+    last_hidden_states: Optional[BackendTensor] = None
     forward_context: ForwardContext = None
 
     def __post_init__(self):

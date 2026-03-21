@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# SPDX-License-Identifier: Apache-2.0
+# Part of this file implemented based on vllm project.
+#
 # Copyright (c) Huawei Technologies Co., Ltd. 2024-2026. All rights reserved.
 # MindIE is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -88,6 +92,8 @@ class MemorySnapshot:
     def measure(self) -> None:
         self.torch_peak = npu.max_memory_allocated()
 
+        npu.current_stream().synchronize()
+
         self.free_memory, self.total_memory, _ = acl.rt.get_mem_info(1)
 
         self.npu_memory = self.total_memory - self.free_memory
@@ -127,6 +133,7 @@ class MemoryProfilingResult:
 def memory_profiling(
     baseline_non_torch: int = 0,
     weights_memory: int = 0,
+    backend_type=None
 ):
     gc.collect()
     npu.empty_cache()
@@ -139,7 +146,8 @@ def memory_profiling(
     yield result
 
     gc.collect()
-    npu.empty_cache()
+    if backend_type != "torch":
+        npu.empty_cache()
 
     result.after_profile.measure()
 

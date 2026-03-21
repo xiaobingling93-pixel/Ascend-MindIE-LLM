@@ -156,7 +156,7 @@ def test_prepare_model_inputs(
     mock_inputs.block_tables = [[10, 11], [12, 13]]
     mock_inputs.input_lengths = None  # Will be set by prepare_model_inputs
 
-    result = wrapper.prepare_model_inputs(mock_inputs)
+    result, _ = wrapper.prepare_model_inputs(mock_inputs)
 
     # Check tensor conversion
     assert torch.is_tensor(result.input_ids)
