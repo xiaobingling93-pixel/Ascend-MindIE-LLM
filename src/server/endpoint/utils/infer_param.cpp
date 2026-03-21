@@ -23,7 +23,6 @@
 #include "parameters_checker.h"
 #include "infer_tokenizer.h"
 #include "log.h"
-#include "system_log.h"
 #include "common_util.h"
 #include "basic_types.h"
 #include "config_manager_impl.h"
@@ -216,7 +215,7 @@ bool AssignDoSample(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string 
     const std::string key = "do_sample";
     bool res = ParametersChecker::OptionalBooleanJsonCheck(jsonObj, key, tmpReq->doSample, error);
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -235,7 +234,7 @@ bool AssignRepetitionPenalty(const OrderedJson &jsonObj, RequestSPtr tmpReq, std
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -257,7 +256,7 @@ bool AssignSeed(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &err
             return false;
         }
         tmpReq->seed = random->GetRand();
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << random->GetRand();
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << random->GetRand());
         return true;
     }
     uint64_t value = jsonObj[key];
@@ -266,7 +265,7 @@ bool AssignSeed(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &err
         return false;
     }
     tmpReq->seed = value;
-    LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << value;
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << value);
     return true;
 }
 
@@ -278,7 +277,7 @@ bool AssignStopStrings(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::stri
         return true;
     }
     auto stopStrings = jsonObj[key];
-    LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << stopStrings.dump();
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << stopStrings.dump());
     switch (stopStrings.type()) {
         case OrderedJson::value_t::array: {
             return AssignStopStringList(stopStrings, tmpReq, error, isNumStopStrLimited, maxLength);
@@ -356,7 +355,7 @@ bool AssignPresencePenalty(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -423,7 +422,7 @@ bool AssignFrequencyPenalty(const OrderedJson &jsonObj, RequestSPtr tmpReq, std:
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -433,7 +432,7 @@ bool AssignSkipSpecialTokens(const OrderedJson &jsonObj, RequestSPtr tmpReq, std
     const std::string key = "skip_special_tokens";
     bool res = ParametersChecker::OptionalBooleanJsonCheck(jsonObj, key, tmpReq->skipSpecialTokens, error);
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -450,7 +449,7 @@ bool AssignIncludeStopStrInOutput(const OrderedJson &jsonObj, RequestSPtr tmpReq
     }
     if (res.isPresent) {
         tmpReq->includeStopStrInOutput = jsonObj[key];
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return true;
 }
@@ -471,7 +470,7 @@ bool AssignTemperature(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::stri
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -553,7 +552,7 @@ bool AssignTopK(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &err
     int64_t value = jsonObj[key];
     if (value == -1 && allowNegativeOne) {
         tmpReq->topK = 0;
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: 0";
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: 0");
         return true;
     }
     bool isValid = (value <= MAX_INT32_VALUE) && (allowLowerBound ? value >= 0 : value > 0);
@@ -563,7 +562,7 @@ bool AssignTopK(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &err
         return false;
     }
     tmpReq->topK = static_cast<int32_t>(value);
-    LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << value;
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << value);
     return true;
 }
 
@@ -579,7 +578,7 @@ bool AssignTopP(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &err
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -589,7 +588,7 @@ bool AssignIgnoreEos(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string
     const std::string key = "ignore_eos";
     bool res = ParametersChecker::OptionalBooleanJsonCheck(jsonObj, key, tmpReq->ignoreEos, error);
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -628,8 +627,8 @@ bool AssignStopTokenIds(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::str
     std::set<TokenId> tempStopTokenIds(tmpReq->stopTokenIds.value().begin(), tmpReq->stopTokenIds.value().end());
     tmpReq->stopTokenIds.value().clear();
     tmpReq->stopTokenIds.value().assign(tempStopTokenIds.begin(), tempStopTokenIds.end());
-    LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: "
-        << Join(tmpReq->stopTokenIds.value(), ",");
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: "
+        << Join(tmpReq->stopTokenIds.value(), ","));
     return true;
 }
 
@@ -645,7 +644,7 @@ bool AssignTypicalP(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string 
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -655,7 +654,7 @@ bool AssignWatermark(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string
     const std::string key = "watermark";
     bool res = ParametersChecker::OptionalBooleanJsonCheck(jsonObj, key, tmpReq->watermark, error);
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
@@ -702,7 +701,7 @@ bool AssignPriority(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string 
             return true;
         });
     if (jsonObj.contains(key)) {
-        LOG_DEBUG_SERVER.SetType(LogType::REQUEST) << "Sampling param `" << key << "` value: " << jsonObj[key];
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Sampling param `" << key << "` value: " << jsonObj[key]);
     }
     return res;
 }
