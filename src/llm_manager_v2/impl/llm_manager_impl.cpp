@@ -595,6 +595,11 @@ static void UpdateEngineConfig(EngineConfig &engineConfig)
         MINDIE_LLM_LOG_INFO("CP enabled: maxPrefillTokens increased to multiple of 2 * cpsize. " <<
                             "New value: " << maxPrefillTokens);
     }
+
+    if (engineConfig.maxBatchSize > maxPrefillTokens) {
+        engineConfig.maxBatchSize = maxPrefillTokens;
+        MINDIE_LLM_LOG_INFO("maxBatchSize is greater than maxPrefillTokens. It will be replaced by maxPrefillTokens.");
+    }
     
     engineConfig.maxPrefillTokens = maxPrefillTokens;
     deployParam.maxSeqLen = maxSeqLen;

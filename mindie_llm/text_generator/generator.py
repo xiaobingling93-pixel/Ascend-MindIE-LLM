@@ -958,17 +958,7 @@ class Generator(PDInterface):
             self._auto_warmup(warmup_params, do_prefix_cache_warmup=True)
 
     def _warmup_specified(self, warmup_params: WarmupParams):
-        if ENV.model_runner_exp:
-            self._auto_warmup(warmup_params)
-        else:
-            prefill_reqs = self._get_warm_up_reqs(warmup_params)
-
-            _ = self._execute_warm_up(
-                requests=prefill_reqs,
-                is_prefill=True
-            )
-
-            self.watcher.watch_npu_mem(self.rank, 'warmup specified success', self.is_multimodal, self.max_input_len)
+        self._auto_warmup(warmup_params)
 
     def _update_kvcache_settings(self, npu_mem):
         kvcache_settings = KVCacheSettings(
