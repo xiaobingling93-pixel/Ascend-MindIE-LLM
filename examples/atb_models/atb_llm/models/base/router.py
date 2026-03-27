@@ -213,7 +213,7 @@ class BaseRouter:
             if filename is not None:
                 with file_utils.safe_open(filename, 'r', check_link=False) as f:
                     quant_descs = json.load(f)
-                if quant_descs.get("model_quant_type") is not None:
+                if quant_descs.get("model_quant_type") is not None and self.config_dict.get("quantize") is None:
                     self.config_dict[quantize] = quant_descs.get("model_quant_type").lower()
                 if quant_descs.get(is_nzcasted) is not None:
                     self.config_dict[is_nzcasted] = quant_descs.get(is_nzcasted)
