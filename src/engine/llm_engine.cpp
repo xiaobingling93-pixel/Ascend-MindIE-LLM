@@ -548,7 +548,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
             if (schedulerConfig_->stageSelectPolicy == static_cast<uint32_t>(StagePolicyType::LATENCY_FIRST) ||
                 schedulerConfig_->dynamicBatchSizeEnable) {
                 auto batchExecuteStartTime = std::chrono::high_resolution_clock::now();
-                SetupLatencyPredictor(batchExecuteStartTime, dpRankId_);
+                SetupLatencyPredictor(batchExecuteStartTime, localDPRank);
             }
 
             DistDecodeAcquireDummyQuota(false, enginePerDP);
@@ -911,9 +911,9 @@ void LlmEngine::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
 
 void LlmEngine::SetupLatencyPredictor(
     const std::chrono::high_resolution_clock::time_point& batchExecuteStartTime,
-    int dpRankId)
+    int localDPRank)
 {
-    auto& recorder = DynamicBatchRecorder::GetInstance(static_cast<size_t>(dpRankId));
+    auto& recorder = DynamicBatchRecorder::GetInstance(static_cast<size_t>(localDPRank));
     auto predictor = recorder.GetLatencyPredictor();
     if (predictor != nullptr) {
         predictor->SetBatchExecuteStartTime(batchExecuteStartTime);
