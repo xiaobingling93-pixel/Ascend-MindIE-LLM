@@ -227,13 +227,27 @@ function fn_main()
     fn_build_dt
 
     export_mindie_llm_env
+    
+    pids=()
+    task_times=()
+    
     if [ $PYTHON_TEST_ENABLE -eq 1 ]; then
-        fn_run_pythontest
+        ( 
+            fn_run_pythontest
+        ) &
+        pids+=($!)
     fi
 
     if [ $CPP_TEST_ENABLE -eq 1 ]; then
-        fn_build_coverage
+        ( 
+            fn_build_coverage
+        ) &
+        pids+=($!)
     fi
+    
+    for pid in "${pids[@]}"; do
+        wait $pid
+    done
 
     fn_show_coverage
 
@@ -243,5 +257,4 @@ function fn_main()
         fn_coverage_gate
     fi
 }
-
 fn_main "$@"
