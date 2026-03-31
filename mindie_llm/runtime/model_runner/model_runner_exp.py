@@ -124,6 +124,12 @@ class ModelRunnerExp:
         local_rank = local_rank if local_rank is not None else rank
         self.device = set_device(rank, npu_id if npu_id is not None else local_rank)
         self._max_seq_len = kwargs.get("max_seq_len", -1)
+        self._block_size = kwargs.get("block_size", 128)
+        if self._max_seq_len <= 0:
+            raise ValueError(f"max_seq_len must be specified and greater than 0, but got {self._max_seq_len}")
+        if self._block_size <= 0:
+            raise ValueError(f"block_size must be greater than 0, but got {self._block_size}")
+        self._max_block_per_seq = (self._max_seq_len + self._block_size - 1) // self._block_size
         self.is_draft_model = kwargs.get("is_draft_model", False)
 
         # bin cpus to the NUMA
@@ -412,7 +418,8 @@ class ModelRunnerExp:
 
     def _init_buffer(self) -> None:
         """Initialize input buffers for graph mode."""
-        ForwardContext.register(self._max_num_token, self.device, self._mindie_llm_config.hf_config)
+        ForwardContext.register(self._max_num_token, self.device, self._mindie_llm_config.hf_config,
+            self._max_block_per_seq)
         input_buffer.register("input_ids", torch.zeros(self._max_num_token, dtype=torch.int32, device=self.device))
         input_buffer.register("position_ids", torch.zeros(self._max_num_token, dtype=torch.int64, device=self.device))
 

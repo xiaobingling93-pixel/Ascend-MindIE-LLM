@@ -82,19 +82,23 @@ class ForwardContext:
     sub_forward_context = None
 
     @staticmethod
-    def register(max_num_token: int, device: torch.device, hf_config: HuggingFaceConfig) -> None:
+    def register(max_num_token: int,
+                 device: torch.device,
+                 hf_config: HuggingFaceConfig,
+                 max_block_per_seq: int) -> None:
         """Register buffer for attention metadata.
         
         Args:
             max_num_token: Maximum number of tokens.
             device: Target device.
             hf_config: HuggingFaceConfig of model.
+            max_block_per_seq: Maximum number of blocks per sequence.
         """
         attns = get_global_attn_dict()
         attn_layer = attns[next(iter(attns))]
         attn_backend = attn_layer.get_attn_backend()
         metadata_cls = attn_backend.get_builder_cls().get_metadata_cls()
-        metadata_cls.register_buffer(max_num_token, device)
+        metadata_cls.register_buffer(max_num_token, device, max_block_per_seq)
         MtpMetadata.register_buffer(max_num_token, device, hf_config)
 
     def to_device(self, device: torch.device) -> None:

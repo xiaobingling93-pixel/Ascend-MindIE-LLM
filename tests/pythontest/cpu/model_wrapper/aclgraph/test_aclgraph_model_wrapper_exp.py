@@ -128,6 +128,7 @@ def test_init_success(
         moe_ep=-1,
         role='standard',
         max_seq_len=-1,
+        block_size=-1,
         sampler_config=None,
         distributed_enable=False,
     )

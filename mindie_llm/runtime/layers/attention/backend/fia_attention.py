@@ -70,9 +70,10 @@ class FiaAttentionMetadata(AttentionMetadata):
         )
 
     @staticmethod
-    def register_buffer(max_num_token, device):
+    def register_buffer(max_num_token, device, max_block_per_seq):
         input_buffer.register("seq_lens", torch.zeros(max_num_token, dtype=torch.int32, device=device))
-        input_buffer.register("block_tables", torch.zeros((max_num_token, 64), dtype=torch.int32, device=device))
+        input_buffer.register("block_tables", 
+                              torch.zeros((max_num_token, max_block_per_seq), dtype=torch.int32, device=device))
         input_buffer.register("slot_mapping", -torch.ones(max_num_token, dtype=torch.int32, device=device))
 
     def to_device(self, device):

@@ -84,6 +84,7 @@ class AclGraphModelWrapperExp(ModelWrapper):
             moe_ep=kwargs.get('moe_ep', -1),
             role=kwargs.get('role', 'standard'),
             max_seq_len=kwargs.get("max_seq_len", -1),
+            block_size=kwargs.get("block_size", -1),
             sampler_config=kwargs.get('sampler_config', None),
             distributed_enable=kwargs.get("distributed_enable", False),
         )
