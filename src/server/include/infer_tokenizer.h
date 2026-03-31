@@ -182,7 +182,14 @@ private:
     ~TokenizerProcessPool() = default;
 
     bool InitProcesses();
+    bool InitProcessesV1();
     bool CreateChildProcesses(std::vector<pid_t> &pids);
+    bool InitProcessesV2();
+    bool CreateOneChildWithRetry(std::shared_ptr<ShareTokenMemory> shm, const int idx);
+    bool CreateOneChild(std::shared_ptr<ShareTokenMemory> shm, pid_t& pid);
+    bool WaitOneChildPid(const pid_t pid, const int idx);
+    bool WaitOneChildInit(std::shared_ptr<ShareTokenMemory> shm, const time_t waitTime);
+    bool KillAndWaitChild(const pid_t pid, const int sign);
     bool InitSharedMemory(int32_t parentPid);
     bool ProcessWorker(std::shared_ptr<ShareTokenMemory> shm);
     bool InitWorkerResource(const std::shared_ptr<ShareTokenMemory> &curMemory,

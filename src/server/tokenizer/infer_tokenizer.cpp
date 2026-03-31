@@ -17,6 +17,9 @@
 #include <unistd.h>
 #include <csignal>
 #include <regex>
+#include <cstdlib>
+#include <string>
+#include <sys/wait.h>
 #include <nlohmann/json.hpp>
 #include "config_manager.h"
 #include "env_util.h"
@@ -32,11 +35,15 @@ namespace mindie_llm {
 std::string g_tokenizerSharedMemName = "/llm_tokenizer_shared_memory_";
 static constexpr uint32_t MEM_PAGE_SIZE = 4096U;
 
-static constexpr time_t INIT_WAIT_TIME = 120;   // 启动等待时长
+static constexpr time_t INIT_WAIT_TIME = 60;   // 启动等待时长
 static constexpr time_t DECODE_WAIT_TIME = 60;  // Decode等待时长
 static constexpr time_t WAIT_TIME = 60;         // Encode等待时长
 static constexpr time_t MIN_WAIT_TIME = 5;
 static constexpr time_t MAX_WAIT_TIME = 300;
+
+static constexpr int D_INIT_RETRY = 3; // 重试3次
+static constexpr time_t D_INIT_WAIT_TIME = 20; // 超时20秒：20*3=60
+static constexpr int D_INIT_TERM_WAIT = 10; // TERM后等待10秒
 
 static std::string GetModelConfigString()
 {
@@ -421,6 +428,16 @@ bool TokenizerProcessPool::InitTokenizerPool()
 
 bool TokenizerProcessPool::InitProcesses()
 {
+    bool initOk = (tokenizerNumber_ > 1) ? InitProcessesV1() : InitProcessesV2();
+    if (!initOk) {
+        ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, INIT_ERROR),
+            "Init tokenizer processes failed, maybe timeout.");
+    }
+    return initOk;
+}
+
+bool TokenizerProcessPool::InitProcessesV1()
+{
     std::vector<pid_t> pids;
     if (!CreateChildProcesses(pids)) {
         return false;
@@ -428,16 +445,8 @@ bool TokenizerProcessPool::InitProcesses()
 
     uint32_t idx = 0;
     for (pid_t pid : pids) {
-        int status = 0;
-        if (waitpid(pid, &status, WNOHANG) != 0) {
-            ULOG_WARN(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(WARNING, SUBMODLE_FEATURE_TOKENIZER,
-                WATTING_SUBPROCESS_WARNING), "Failed to wait tokenizer sub process start, pid " << pid);
-            continue;
-        } else {
-            availablePid.push_back(pid);
-            // map sub process with share memory
-            pidMemoryMap.insert({ pid, idx++ });
-            ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Create and wait process success, sub pid " << std::to_string(pid));
+        if (WaitOneChildPid(pid, idx)) {
+            idx++;
         }
     }
 
@@ -447,7 +456,37 @@ bool TokenizerProcessPool::InitProcesses()
     }
 
     for (auto const &kv : sharedMemory_) {
-        SharedMemoryHeader *header = reinterpret_cast<SharedMemoryHeader *>(kv.second->GetBuf());
+        if (!WaitOneChildInit(kv.second, INIT_WAIT_TIME)) {
+            return false;
+        }
+    }
+
+    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Finished to init tokenizer sub process size " << availablePid.size());
+    return !availablePid.empty();
+}
+
+bool TokenizerProcessPool::WaitOneChildPid(const pid_t pid, const int idx)
+{
+    {
+        int status = 0;
+        if (waitpid(pid, &status, WNOHANG) != 0) {
+            ULOG_WARN(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(WARNING, SUBMODLE_FEATURE_TOKENIZER,
+                WATTING_SUBPROCESS_WARNING), "Failed to wait tokenizer sub process start, pid " << pid);
+            return false;
+        } else {
+            availablePid.push_back(pid);
+            // map sub process with share memory
+            pidMemoryMap.insert({ pid, idx });
+            ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Create and wait process success, sub pid " << std::to_string(pid));
+        }
+    }
+    return true;
+}
+
+bool TokenizerProcessPool::WaitOneChildInit(std::shared_ptr<ShareTokenMemory> shm, const time_t waitTime)
+{
+    {
+        SharedMemoryHeader *header = reinterpret_cast<SharedMemoryHeader *>(shm->GetBuf());
         if (header == nullptr) {
             ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
                 ABNORMAL_TRANSMISSION_ERROR), "Cast buffer to header failed.");
@@ -456,28 +495,36 @@ bool TokenizerProcessPool::InitProcesses()
 
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += INIT_WAIT_TIME;
+        ts.tv_sec += waitTime;
         int ret = sem_timedwait(&header->sems.subInitialized, &ts);
         if (ret == -1 || errno == ETIMEDOUT || header->magic == MAGIC_HEAD_FAILED) {
-            ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                INIT_ERROR), "Timeout, Failed to init tokenizer process after " << static_cast<uint32_t>(ts.tv_sec) <<
-                " seconds, step=" << static_cast<uint32_t>(header->sems.step));
+            ULOG_WARN(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
+                INIT_ERROR), "Timeout, Failed to init tokenizer process");
             return false;
         }
-        ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Success to init tokenizer process after " <<
-            static_cast<uint32_t>(ts.tv_sec) << " seconds, step=" << static_cast<uint32_t>(header->sems.step));
     }
-
-    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Finished to init tokenizer sub process size " << availablePid.size());
-    return !availablePid.empty();
+    return true;
 }
+
 
 bool TokenizerProcessPool::CreateChildProcesses(std::vector<pid_t> &pids)
 {
     for (auto &shmPair : sharedMemory_) {
         sleep(0);
+        pid_t pid = -1;
+        if (!CreateOneChild(shmPair.second, pid)) {
+            return false;
+        }
+        pids.push_back(pid);
+    }
+    return true;
+}
+
+bool TokenizerProcessPool::CreateOneChild(std::shared_ptr<ShareTokenMemory> shm, pid_t& pid)
+{
+    {
         PyOS_BeforeFork();
-        pid_t pid = fork();
+        pid = fork();
         if (pid == 0) {
             // Reset signal dispositions to default so child won't run parent's handlers
             signal(SIGTERM, SIG_DFL);
@@ -490,7 +537,7 @@ bool TokenizerProcessPool::CreateChildProcesses(std::vector<pid_t> &pids)
             PyOS_AfterFork_Child();
             PyGILState_STATE gstate = PyGILState_Ensure();
             ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Begin to process with pid " << getpid());
-            if (!ProcessWorker(shmPair.second)) {
+            if (!ProcessWorker(shm)) {
                 ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
                     ABNORMAL_TRANSMISSION_ERROR), "Tokenizer pool process worker failed.");
                 PyGILState_Release(gstate);
@@ -502,7 +549,6 @@ bool TokenizerProcessPool::CreateChildProcesses(std::vector<pid_t> &pids)
 
         if (pid > 0) {
             PyOS_AfterFork_Parent();
-            pids.push_back(pid);
             ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Started tokenizer sub process with pid " << pid);
         } else {
             ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
@@ -511,6 +557,71 @@ bool TokenizerProcessPool::CreateChildProcesses(std::vector<pid_t> &pids)
         }
     }
     return true;
+}
+
+bool TokenizerProcessPool::InitProcessesV2()
+{
+    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Start tokenizer with retry.");
+
+    uint32_t idx = 0;
+    for (auto &shmPair : sharedMemory_) {
+        sleep(0);
+        ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Start tokenizer[" << shmPair.first << "]");
+        if (!CreateOneChildWithRetry(shmPair.second, idx++)) {
+            ULOG_ERROR(SUBMODLE_NAME_TOKENIZER, GenerateTokenizerErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
+                INIT_ERROR), "Timeout, Failed to init tokenizer[" << shmPair.first << "]");
+            return false;
+        }
+        ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Success to init tokenizer[" << shmPair.first << "]");
+    }
+    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Finished to init tokenizer sub process size " << availablePid.size());
+    return true;
+}
+
+bool TokenizerProcessPool::CreateOneChildWithRetry(std::shared_ptr<ShareTokenMemory> shm, const int idx)
+{
+    int sign = SIGKILL;
+    for (int i = 0; i < D_INIT_RETRY; i++) {
+        ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Start tokenizer[" << idx << "] try " << i);
+        pid_t pid = -1;
+        if (!CreateOneChild(shm, pid)) {
+            return false;
+        }
+        if (!WaitOneChildPid(pid, idx)) {
+            return false;
+        }
+        if (WaitOneChildInit(shm, D_INIT_WAIT_TIME)) {
+            return true;
+        }
+        if (!KillAndWaitChild(pid, sign)) {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool TokenizerProcessPool::KillAndWaitChild(const pid_t pid, const int sign)
+{
+    if (pid <= 0) {
+        return false;
+    }
+    // 发送信号量，复位子进程
+    int id = static_cast<int>(pid);
+    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Start tokenizer timeout, try to restart it, pid=" << id);
+    kill(pid, sign);
+
+    // 等待子进程退出
+    int status;
+    for (int k = 0; k < D_INIT_TERM_WAIT; k++) {
+        sleep(1);
+        ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Wait tokenizer to restart, pid=" << id << ", wait " << k);
+        if (kill(pid, 0) < 0) {
+            ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Restart tokenizer success, pid=" << id);
+            return true;
+        }
+    }
+    ULOG_INFO(SUBMODLE_NAME_TOKENIZER, "Restart tokenizer failed, pid=" << id);
+    return false;
 }
 
 bool TokenizerProcessPool::InitSharedMemory(int32_t parentPid)
