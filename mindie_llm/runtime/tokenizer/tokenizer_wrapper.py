@@ -55,6 +55,7 @@ class TokenizerWrapper:
         self.reasoning_parser = router_ins.reasoning_parser
         self.llm_config = router_ins.llm_config
         self.enable_thinking = self.tokenizer.init_kwargs.get("enable_thinking", True)
+        self.truncation = "truncation"
         
     def encode(self, inputs, **kwargs) -> list[int]:
         """Encodes input text or conversation into token IDs.
@@ -70,12 +71,15 @@ class TokenizerWrapper:
         if is_chatting:
             token_ids = self.input_builder.make_context(0, inputs, **kwargs)
         else:
-            truncation_method = kwargs.pop("truncation", TruncationSide.RIGHT)
-            kwargs["truncation"] = True
-            if truncation_method == TruncationSide.RIGHT:
-                self.tokenizer.truncation_side = "right"
+            truncation_method = kwargs.pop(self.truncation, TruncationSide.RIGHT)
+            if truncation_method == TruncationSide.Disable:
+                kwargs[self.truncation] = False
             else:
-                self.tokenizer.truncation_side = "left"
+                kwargs[self.truncation] = True
+                if truncation_method == TruncationSide.RIGHT:   
+                    self.tokenizer.truncation_side = "right"
+                else:
+                    self.tokenizer.truncation_side = "left"
             token_ids = self.tokenizer(inputs, **kwargs)["input_ids"][0].tolist()
         return token_ids
 

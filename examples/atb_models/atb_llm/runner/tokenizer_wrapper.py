@@ -55,6 +55,7 @@ class TokenizerWrapper:
         self.enable_thinking = self.tokenizer.init_kwargs.get("enable_thinking", True)
         self.obfuscation_func = None
         self.enable_data_obfuscation = False
+        self.truncation = "truncation"
         if self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir is not None:
             from ai_asset_obfuscate import data_asset_obfuscation
             self.obfuscation_func = data_asset_obfuscation.DataAssetObfuscation(self.config.vocab_size)
@@ -89,12 +90,15 @@ class TokenizerWrapper:
         if is_chatting:
             token_ids = self.input_builder.make_context(0, inputs, **kwargs)
         else:
-            truncation_method = kwargs.pop("truncation", TruncationSide.RIGHT)
-            kwargs["truncation"] = True
-            if truncation_method == TruncationSide.RIGHT:
-                self.tokenizer.truncation_side = "right"
+            truncation_method = kwargs.pop(self.truncation, TruncationSide.RIGHT)
+            if truncation_method == TruncationSide.Disable:
+                kwargs[self.truncation] = False
             else:
-                self.tokenizer.truncation_side = "left"
+                kwargs[self.truncation] = True       
+                if truncation_method == TruncationSide.RIGHT:   
+                    self.tokenizer.truncation_side = "right"
+                else:
+                    self.tokenizer.truncation_side = "left"
             token_ids = self.tokenizer(inputs, **kwargs)["input_ids"][0].tolist()
         if self.enable_data_obfuscation:
             if len(token_ids) > 0 and isinstance(token_ids[0], list):
