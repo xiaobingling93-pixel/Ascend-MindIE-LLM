@@ -459,7 +459,7 @@ class SfaBackendImpl(SelectAttentionImpl):
 
         self.enable_mlapo = kwargs['enable_mlapo']
         if self.enable_mlapo:
-            import mie_ops
+            from mindie_llm.runtime.ops import mie_ops
         self.input_layernorm = kwargs.get('input_layernorm', None)
         self.mlapo_weight_pack = MlapoWeightPack()
 

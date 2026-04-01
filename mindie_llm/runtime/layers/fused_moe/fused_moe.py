@@ -128,7 +128,7 @@ class FusedMoE(CustomLayer):
         )
 
         if moe_comm_type == MoECommType.FUSED_MC2:
-            import mie_ops
+            from mindie_llm.runtime.ops import mie_ops
             # FUSED_MC2 mode: Directly invoke the fused dispatch + FFN + combine operator
             self._create_moe_ep_group()
             final_hidden_states = torch.empty_like(hidden_states)

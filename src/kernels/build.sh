@@ -15,10 +15,30 @@
 
 set -e
 
-if [ $# -eq 1 ]; then
-    ops=$1
+startswith() {
+    local str="$1"
+    local prefix="$2"
+    [[ $str == "$prefix"* ]]
+}
+
+soc_name=$(python3 -c "\
+import torch;\
+import torch_npu;\
+soc_name = torch.npu.get_device_properties().name;\
+print(soc_name);\
+" 2>/dev/null) || soc_name="unknown"
+
+if startswith "$soc_name" "Ascend910B" ]; then
+    ops="ascend910b"
+elif startswith "$soc_name" "Ascend910_93" ]; then
+    ops="ascend910_93"
 else
-    ops=$(python3 -c "import torch; import torch_npu; soc = torch_npu._C._npu_get_soc_version(); ops = 'ascend910b' if soc <= 250 else 'ascend910_93'; print(ops)")
+    if [ $# -eq 1 ]; then
+        ops=$1
+    else
+        echo "Soc version not identified and missing input parameter 'ops'. Skipping mie_ops build!"
+        exit 0
+    fi
 fi
 
 BASE_DIR=$(realpath "$(dirname "$0")")
@@ -40,4 +60,4 @@ bash csrc/build_aclnn.sh $BASE_DIR/mie_ops $ops
 
 # 编译wheel包
 cd -
-python3 $BASE_DIR/setup.py build bdist_wheel
+python3 $BASE_DIR/setup.py build bdist_wheel --ops $ops
