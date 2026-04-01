@@ -358,16 +358,14 @@ class ModelRunner:
                 TLS_CRL_PATH: kwargs.get(TLS_CRL_PATH, ''),
                 TLS_CRL_FILES: kwargs.get(TLS_CRL_FILES, ''),
             }
-            batch_p_num = kwargs.get('batch_p_num', 1)
+            self.batch_p_num = kwargs.get('batch_p_num', 1)
             moe_quantize = getattr(self.config, 'moe_quantize', None)
-            self.data_comm = EdgeCloudDataComm(self.dtype, batch_p_num)
+            self.data_comm = EdgeCloudDataComm(self.dtype, self.batch_p_num)
             self.ctrl_comm = EdgeCloudCtrlComm(tls_config)
-            self.time_counter = CloudCutPolicy(self.layerwise_disaggregated_role_type, model_name_or_path, batch_p_num,
-                                               moe_quantize)
-            self.chunk_prefill_manager = ChunkPrefilPolicy(model_name_or_path, batch_p_num, moe_quantize)
+            self.time_counter = CloudCutPolicy(self.layerwise_disaggregated_role_type, model_name_or_path,
+                                               self.batch_p_num, moe_quantize)
+            self.chunk_prefill_manager = ChunkPrefilPolicy(model_name_or_path, self.batch_p_num, moe_quantize)
             self.prefill_input_lengths = None
-            self.edge_pre_chunk_length = 0
-            self.prefill_total_seq_len = 0
             lwd_comm_args = kwargs.get('lwd_comm_args', None)
             lwd_comm_args.update({'npu_id': self.npu_id})
             self.data_comm.set_comm_args(rank=self.local_rank, role=self.layerwise_disaggregated_role_type,
@@ -585,13 +583,12 @@ class ModelRunner:
         return [self.input_builder.make_context(self.rank, conversation, **kwargs) for conversation in conversations]
 
     def forward_layerwise_disaggregated_edge_qwenvl(self, **kwargs) -> Union[CausalLMOutputWithPast, tuple]:
-        layerwise_disaggregated_exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
-        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} start_layer \
-            {layerwise_disaggregated_exe_stage.start_exec_layer} end_layer \
-                {layerwise_disaggregated_exe_stage.end_exec_layer} {kwargs.keys()}")
+        exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} start_layer {exe_stage.start_exec_layer} "
+            f"end_layer {exe_stage.end_exec_layer} {kwargs.keys()}")
 
-        if not layerwise_disaggregated_exe_stage.is_prefill:  # decode
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0: # decode首层
+        if not exe_stage.is_prefill:  # decode
+            if exe_stage.start_exec_layer == 0: # decode首层
                 # 云侧decode计算图输入与边侧计算图输入产生了差异（多模态场景，迭代1中并未出现此情况，
                 # 迭代二中出现，具体原因需要进一步定位），针对此情况，decode阶段需要将云边不一致的计算图输入上传云端，
                 # 具体是position ids
@@ -627,7 +624,8 @@ class ModelRunner:
                 res = self.model.forward(**kwargs)
                 return res
         else:
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0:
+            p_comm_index = exe_stage.request_key % self.batch_p_num
+            if exe_stage.start_exec_layer == 0:
                 # 多模态模型场景下，部分计算图输入是需要经过vit模型计算后才可以获取的，因此必须从边缘上传云端。
                 hidden = self.model.forward(**kwargs)	
 
@@ -642,16 +640,18 @@ class ModelRunner:
                     new_hidden = torch.cat([hidden, temp_cos], dim=0)
                     
                 self.data_comm.prefill_seq_len_queue.put(int(new_hidden.shape[0]))
-                self.data_comm.send_hidden('p', new_hidden)
+                
+                self.data_comm.send_hidden('p', new_hidden, send_index=p_comm_index)
                 self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(new_hidden.shape)
                 self.ctrl_comm.send_prefill()
 
-                self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
-                self.data_comm.recv_hidden('p', self.data_comm.p_shape)
+                self.data_comm.p_shape[p_comm_index] = self.data_comm.prefill_seq_len_queue.get()
+                self.data_comm.recv_hidden('p', self.data_comm.p_shape, recv_index=p_comm_index)
                 return hidden
             else:
-                tmp = self.data_comm.data_wait_after_recv('p')
-                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
+                tmp = self.data_comm.data_wait_after_recv('p', wait_recv_index=p_comm_index)
+                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p',
+                    wait_recv_index=p_comm_index)
                 #为适配当前decode隐变量传输逻辑，边缘返回同样大小的数据，需要还原真实的隐变量大小
                 hidden = hidden[: int(hidden.shape[0] / 2)]
                 new_params = {OUT_HIDDEN: hidden}
@@ -660,16 +660,14 @@ class ModelRunner:
                 return res
 
     def forward_layerwise_disaggregated_edge_default(self, **kwargs) -> Union[CausalLMOutputWithPast, tuple]:
-        layerwise_disaggregated_exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
-        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} start_layer \
-            {layerwise_disaggregated_exe_stage.start_exec_layer} end_layer \
-                {layerwise_disaggregated_exe_stage.end_exec_layer} {kwargs.keys()}")
+        exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} start_layer {exe_stage.start_exec_layer} end_layer"
+                f" {exe_stage.end_exec_layer} {kwargs.keys()}")
 
-        if not layerwise_disaggregated_exe_stage.is_prefill:
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0:
+        if not exe_stage.is_prefill:
+            if exe_stage.start_exec_layer == 0:
                 hidden = self.model.forward(**kwargs)
-                logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} \
-                    decode batch size putted {hidden.shape}")
+                logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} decode batch size putted {hidden.shape}")
                 self.data_comm.decode_batch_size_queue.put(hidden.shape[0])
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} decode send {hidden.shape}")
                 self.data_comm.npu_net_host_hidden_sync(hidden)
@@ -691,48 +689,56 @@ class ModelRunner:
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} decode logits {res.shape}")
                 return res
         else:
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0:
+            p_comm_index = exe_stage.request_key % self.batch_p_num
+            if exe_stage.start_exec_layer == 0:
                 hidden = self.model.forward(**kwargs)
-                logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill seq len putted {hidden.shape}")
-                if not layerwise_disaggregated_exe_stage.is_long_seq:
+                if not exe_stage.is_long_seq:
                     self.data_comm.prefill_seq_len_queue.put(int(hidden.shape[0]))
+                    logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill seq len putted {hidden.shape}")
                 else:
-                    if layerwise_disaggregated_exe_stage.long_seq_start_idx != 0:
-                        self.data_comm.prefill_seq_len_queue.put(self.edge_pre_chunk_length)
-                        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank}, put {self.edge_pre_chunk_length}")
-                    self.edge_pre_chunk_length = int(hidden.shape[0])
-                    if layerwise_disaggregated_exe_stage.is_last_chunk:
-                        self.data_comm.prefill_seq_len_queue.put(self.edge_pre_chunk_length)
-                        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank}, "
-                                    f"end put {self.edge_pre_chunk_length}")
+                    if len(exe_stage.long_seq_recv_list) > 0:
+                        recv_len = exe_stage.long_seq_recv_list[0][1]
+                        self.data_comm.prefill_seq_len_queue.put(recv_len)
+                        logger.info(f"[layerwiseDisaggregated] edge rank {self.rank}, prefill len putted {recv_len}")
+
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill send {hidden.shape}")
                 self.data_comm.npu_net_host_hidden_sync(hidden)
-                self.data_comm.send_hidden('p', hidden)
+                self.data_comm.send_hidden('p', hidden, send_index=p_comm_index)
 
                 self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(hidden.shape)
                 self.ctrl_comm.send_prefill()
 
-                if not (layerwise_disaggregated_exe_stage.is_long_seq and \
-                        layerwise_disaggregated_exe_stage.long_seq_start_idx == 0):
-                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
-                    self.data_comm.recv_hidden('p', self.data_comm.p_shape)
-                    logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv start first part, "
-                                f"the data length is: {self.data_comm.p_shape}")
+                if not exe_stage.is_long_seq or len(exe_stage.long_seq_recv_list) > 0:
+                    self.data_comm.p_shape[p_comm_index] = self.data_comm.prefill_seq_len_queue.get()
+                    self.data_comm.recv_hidden('p', self.data_comm.p_shape, recv_index=p_comm_index)
+                    logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv start part, "
+                        f"the data length is: {self.data_comm.p_shape[p_comm_index]}")
                 return hidden
             else:
-                tmp = self.data_comm.data_wait_after_recv('p')
-                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
-                logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv {hidden.shape}")
+                hidden = None
+                if exe_stage.hidden_start_pos == 0:
+                    tmp = self.data_comm.data_wait_after_recv('p', wait_recv_index=p_comm_index)
+                    hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p',
+                        wait_recv_index=p_comm_index) # 这里需要保证p_shape是本次要接收的
+                    logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv {hidden.shape} p_shape: "
+                        f"{self.data_comm.p_shape[p_comm_index]}")
+                if exe_stage.is_long_seq:
+                    hidden_len = exe_stage.long_seq_end_idx - exe_stage.long_seq_start_idx
+                    end_idx = exe_stage.hidden_start_pos + hidden_len
+                    hidden = self.data_comm.get_cached_data(exe_stage.hidden_start_pos, end_idx,
+                        batch_index=p_comm_index)
+                    logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill get hidden"
+                        f" {hidden.shape} hidden_len:{hidden_len}")
                 new_params = {OUT_HIDDEN: hidden}
                 kwargs.update(new_params)
                 res = self.model.forward(**kwargs)
                 logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill logits {res.shape}")
                 
-                if not self.data_comm.prefill_seq_len_queue.empty():
-                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
-                    self.data_comm.recv_hidden('p', self.data_comm.p_shape)
+                if len(exe_stage.long_seq_recv_list) > 0:
+                    self.data_comm.p_shape[p_comm_index] = exe_stage.long_seq_recv_list[0][1]
+                    self.data_comm.recv_hidden('p', self.data_comm.p_shape, recv_index=p_comm_index)
                     logger.info(f"[layerwiseDisaggregated] edge rank {self.rank} prefill recv start post part, "
-                                f"self.data_comm.p_shape: {self.data_comm.p_shape}")
+                        f"p_shape: {self.data_comm.p_shape[p_comm_index]}")
                 
                 return res
 
@@ -743,12 +749,11 @@ class ModelRunner:
             return self.forward_layerwise_disaggregated_edge_qwenvl(**kwargs)
 
     def forward_layerwise_disaggregated_cloud_qwenvl(self, **kwargs) -> Union[CausalLMOutputWithPast, tuple]:
-        layerwise_disaggregated_exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
-        logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} start_layer \
-            {layerwise_disaggregated_exe_stage.start_exec_layer} end_layer \
-                {layerwise_disaggregated_exe_stage.end_exec_layer} {kwargs.keys()}")
+        exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} start_layer {exe_stage.start_exec_layer} "
+            f"end_layer {exe_stage.end_exec_layer} {kwargs.keys()}")
 
-        if not layerwise_disaggregated_exe_stage.is_prefill:  # Decode
+        if not exe_stage.is_prefill:  # Decode
             tmp = self.data_comm.data_wait_after_recv('d')
             hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.d_shape, 'd')
             # decode场景下，传输来的tensor，最后一行向量为position_ids,分离真实的hidden与position_ids
@@ -778,9 +783,8 @@ class ModelRunner:
             self.ctrl_comm.send_decode()
             # 此处做判断，如果有req，且没有收操作，则挂出接收操作
             with self.data_comm.lock:
-                logger.info(
-                    f"[layerwiseDisaggregated] model_runner, pre recv \
-                        {self.data_comm.decode_batch_size_queue.qsize()} {self.data_comm.flag_pre_recv}")
+                logger.info("[layerwiseDisaggregated] model_runner, pre recv "
+                    f"{self.data_comm.decode_batch_size_queue.qsize()} {self.data_comm.flag_pre_recv}")
                 if not self.data_comm.decode_batch_size_queue.empty():
                     self.data_comm.d_shape = self.data_comm.decode_batch_size_queue.get()
                     self.data_comm.recv_hidden('d', self.data_comm.d_shape)
@@ -795,10 +799,12 @@ class ModelRunner:
             logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} deocde shape {res.shape}")
             return res
         else:  # Prefill
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0:  # prefill首层
+            p_comm_index = exe_stage.request_key % self.batch_p_num
+            if exe_stage.start_exec_layer == 0:  # prefill首层
                 self.prefill_input_lengths = kwargs.get("input_lengths")
-                tmp = self.data_comm.data_wait_after_recv('p')
-                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
+                tmp = self.data_comm.data_wait_after_recv('p', wait_recv_index=p_comm_index)
+                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p',
+                    wait_recv_index=p_comm_index)
                 real_len = int(hidden.shape[0] / 2)
                 real_hidden = hidden[:real_len, :]
                 sin_list = hidden[real_len:, 128:256]
@@ -813,15 +819,14 @@ class ModelRunner:
                 logger.info("[layerwiseDisaggregated] isqwenvl prefill end!")
                 return res
             else:
-                if layerwise_disaggregated_exe_stage.end_exec_layer < \
-                    layerwise_disaggregated_exe_stage.cloud_total_layer: 
+                if exe_stage.end_exec_layer < exe_stage.cloud_total_layer: 
                     res = self.model.forward(**kwargs)
                     return res
                 else:
                     res = self.model.forward(**kwargs)
                     # 扩展为原始返回的四倍返回
                     new_res = torch.cat([res, res], dim=0)
-                    self.data_comm.send_hidden('p', new_res)
+                    self.data_comm.send_hidden('p', new_res, send_index=p_comm_index)
                     # 发送tcp信号
                     self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(new_res.shape)
                     self.ctrl_comm.send_prefill()
@@ -832,12 +837,11 @@ class ModelRunner:
                     return res
 
     def forward_layerwise_disaggregated_cloud_default(self, **kwargs) -> Union[CausalLMOutputWithPast, tuple]:
-        layerwise_disaggregated_exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
-        logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} start_layer \
-            {layerwise_disaggregated_exe_stage.start_exec_layer} end_layer \
-                {layerwise_disaggregated_exe_stage.end_exec_layer} {kwargs.keys()}")
+        exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} start_layer {exe_stage.start_exec_layer} "
+            f"end_layer {exe_stage.end_exec_layer} {kwargs.keys()}")
 
-        if not layerwise_disaggregated_exe_stage.is_prefill:
+        if not exe_stage.is_prefill:
             tmp = self.data_comm.data_wait_after_recv('d')
             hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.d_shape, 'd')
             logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} decode recv {hidden.shape}")
@@ -847,7 +851,7 @@ class ModelRunner:
             # 同步 + decode 计时打点，为了decode统计时间准确执行hidden_sync
             hidden_sync = torch.clone(hidden[0][0])
             hidden_sync.cpu()
-            self.time_counter.set_decode_start_time(layerwise_disaggregated_exe_stage.is_prefill, time.time())
+            self.time_counter.set_decode_start_time(exe_stage.is_prefill, time.time())
 
             res = self.model.forward(**kwargs)
             logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} decode send {res.shape}")
@@ -873,44 +877,57 @@ class ModelRunner:
                 res = torch.ones([batch_size, self.model.config.vocab_size], dtype=self.dtype, device=self.device)
             logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} deocde shape {res.shape}")
             return res
-        else:
+        else:  # Prefill
+            p_comm_index = exe_stage.request_key % self.batch_p_num
             self.prefill_input_lengths = kwargs.get("input_lengths")
-            logger.info(f"[layerwiseDisaggregated]: is_long_seq \
-                {layerwise_disaggregated_exe_stage.is_long_seq} in \
-                    {layerwise_disaggregated_exe_stage.start_exec_layer} \
-                        {layerwise_disaggregated_exe_stage.end_exec_layer}; \
-                            {layerwise_disaggregated_exe_stage.long_seq_start_idx}~\
-                                {layerwise_disaggregated_exe_stage.long_seq_end_idx}; \
-                                    self.prefill_input_lengths: {self.prefill_input_lengths}")
-            if layerwise_disaggregated_exe_stage.start_exec_layer == 0:
-                tmp = self.data_comm.data_wait_after_recv('p')
-                hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p')
-                logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} prefill recv {hidden.shape}")
-                if layerwise_disaggregated_exe_stage.is_long_seq and \
-                    not layerwise_disaggregated_exe_stage.is_last_chunk: # 不是最后一个序列
-                    prefill_seq_len = layerwise_disaggregated_exe_stage.long_seq_next_end_idx - \
-                                        layerwise_disaggregated_exe_stage.long_seq_end_idx
-                    prefill_seq_len = prefill_seq_len if prefill_seq_len > 0 else 1 # 至少长度应为1
-                    self.data_comm.prefill_seq_len_queue.put(prefill_seq_len)
+            logger.info(f"[layerwiseDisaggregated]:is_long_seq {exe_stage.is_long_seq} in {exe_stage.start_exec_layer} "
+                f"{exe_stage.end_exec_layer}; {exe_stage.long_seq_start_idx} {exe_stage.long_seq_end_idx}; "
+                f"self.prefill_input_lengths: {self.prefill_input_lengths}")
+            if exe_stage.start_exec_layer == 0:
+                tmp = self.data_comm.data_wait_after_recv('p', wait_recv_index=p_comm_index)
+                hidden = tmp
+                if exe_stage.is_long_seq:
+                    hidden_len = exe_stage.long_seq_end_idx - exe_stage.long_seq_start_idx
+                    if tmp is not None:
+                        hidden = self.data_comm.get_cached_data(0, hidden_len, batch_index=p_comm_index)
+
+                    # 长序列需要广播边侧发过来的很多段拼成的一大段
+                    self.data_comm.p_shape[p_comm_index] = hidden_len
+                    hidden = self.data_comm.broadcast_hidden(hidden, self.data_comm.p_shape, 'p', 0,
+                        wait_recv_index=p_comm_index)
+                    logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} prefill recv {hidden.shape} "
+                        f"hidden_len:{hidden_len} hidden_start_pos:{0} p_comm_index: {p_comm_index}")
+                else:
+                    hidden = self.data_comm.broadcast_hidden(tmp, self.data_comm.p_shape, 'p',
+                        wait_recv_index=p_comm_index)
+                    logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} prefill recv {hidden.shape} "
+                        f"p_shape:{self.data_comm.p_shape[p_comm_index]}")
+
+                recv_list = exe_stage.long_seq_recv_list
+                if len(recv_list) > 1:
+                    self.data_comm.prefill_chunk_recv(recv_list, p_comm_index)
                     logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank}, "
-                                f"queue input is {prefill_seq_len}")
-                    self.data_comm.p_shape[self.data_comm.recv_index] = self.data_comm.prefill_seq_len_queue.get()
-                    self.data_comm.recv_hidden('p', self.data_comm.p_shape)
-                
+                        f"queue input is recv_list: {recv_list}")
+                elif len(recv_list) == 1:
+                    self.data_comm.prefill_seq_len_queue.put(recv_list[0][1])
+                    self.data_comm.p_shape[p_comm_index] = self.data_comm.prefill_seq_len_queue.get()
+                    self.data_comm.recv_hidden('p', self.data_comm.p_shape, recv_index=p_comm_index)
+                    logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank}, "
+                        f"queue input is {recv_list[0][1]}, recv_list: {recv_list}")
+
                 new_params = {OUT_HIDDEN: hidden}
                 kwargs.update(new_params)
                 res = self.model.forward(**kwargs)
                 return res
             else:
-                if layerwise_disaggregated_exe_stage.end_exec_layer < \
-                    layerwise_disaggregated_exe_stage.cloud_total_layer:
+                if exe_stage.end_exec_layer < exe_stage.cloud_total_layer:
                     res = self.model.forward(**kwargs)
                     return res
                 else:
-                    # # 发送tcp信号
+                    # 发送tcp信号
                     res = self.model.forward(**kwargs)
                     logger.info(f"[layerwiseDisaggregated] cloud rank {self.rank} prefill send {res.shape}")
-                    self.data_comm.send_hidden('p', res)
+                    self.data_comm.send_hidden('p', res, send_index=p_comm_index)
                     # 发送tcp信号
                     self.ctrl_comm.prefill_send_msg = self.ctrl_comm.shape_to_msg(res.shape)
                     self.ctrl_comm.send_prefill()
@@ -927,11 +944,11 @@ class ModelRunner:
             return self.forward_layerwise_disaggregated_cloud_qwenvl(**kwargs)
 
     def forward_layerwise_disaggregated(self, **kwargs) -> Union[CausalLMOutputWithPast, tuple]:
-        layerwise_disaggregated_exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        exe_stage = kwargs.get("layerwise_disaggregated_exe_stage")
+        role_str = 'edge' if self.layerwise_disaggregated_role_type == 'master' else 'cloud'
         if self.data_comm.init_finish and self.ctrl_comm.init_finish:
-            self.prefill_total_seq_len = layerwise_disaggregated_exe_stage.prefill_total_seq_len \
-                if layerwise_disaggregated_exe_stage.is_prefill else self.prefill_total_seq_len
-            if self.data_comm.role == 'master':
+            logger.info(f"[layerwiseDisaggregated] {role_str} rank {self.rank} forward exe_stage:{exe_stage}")
+            if role_str == 'edge':
                 res = self.forward_layerwise_disaggregated_edge(**kwargs)
             else:
                 res = self.forward_layerwise_disaggregated_cloud(**kwargs)
@@ -942,7 +959,7 @@ class ModelRunner:
                     self.data_comm.hccl_comm_warmup(self.model.hidden_size)
 
             # warmup处理
-            if layerwise_disaggregated_exe_stage is None:
+            if exe_stage is None:
                 input_lengths = kwargs.get("input_lengths")
                 input_ids = kwargs.get("input_ids")
                 is_prefill = kwargs.get("is_prefill")
@@ -959,7 +976,7 @@ class ModelRunner:
             """Call model's forward pass."""
             res = self.model.forward(**kwargs)
             # warmup时exe_stage为None
-            if layerwise_disaggregated_exe_stage is None: 
+            if exe_stage is None: 
                 res = torch.ones([batch_size, self.model.config.vocab_size], dtype=self.dtype, device=self.device)
         if ENV.enable_dp_partition_up and self.mapping.has_dp() and self.dp_all_gather_engine is None:
             self.init_gather_dp_graph()

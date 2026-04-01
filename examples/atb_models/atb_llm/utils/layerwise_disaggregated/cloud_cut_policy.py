@@ -399,8 +399,8 @@ class CloudCutPolicy():
     def __ajust_prefill_cut_num_for_diff_npu_soc_qwen(self):
         if self.soc_name.startswith('Ascend910B2'):
             if self.batch_p_num != 1:
-                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 8, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 8, 1: 5, 0: 8}
                 self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
             return
         if self.soc_name.startswith('Ascend910B3'):
@@ -419,9 +419,18 @@ class CloudCutPolicy():
                 self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
                 self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 4, 3: 6, 2: 5, 1: 5, 0: 8}
             else:
-                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
-                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 5, 0: 8}
-                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 5, 3: 6, 2: 5, 1: 5, 0: 8}
+                self.prefill_seq_k_len_default_forward_time = {16: 100000000000,
+                                                            8: 610.166,
+                                                            4: 432,
+                                                            3: 380,
+                                                            2: 220,
+                                                            1: 71.434,
+                                                            0: 71.434
+                                                            }
+                self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24,
+                                                8: 10, 4: 6, 3: 8, 2: 11, 1: 6, 0: 8}
+                self.prefill_cut_num_max = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 11, 1: 5, 0: 8}
+                self.prefill_cut_num_min = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 6, 2: 4, 1: 5, 0: 8}
             return
         if self.soc_name == 'Ascend910_9362':   # 910C
             self.prefill_default_cut_map = {125: 330, 64: 120, 32: 100, 16: 24, 8: 10, 4: 6, 3: 8, 2: 9, 1: 6, 0: 8}
@@ -431,9 +440,22 @@ class CloudCutPolicy():
 
     def __ajust_prefill_cut_num_for_diff_npu_soc_deepseek(self):
         if self.soc_name == 'Ascend910_9362':   # 910C
-            self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
-            self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
-            self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+            if self.moe_quantize == 'w4a8_dynamic':
+                self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+                self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+                self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 50, 3.8: 23, 3.3: 34, 1.8: 32, 0.8: 21, 0: 21}
+            else:
+                self.prefill_default_cut_map = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59,
+                                                7.5: 35, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+                self.prefill_cut_num_max = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59,
+                                            7.5: 35, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+                self.prefill_cut_num_min = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59,
+                                            7.5: 35, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            return
+        if self.soc_name.startswith('Ascend910B4'):
+            self.prefill_default_cut_map = {31.5: 80, 15.5: 40, 7.5: 56, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
+            self.prefill_cut_num_max = {31.5: 80, 15.5: 40, 7.5: 56, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
+            self.prefill_cut_num_min = {31.5: 80, 15.5: 40, 7.5: 56, 3.8: 30, 3.3: 36, 1.8: 30, 0.8: 17, 0: 17}
             return
 
     def __ajust_prefill_cut_num_for_diff_npu_soc(self):
@@ -450,13 +472,19 @@ class CloudCutPolicy():
             return
 
         if self.moe_quantize == 'w4a8_dynamic':
-            self.prefill_default_cut_map = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_max = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
-            self.prefill_cut_num_min = {31.5: 59, 15.5: 60, 7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_default_cut_map = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 60, 
+                                            7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 60, 
+                                        7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 60, 
+                                        7.5: 32, 3.8: 17, 3.3: 17, 1.8: 17, 0.8: 21, 0: 21}
         else:
-            self.prefill_default_cut_map = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
-            self.prefill_cut_num_max = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
-            self.prefill_cut_num_min = {31.5: 59, 15.5: 59, 7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            self.prefill_default_cut_map = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59, 
+                                            7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            self.prefill_cut_num_max = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59, 
+                                        7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
+            self.prefill_cut_num_min = {126.5: 944, 63.5: 295, 31.5: 118, 15.5: 59, 
+                                        7.5: 45, 3.8: 21, 3.3: 20, 1.8: 20, 0.8: 21, 0: 21}
 
     def __ajust_prefill_cut_num_for_standard_card(self):
         self.prefill_seq_k_len_default_forward_time = {16: 100000000000,
@@ -575,4 +603,3 @@ class CloudCutPolicy():
         merged_ = PolicyParserUtils.merge_nested_dicts(self.hierarchical_policy_config, \
                                                        hierarchical_policy_config_edge_b4_64g)
         self.hierarchical_policy_config = merged_.copy()
-

@@ -163,6 +163,40 @@ bool Executor::ExecutorParseConfigAndInitGRPC(std::map<std::string, std::string>
     return true;
 }
 
+bool Executor::LwdMasterAndSlaveSync()
+{
+    MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|executor] "
+                        <<"Start to synchronize model initialization between Master and Slave nodes.");
+    // Master node receives init response from slave
+    if (modelLaunchConfig_.layerwiseDisaggregatedRoleType == "master" && modelLaunchConfig_.dp > 1) {
+        if (!modelLaunchConfig_.lwdMultiNodesEnable && dpRankIdx_ > 0) {
+            return true;  // 单机多dp场景,只有rank0处理model_init
+        }
+        ExecuteResponse rawSlaveResponse;
+        communicator_->GRPCGetSyncResponse(rawSlaveResponse);
+        if (!MasterHandleSlaveInitResponse(rawSlaveResponse)) {
+            MINDIE_LLM_LOG_ERROR("Failed to handle slave initialization response.");
+            return false;
+        }
+    } else if (modelLaunchConfig_.layerwiseDisaggregatedRoleType == "master" && modelLaunchConfig_.dp == 1) {
+        uint32_t slaveCount = modelLaunchConfig_.slaveIPs.size();
+        for (uint32_t i = 0; i < slaveCount; i++) {
+            ExecuteResponse rawSlaveResponse;
+            communicator_->GRPCGetSyncResponse(rawSlaveResponse);
+            if (!MasterHandleSlaveInitResponse(rawSlaveResponse)) {
+                MINDIE_LLM_LOG_ERROR("Failed to handle slave initialization response.");
+                return false;
+            }
+        }
+    } else if (!SlaveSendInitResponseToMaster()) { // Slave node sends init response to master
+        MINDIE_LLM_LOG_ERROR("Failed to send initialization response to master node.");
+        return false;
+    }
+    MINDIE_LLM_LOG_INFO("Successfully synchronize model initialization between Master and"
+        " Slave nodes in layerwise disaggregated scenario.");
+    return true;
+}
+
 bool Executor::ExecutorModelInitAndSync()
 {
     // Initialize IPC communicator and launch model if needed.
@@ -172,12 +206,10 @@ bool Executor::ExecutorModelInitAndSync()
             return false;
         }
     }
-    // 以下是集中式场景下，Master和Slave节点之间的同步逻辑
-    if ((isMultiNodesInfer_ || (modelLaunchConfig_.layerwiseDisaggregated && dpRankIdx_ < 1)) && isGRPCInit_) {
-        if (modelLaunchConfig_.layerwiseDisaggregated) {
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|executor] "
-                                <<"Start to synchronize model initialization between Master and Slave nodes.");
-        }
+    if (modelLaunchConfig_.layerwiseDisaggregated && isGRPCInit_) {
+        return LwdMasterAndSlaveSync();
+    } else if (isMultiNodesInfer_ && isGRPCInit_) {
+        // 以下是集中式场景下，Master和Slave节点之间的同步逻辑
         if (modelLaunchConfig_.isMasterNode) { // Master node receives init response from slave
             // For intraNodeTP scenario(where one GRPC message is broadcasted to multiple slaves),
             // master needs to receive responses from all slaves and aggregate the results.

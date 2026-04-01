@@ -1366,11 +1366,24 @@ Status LlmManagerImpl::Init(uint32_t modelInstanceId, std::set<size_t> npuDevice
     size_t shmCount = 1;
     auto it = engineConfig_.modelDeployParam[0].modelConfig.find("dp");
 
-    if (engineConfig_.layerwiseDisaggregated) {
-        executorNum = 1;
+    if (engineConfig_.layerwiseDisaggregated) { // 边云特性的逻辑在这个分支
+        size_t dp = 1;
+        if (it != engineConfig_.modelDeployParam[0].modelConfig.end()) {
+            dp = std::stoul(it->second);
+        }
         auto &configManager = mindie_llm::ConfigManager::GetInstance();
-        if (configManager.IsLwdMultiNodesEnable() && configManager.GetLwdRoleType() == "master") {
-            executorNum = std::stoul(it->second);   // 多机场景 = dp数
+        if (configManager.GetLwdRoleType() == "master") {
+            executorNum = dp;   // master起dp个
+        } else {
+            std::vector<std::string> slaveIPs;
+            mindie_llm::Split(modelConfigs_[0].at("slaveIPs"), ",", slaveIPs);
+            size_t slaveNum = slaveIPs.size();
+            // slave在多dp下起DP/slaveNum个,单dp下起1个;至少起1个
+            if (slaveNum == 0) {
+                throw std::runtime_error("slaveIPs must be greater than 0");
+            } else {
+                executorNum = std::max(dp / slaveNum, size_t(1));
+            }
         }
     } else if (engineConfig_.distributedEnable && !multiNodesInferEnabled_) {
         executorNum = 1;

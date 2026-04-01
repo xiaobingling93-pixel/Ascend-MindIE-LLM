@@ -492,6 +492,10 @@ bool Communicator::SendAsyncRequestToRemote(ExecuteRequest &request)
             meta->set_prompt_token_ids(tmp.data(), tmp.size() * sizeof(TokenId));
         }
     }
+    if (layerwiseDisaggregated_ && !isLwdMultiNodesInfer_ && dpRankIdx_ > 0) {
+        // In edge-cloud scenario with single-node multi-DP on cloud side, only rank0 sends GRPC requests.
+        return true;
+    }
     if (!grpcCommunicator_->SendRequest(request, dpRankIdx_, remoteDPRankIdx_, remoteSlaveIP_)) {
         MINDIE_LLM_LOG_ERROR("Failed to send request from DP " << dpRankIdx_ << " to remote DP " << remoteDPRankIdx_);
         return false;

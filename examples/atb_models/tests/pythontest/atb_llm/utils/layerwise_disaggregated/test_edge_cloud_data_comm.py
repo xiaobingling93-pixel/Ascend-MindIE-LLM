@@ -17,7 +17,7 @@ import torch_npu
 
 
 from atb_llm.utils.layerwise_disaggregated.edge_cloud_data_comm import D_INDEX, P_INDEX, EdgeCloudDataComm
-from atb_llm.utils.layerwise_disaggregated.edge_cloud_data_comm import SEQ_LEN, BATCH_LEN, RECV_P, RECV_D, SEND_P, SEND_D
+from atb_llm.utils.layerwise_disaggregated.edge_cloud_data_comm import SINGLE_CHUNK_LEN_MAX, BATCH_LEN, SEND_P, SEND_D
 
 MOCKED_INIT_METHOD = f"{__name__}.EdgeCloudDataComm.__init__"
 
@@ -75,7 +75,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         comm.streams = [[[MagicMock(), MagicMock()]], [MagicMock(), MagicMock()]]
 
         comm.hidden_size = 64
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_P]
 
@@ -109,7 +109,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
         with patch('torch.distributed.isend') as mock_isend:
             comm.send_hidden(mode=mode, out_tensor=test_tensor)
@@ -130,7 +130,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
         with patch('torch.distributed.isend') as mock_isend:
             comm.send_hidden(mode=mode, out_tensor=test_tensor)
@@ -151,7 +151,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
         
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_D]
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
@@ -184,7 +184,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
         
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_P]
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
@@ -217,7 +217,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
         with patch('torch.distributed.isend') as mock_isend:
             comm.send_hidden(mode=mode, out_tensor=test_tensor)
@@ -238,7 +238,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
         with patch('torch.distributed.isend') as mock_isend:
             comm.send_hidden(mode=mode, out_tensor=test_tensor)
@@ -259,7 +259,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
         
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_D]
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
@@ -292,7 +292,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_P]
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
@@ -325,7 +325,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         self.dp_group = 0
         comm.hidden_size = 64
 
-        test_len = SEQ_LEN if mode == 'p' else BATCH_LEN
+        test_len = SINGLE_CHUNK_LEN_MAX if mode == 'p' else BATCH_LEN
         peer_index = 1 if comm.role == "master" else 0
         src_rank = comm.cards[SEND_D]
         test_tensor = torch.ones((test_len, comm.hidden_size), dtype=torch.bfloat16, device=torch.device("npu"))
@@ -382,7 +382,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
             else:
                 mock_isend.assert_not_called()
             if mode == 'p':
-                self.assertEqual(comm.ret_p, [1])
+                self.assertEqual(comm.prefill_recv_ret_queue[0].get(), 1)
             else:
                 self.assertEqual(comm.ret_d, 1)
 
@@ -503,7 +503,7 @@ class TestEdgeCloudDataComm(unittest.TestCase):
             else:
                 mock_isend.assert_not_called()
             if mode == 'p':
-                self.assertEqual(comm.ret_p, [1])
+                self.assertEqual(comm.prefill_recv_ret_queue[0].get(), 1)
             else:
                 self.assertEqual(comm.ret_d, 1)
 
@@ -711,6 +711,58 @@ class TestEdgeCloudDataComm(unittest.TestCase):
         with patch("torch.distributed.destroy_process_group") as mock_destroy_process_group:
             comm.final_cleanup()
             assert mock_destroy_process_group.call_count == 6
+
+    @patch.object(EdgeCloudDataComm, '__new__', return_value=object.__new__(EdgeCloudDataComm))
+    def test_init_multi_nodes_infer(self, *args):
+        '''
+        测试初始化多节点推理相关参数和通信组
+        '''
+        comm = EdgeCloudDataComm()
+        
+        comm.role = "slave"  # CLOUD
+        comm.comm_group_size = 2
+        comm.cloud_ranks_num = 4  # rank_per_dp = 4 // 2 = 2
+        comm.rank = 1  # < rank_per_dp
+        comm.init_multi_nodes_infer(None)
+        self.assertEqual(comm.comm_group, 0)
+        
+        comm.rank = 2  # >= rank_per_dp
+        comm.init_multi_nodes_infer(None)
+        self.assertEqual(comm.comm_group, 1)
+        
+        comm.role = "master"  # EDGE
+        comm.rank = 0
+        comm.init_multi_nodes_infer(None)
+        self.assertEqual(comm.comm_group, 0)
+        
+        comm.comm_group_size = 1
+        comm.comm_group = 999  # 设置一个初始值，确保不会被修改
+        comm.init_multi_nodes_infer(None)
+        self.assertEqual(comm.comm_group, 999)
+        
+        multi_nodes_args = {'is_master': True, 'max_input_len': 1024}
+        comm.comm_group_size = 1
+        comm.multi_nodes_infer_enabled = False  # 初始值
+        comm.init_multi_nodes_infer(multi_nodes_args)
+        self.assertTrue(comm.multi_nodes_infer_enabled)
+        self.assertTrue(comm.multi_nodes_is_master)
+        self.assertEqual(comm.max_input_len, 1024)
+        
+        comm.comm_group_size = 2
+        comm.role = "slave"  # CLOUD
+        multi_nodes_args = {'is_master': True, 'max_input_len': 2048}
+        comm.init_multi_nodes_infer(multi_nodes_args)
+        self.assertEqual(comm.comm_group, 0)
+        
+        multi_nodes_args = {'is_master': False, 'max_input_len': 2048}
+        comm.init_multi_nodes_infer(multi_nodes_args)
+        self.assertEqual(comm.comm_group, 1)
+        
+        comm.role = "master"  # EDGE
+        comm.rank = 1
+        multi_nodes_args = {'is_master': True, 'max_input_len': 2048}
+        comm.init_multi_nodes_infer(multi_nodes_args)
+        self.assertEqual(comm.comm_group, 1)
 
 if __name__ == '__main__':
     # 设置测试环境

@@ -317,7 +317,8 @@ bool ConfigManager::Impl::CheckLayerwiseDisaggregatedParam()
     }
 
     bool singleNode = !backendConfigParam.lwdMultiNodesEnable;
-    bool singleNodeInsNotSupportDpNum = isFindDp && (dpNum != 1);
+    bool deepseekDetected = ConfigInteraction::CheckModelTypeDeepseek(modelDeployConfig_->GetParam());
+    bool singleNodeInsNotSupportDpNum = isFindDp && !deepseekDetected &&(dpNum != 1);
     if (singleNode && singleNodeInsNotSupportDpNum) {
         MINDIE_LLM_LOG_ERROR("layerwiseDisaggregated not incompatible with dp "<< itrFindDp->second << std::endl);
         return false;

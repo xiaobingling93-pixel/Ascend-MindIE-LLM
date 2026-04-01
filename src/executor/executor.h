@@ -100,6 +100,7 @@ private:
     bool InitIPCAndLaunchModel();
     bool InitModelExecution(std::unordered_map<std::string, std::string> &config);
     bool ExecutorModelInitAndSync();
+    bool LwdMasterAndSlaveSync();
     bool MasterSendPDInfoToSlave(const std::map<std::string, std::string> &pdInfo);
     bool SlaveSendInitResponseToMaster();
     bool MasterHandleSlaveInitResponse(ExecuteResponse &response) const;

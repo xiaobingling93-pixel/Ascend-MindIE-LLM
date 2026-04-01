@@ -90,16 +90,18 @@ class TestCloudCutPolicy(unittest.TestCase):
         self.cloud_cut_policy.model_type = CloudCutModelType.DEEP_SEEK
         self.cloud_cut_policy.soc_name = 'Ascend910_9362'
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_diff_npu_soc()
-        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 35)
 
     def test_ajust_prefill_cut_num_for_multi_nodes(self):
+        self.cloud_cut_policy.multi_nodes_enable = True
+        self.cloud_cut_policy.model_type = CloudCutModelType.DEEP_SEEK
         self.cloud_cut_policy.moe_quantize = 'w4a8_dynamic'
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
-        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 32)
 
         self.cloud_cut_policy.moe_quantize = None
         self.cloud_cut_policy._CloudCutPolicy__ajust_prefill_cut_num_for_multi_nodes()
-        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 50)
+        self.assertEqual(self.cloud_cut_policy.prefill_default_cut_map.get(7.5), 45)
 
     @patch('atb_llm.utils.layerwise_disaggregated.cloud_cut_policy.acl')
     def test_ajust_prefill_cut_num_for_standard_card(self, standard_card_mock_acl):

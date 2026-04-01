@@ -22,8 +22,7 @@ EDGE = "master"
 CLOUD = "slave"
 HCCL = 'hccl'
 
-SEQ_LEN = 32 * 1024
-MULTI_NODES_RESV_SEQ_LEN = 1 * 1024 # reserve 1K seq len for malloc memory
+SINGLE_CHUNK_LEN_MAX = 32 * 1024
 BATCH_LEN = 1024
 
 MAX_COMM_GROUPS = 2
@@ -60,10 +59,6 @@ class EdgeCloudDataComm:
 
         self.streams = [None] * 2 # [P_stream, D_stream]
         
-        self.send_index = 0
-        self.recv_index = 0
-        self.wait_recv_index = 0
-        
         self.cards = [None] * 4  # PD收发时使用的NPU卡号
 
         self.hidden_size = 7168 # No specific requirements; considering general model settings, use 7168.
@@ -72,7 +67,10 @@ class EdgeCloudDataComm:
         self.out_hidden_d = None
         self.target_p = [None] * self.batch_p_num
         self.target_d = None
-        self.ret_p = [None] * self.batch_p_num
+        
+        self.prefill_recv_ret_queue = []
+        for _ in range(self.batch_p_num):
+            self.prefill_recv_ret_queue.append(queue.Queue())
         self.ret_d = None
 
         self.prefill_seq_len_queue = queue.Queue()
@@ -123,11 +121,16 @@ class EdgeCloudDataComm:
         self.rank_file = None
 
     def init_multi_nodes_infer(self, multi_nodes_infer_args):
+        rank_per_dp = self.cloud_ranks_num // self.comm_group_size
         if multi_nodes_infer_args is None:
+            if self.comm_group_size == 2:
+                if self.role == CLOUD:
+                    self.comm_group = 0 if self.rank < rank_per_dp else 1
+                else:
+                    self.comm_group = self.rank
             return
         self.multi_nodes_infer_enabled = True
         self.multi_nodes_is_master = multi_nodes_infer_args['is_master']
-        self.comm_group_size = multi_nodes_infer_args['comm_group_size']
         self.max_input_len = multi_nodes_infer_args['max_input_len']
         if self.comm_group_size == 1:
             return
@@ -137,11 +140,15 @@ class EdgeCloudDataComm:
             self.comm_group = self.rank
             
     def init_stream_cards(self):
+        rank_per_dp = self.cloud_ranks_num // self.comm_group_size
         if self.comm_group_size == 2: # dp或cp=2 的场景，P/D 的收发均在 0 卡，所有节点都需要要初始化
             if self.role == EDGE:
                 self.cards = [self.rank] * 4
             else:
-                self.cards = [0] * 4
+                if self.multi_nodes_infer_enabled:
+                    self.cards = [0] * 4
+                else:
+                    self.cards = [0] * 4 if self.rank < rank_per_dp else [0 + rank_per_dp] * 4
             p_streams = []
             for _ in range(self.batch_p_num):
                 p_streams.append([torch.npu.Stream() for _ in range(2)])
@@ -284,16 +291,15 @@ class EdgeCloudDataComm:
         # No inter-node communication warmup is performed here; it will be conducted prior to model-level computation.
 
     def hidden_malloc(self):
-        seq_len = SEQ_LEN
-        if self.multi_nodes_infer_enabled:
-            seq_len = self.max_input_len + MULTI_NODES_RESV_SEQ_LEN
         for i in range(self.batch_p_num):
             if self.out_hidden_p[i] is None:
-                self.out_hidden_p[i] = torch.ones((seq_len, self.hidden_size), dtype=self.dtype, device='npu')
+                self.out_hidden_p[i] = torch.ones((SINGLE_CHUNK_LEN_MAX, self.hidden_size), dtype=self.dtype,
+                    device='npu')
         if self.out_hidden_d is None:
             self.out_hidden_d = torch.ones((BATCH_LEN, self.hidden_size), dtype=self.dtype, device='npu')
 
-        logger.info(f"[layerwiseDisaggregated] {torch.distributed.get_rank()}-{self.rank} init max seq len: {seq_len}.")
+        logger.info(f"[layerwiseDisaggregated] {torch.distributed.get_rank()}-{self.rank} init max seq len: "
+            f"{SINGLE_CHUNK_LEN_MAX}.")
 
     def get_global_comm(self):
         default_pg = torch.distributed.group.WORLD
@@ -357,14 +363,12 @@ class EdgeCloudDataComm:
                 ret.wait()
                 torch_npu.npu.synchronize()
 
-    def broadcast_hidden(self, bc_tensor, shape, mode: str):
-        if mode == 'p':
-            wait_recv_index = self.wait_recv_index
-            self.wait_recv_index = (wait_recv_index + 1) % self.batch_p_num
-            
+    def broadcast_hidden(self, bc_tensor, shape, mode: str, start_position=0, wait_recv_index=0):
         if self.role == EDGE and self.comm_group_size > 1:  # 多机边侧两卡接收对应云侧的hidden，不需要broadcast
             return bc_tensor
+        rank_per_dp = self.cloud_ranks_num // self.comm_group_size
         src_rank = self.cards[RECV_P if mode == 'p' else RECV_D]
+        src_rank = src_rank - rank_per_dp if src_rank >= rank_per_dp else src_rank
         bc_group = self.group_intra_broadcast_edge if self.role == EDGE \
                                                    else self.groups_intra_broadcast_cloud[self.comm_group]
         bc_group_map = self.map_intra_broadcast_edge if self.role == EDGE \
@@ -372,7 +376,8 @@ class EdgeCloudDataComm:
 
         if bc_tensor is None:
             if mode == 'p':
-                self.target_p[wait_recv_index] = self.out_hidden_p[wait_recv_index][:shape[wait_recv_index], :]
+                end_pos = start_position + shape[wait_recv_index]
+                self.target_p[wait_recv_index] = self.out_hidden_p[wait_recv_index][start_position: end_pos, :]
                 torch.distributed.broadcast(self.target_p[wait_recv_index], src=bc_group_map[src_rank], group=bc_group)
                 return self.target_p[wait_recv_index]
             else:
@@ -383,15 +388,11 @@ class EdgeCloudDataComm:
             torch.distributed.broadcast(bc_tensor, src=bc_group_map[src_rank], group=bc_group)
             return bc_tensor
 
-    def send_hidden(self, mode: str, out_tensor):
+    def send_hidden(self, mode: str, out_tensor, send_index=0):
         if self.groups_inter_cleanup:
             return
         peer_index = 1 if self.role == EDGE else 0
         src_rank = self.cards[SEND_P if mode == 'p' else SEND_D]
-
-        if mode == 'p':
-            send_index = self.send_index 
-            self.send_index = (send_index + 1) % self.batch_p_num
 
         # dp1 云侧从节点不收发hidden
         is_multi_node_cloud_slave = self.multi_nodes_infer_enabled and self.role == CLOUD and \
@@ -416,15 +417,11 @@ class EdgeCloudDataComm:
                                                 dst=self.maps_inter_send_recv[self.comm_group][D_INDEX][peer_index],
                                                 group=self.groups_inter_send_recv[self.comm_group][D_INDEX])
 
-    def recv_hidden(self, mode: str, shape):
+    def recv_hidden(self, mode: str, shape: list, start_position=0, recv_index=0):
         if self.groups_inter_cleanup:
             return
         peer_index = 1 if self.role == EDGE else 0
         src_rank = self.cards[RECV_P if mode == 'p' else RECV_D]
-
-        if mode == 'p':
-            recv_index = self.recv_index 
-            self.recv_index = (recv_index + 1) % self.batch_p_num
 
         # dp1 云侧从节点不收发hidden
         is_multi_node_cloud_slave = self.multi_nodes_infer_enabled and self.role == CLOUD and \
@@ -437,13 +434,14 @@ class EdgeCloudDataComm:
                 if self.role == CLOUD and not self.set_prefill_device_done:
                     torch.npu.set_device(torch.device(f"npu:{self.npu_device_id}"))
                     self.set_prefill_device_done = True
-                self.target_p[recv_index] = self.out_hidden_p[recv_index][:shape[recv_index], :]
+                end_pos = start_position + shape[recv_index]
+                self.target_p[recv_index] = self.out_hidden_p[recv_index][start_position: end_pos, :]
                 with torch.npu.stream(self.streams[P_INDEX][recv_index][RECV_INDEX]):
                     ret = torch.distributed.irecv(
                         self.target_p[recv_index], 
                         src=self.maps_inter_send_recv[self.comm_group][P_INDEX][recv_index][peer_index], 
                         group=self.groups_inter_send_recv[self.comm_group][P_INDEX][recv_index])
-                self.ret_p[recv_index] = ret
+                self.prefill_recv_ret_queue[recv_index].put(ret)
                 logger.info(f"[rank-{self.rank}] prefill start async recv, shape={shape[recv_index]}")
             else:
                 if self.role == CLOUD and not self.set_decode_device_done:
@@ -457,7 +455,7 @@ class EdgeCloudDataComm:
                 self.ret_d = ret
                 logger.info(f"[rank-{self.rank}] decode start async recv, shape={shape}")
 
-    def data_wait_after_recv(self, mode: str):
+    def data_wait_after_recv(self, mode: str, wait_recv_index=0):
         src_rank = self.cards[RECV_P if mode == 'p' else RECV_D]
 
         # dp1 云侧从节点不收发hidden
@@ -468,26 +466,17 @@ class EdgeCloudDataComm:
 
         if self.rank == src_rank:
             if mode == 'p':
-                self.ret_p[self.wait_recv_index].wait()
-                self.ret_p[self.wait_recv_index] = None
-                torch.npu.default_stream().wait_stream(self.streams[P_INDEX][self.wait_recv_index][RECV_INDEX])
-                return self.target_p[self.wait_recv_index]
+                while not self.prefill_recv_ret_queue[wait_recv_index].empty():
+                    self.prefill_recv_ret_queue[wait_recv_index].get().wait()
+                torch.npu.default_stream().wait_stream(self.streams[P_INDEX][wait_recv_index][RECV_INDEX])
+                # The data is already saved to out_hidden_p through the slice in recv_hidden
+                return self.target_p[wait_recv_index]
             else:
                 self.ret_d.wait()
                 torch.npu.default_stream().wait_stream(self.streams[D_INDEX][RECV_INDEX])
                 return self.target_d
 
         return None
-
-    def check_prefill_recv_done(self):
-        src_rank = self.cards[RECV_P]
-
-        if self.rank == src_rank:
-            if self.ret_p[self.wait_recv_index] is None:
-                return True
-            return self.ret_p[self.wait_recv_index].is_completed()
-
-        return True
 
     def npu_net_is_host(self) -> bool:
         return self.npu_net_host
@@ -496,6 +485,33 @@ class EdgeCloudDataComm:
         if self.npu_net_host:
             hidden_sync = torch.clone(hidden[0][0])
             hidden_sync.cpu()
+
+    def get_cached_data(self, start_pos, end_pos, batch_index=0):
+        """
+        Get cached data from out_hidden_p based on start and end positions
+
+        Args:
+            start_pos (int): Start position of the data to retrieve
+            end_pos (int): End position of the data to retrieve
+            batch_index (int): Index of the batch in out_hidden_p
+
+        Returns:
+            torch.Tensor: The requested slice of data
+        """
+        if batch_index < 0 or batch_index >= self.batch_p_num:
+            logger.error(f"Invalid batch_index: {batch_index}, must be between 0 and {self.batch_p_num-1}")
+            return None
+
+        if self.out_hidden_p[batch_index] is None:
+            logger.error(f"out_hidden_p[{batch_index}] is not initialized")
+            return None
+
+        seq_len = self.out_hidden_p[batch_index].shape[0]
+        if start_pos < 0 or end_pos > seq_len or start_pos >= end_pos:
+            logger.error(f"Invalid start_pos or end_pos: start_pos={start_pos}, end_pos={end_pos}, seq_len={seq_len}")
+            return None
+        
+        return self.out_hidden_p[batch_index][start_pos:end_pos, :]
 
     def set_comm_args(self, rank=None, role=None, comm_args=None):
         edge_ip_address = comm_args.get('edge_ip_address', None)
@@ -506,7 +522,7 @@ class EdgeCloudDataComm:
         multi_nodes_ctrl_port = comm_args.get('multi_nodes_ctrl_port', None)
         multi_nodes_infer_enabled = comm_args.get('multi_nodes_infer_enabled', False)
         multi_nodes_is_master = comm_args.get('multi_nodes_is_master', False)
-        comm_group_size = comm_args.get('comm_group_size', None)
+        self.comm_group_size = comm_args.get('comm_group_size', None)
         max_input_len = comm_args.get('max_input_len', None)
         self.npu_id = comm_args.get('npu_id', None)
         self.npu_net_host = comm_args.get('npu_net_host', False)
@@ -522,7 +538,11 @@ class EdgeCloudDataComm:
                 'is_master': multi_nodes_is_master,
                 'cloud_ctrl_port': multi_nodes_ctrl_port,
                 'cloud_ctrl_address': cloud_ip_address[0],
-                'comm_group_size': comm_group_size,
                 'max_input_len': max_input_len,
             }
         self.init_multi_nodes_infer(multi_nodes_infer_args)
+        
+    def prefill_chunk_recv(self, shape_list, recv_index):
+        for start_pos, recv_len in shape_list:
+            self.p_shape[recv_index] = recv_len
+            self.recv_hidden('p', self.p_shape, start_pos, recv_index=recv_index)
