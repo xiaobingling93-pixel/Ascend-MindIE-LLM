@@ -944,7 +944,8 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
     modelConfig["max_beam_width"] = std::to_string(engineConfig.maxBeamWidth);
     modelConfig["kv_pool_backend"] = engineConfig.kvPoolConfig.backend;
     modelConfig["kv_pool_config_path"] = engineConfig.kvPoolConfig.configPath;
-   
+    modelConfig["kv_pool_async_write"] = engineConfig.kvPoolConfig.asyncWrite ? "true" : "false";
+
     std::string npuIds;
     if (!modelParam.npuDeviceIds.empty()) {
         for (auto &item : modelParam.npuDeviceIds) {
@@ -977,9 +978,7 @@ static void LLMSetModelConfig(std::map<std::string, std::string> &modelConfig, c
     modelConfig["threadNum"] = (modelConfig["asyncBatchscheduler"] == "true") ? "2" : "1";
 
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
-    if (configManager.IslayerwiseDisaggregated()) {
-        LLMSetLayerwiseDisaggregatedModelConfig(modelConfig, engineConfig);
-    }
+    if (configManager.IslayerwiseDisaggregated()) LLMSetLayerwiseDisaggregatedModelConfig(modelConfig, engineConfig);
 }
 
 static void InitPolicyConfig(SchedulerConfig &schedulerConfig, const EngineConfig &engineConfig)

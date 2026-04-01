@@ -98,7 +98,7 @@
             },
     ```
 
-3. 拉起池化后端对应的中心化服务Master Service，具体安装和拉起命令，请参考[KV Cache池化使用指导](../../../../mindie_llm/text_generator/mempool/README.md)。
+3. 拉起池化后端对应的中心化服务Master Service，具体安装和拉起命令，请参考[KV Cache池化使用指导](mempool.md)。
 4. 启动服务。
 
     ```bash
