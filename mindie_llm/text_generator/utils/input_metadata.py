@@ -8,7 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, List, Optional, Union
 
 import numpy as np
@@ -41,6 +41,7 @@ def get_batch_size(is_prefill_pre_batch, requests):
 
 @dataclass
 class LwdMetadata():
+    request_key: int = 0
     start_exec_layer: int = 0
     end_exec_layer: int = 0
     end_of_generate_token: bool = True
@@ -51,9 +52,10 @@ class LwdMetadata():
     is_long_seq: bool = False
     long_seq_start_idx: int = 0
     long_seq_end_idx: int = 0
-    long_seq_next_end_idx: int = 0
+    hidden_start_pos: int = 0
     prefill_total_seq_len: int = 0
     is_last_chunk: bool = False
+    long_seq_recv_list: List[tuple] = field(default_factory=list)
 
 
 @dataclass(slots=True)

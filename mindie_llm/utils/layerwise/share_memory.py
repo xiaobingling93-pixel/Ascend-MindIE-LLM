@@ -163,7 +163,7 @@ class SharedMemoryManager:
                 if isinstance(item, int):
                     packed_item = struct.pack(SHARED_MEM_TYPE, item)
                 else:
-                    raise ValueError("Unsupported data type in list")
+                    raise ValueError(f"Unsupported data type in list, item: {item} type: {type(item)}")
                 
                 self._ptr.seek(data_offset)
                 data_offset += self._ptr.write(packed_item)

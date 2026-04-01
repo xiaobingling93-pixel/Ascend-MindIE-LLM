@@ -13,6 +13,7 @@ import copy
 import time
 from enum import IntEnum
 import numpy as np
+import torch
 
 from mindie_llm.text_generator.plugins.plugin_manager import PluginManager
 from mindie_llm.text_generator.utils import (
@@ -127,16 +128,10 @@ class PluginManagerLwd(PluginManager):
         scp_size = self.infer_context.spcp_parallel_info.scp_size
         block_size = self.generator_backend.block_size
 
-        start_total_idx = lwd_exe_stage.long_seq_start_idx
-        end_total_idx = lwd_exe_stage.long_seq_end_idx
-        if self.role_type == RoleType.EDGE:
-            start_idx = lwd_exe_stage.long_seq_start_idx // cp_size
-            end_idx = lwd_exe_stage.long_seq_end_idx // cp_size
-        else:
-            start_idx = lwd_exe_stage.long_seq_start_idx
-            end_idx = lwd_exe_stage.long_seq_end_idx
-            start_total_idx = lwd_exe_stage.long_seq_start_idx * cp_size
-            end_total_idx = lwd_exe_stage.long_seq_end_idx * cp_size
+        start_idx = lwd_exe_stage.long_seq_start_idx
+        end_idx = lwd_exe_stage.long_seq_end_idx
+        start_total_idx = lwd_exe_stage.long_seq_start_idx * cp_size
+        end_total_idx = lwd_exe_stage.long_seq_end_idx * cp_size
 
         if not lwd_exe_stage.is_last_chunk:
             input_metadata.sp_tokens[:] = end_total_idx // scp_size
@@ -158,7 +153,7 @@ class PluginManagerLwd(PluginManager):
         return input_metadata
 
     def model_inputs_update_manager_longseq_chunk_cp(self, model_inputs, input_metadata,
-                                                     sampling_metadata, cache_ids, **kwargs):
+                                                    sampling_metadata, cache_ids, **kwargs):
         if not self.is_mix_model:
             self.plugin_data_param.q_len = None
             self.plugin_data_param.mask = None
@@ -203,7 +198,8 @@ class PluginManagerLwd(PluginManager):
                 if input_metadata.is_prefill else self.prefill_total_seq_len
         cloud_cut_instance = self.model_wrapper.model_runner.time_counter
         if ENV.framework_backend == BackendType.ATB:
-            self.model_wrapper.model_runner.clear_internal_tensors()
+            if not warmup:
+                self.model_wrapper.model_runner.clear_internal_tensors()
             if (self.plugin_list and "mtp" not in self.plugin_list) or self.is_mix_model:
                 result = self.generator_backend.forward(model_inputs, q_lens=self.plugin_data_param.q_len,
                                                         attn_mask=self.plugin_data_param.mask)  # q_len spec_mask
@@ -227,6 +223,9 @@ class PluginManagerLwd(PluginManager):
         else:
             logits = result
         span_end(prof, True)
+        if warmup:
+            torch.npu.synchronize()
+            torch.npu.empty_cache()
         self.watcher.watch_npu_mem(self.rank, f'After forward', trigger_count=self.mem_det_trigger_counter)
 
         prof = span_start("sample")
@@ -236,7 +235,7 @@ class PluginManagerLwd(PluginManager):
         else:
             sampling_output = self.lwd_sampling_output(input_metadata)
             
-        if ENV.framework_backend == BackendType.ATB:
+        if ENV.framework_backend == BackendType.ATB and not warmup:
             self.model_wrapper.model_runner.clear_internal_tensors()
         self.watcher.watch_npu_mem(self.rank, f'After sample', trigger_count=self.mem_det_trigger_counter)
 
@@ -261,7 +260,6 @@ class PluginManagerLwd(PluginManager):
                     not input_metadata.layerwise_disaggregated_exe_stage.request_dp_empty):
                     if self.infer_context.spcp_parallel_info.cp_size > 1:
                         input_metadata = self.prepare_metadata_for_longseq_chunk_cp(input_metadata)
-
                 hit_mask = np.isin(input_metadata.all_sequence_ids, self.last_sequence_ids)
                 cache_ids, model_input, sampling_metadata, trace_ids = self.preprocess(
                     input_metadata, warmup=warmup, hit_mask=hit_mask
@@ -468,7 +466,6 @@ class PluginManagerLwd(PluginManager):
                     input_metadata, warmup=warmup, hit_mask=hit_mask
                 )
                 self.infer_context.last_sampling_metadata.clear()  # Do not use sampling cache under async inference.
-
                 if (input_metadata.layerwise_disaggregated_exe_stage.is_long_seq and
                     not input_metadata.layerwise_disaggregated_exe_stage.request_dp_empty):
                     if self.infer_context.spcp_parallel_info.cp_size > 1:
@@ -600,7 +597,8 @@ class PluginManagerLwd(PluginManager):
         model_input_wrapper.model_inputs.lm_head_indices[0] = lwd_exe_stage.long_seq_end_idx - \
             lwd_exe_stage.long_seq_start_idx - 1
         if lwd_exe_stage.long_seq_start_idx != 0:
-            q_lens = [lwd_exe_stage.long_seq_end_idx - lwd_exe_stage.long_seq_start_idx]
+            q_lens = np.array([lwd_exe_stage.long_seq_end_idx - 
+                               lwd_exe_stage.long_seq_start_idx], dtype=np.int32).tolist()
             model_input_wrapper.model_kwargs.update({"q_lens": q_lens})
             attn_mask = self.generator_backend.model_wrapper.model_runner.attn_mask\
                 .get_splitfuse_mask(self.generator_backend.model_wrapper.device)
@@ -646,7 +644,6 @@ class PluginManagerLwd(PluginManager):
             
             if layerwise_disaggregated_exe_stage and layerwise_disaggregated_exe_stage.is_long_seq:
                 if not layerwise_disaggregated_exe_stage.request_dp_empty:
-
                     if self.infer_context.spcp_parallel_info.cp_size == 1:
                         self.prepare_inputs_for_longseq_chunk(model_input_wrapper)
                 model_output = self.generator_backend.forward_from_model_inputs(
