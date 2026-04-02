@@ -25,9 +25,6 @@ class Deepseekv32InputBuilder(InputBuilder):
                                "model is not supported to run on transformers <4.34. You can upgrade transformers to "
                                "4.34 or above, or rewrite the InputBuilder provided with this model and load it in the "
                                "router.")
-        if not self.tokenizer.chat_template:
-            raise RuntimeError("The model does not appear to be a chat model because it is not configured with a "
-                               "`chat_template`.")
 
         for single_conversation in conversation:
             if single_conversation.get("content", None) is None:
