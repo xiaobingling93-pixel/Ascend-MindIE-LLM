@@ -226,10 +226,11 @@ class PluginManager:
                 span_attr(prof, "dp_rank", str(self.model_wrapper.mapping.attn_dp.rank))
                 
             if ENV.framework_backend == BackendType.ATB:
-                self.model_wrapper.model_runner.clear_internal_tensors()
                 forward_extra_kwargs = {}
                 if warmup:
                     forward_extra_kwargs["warmup_is_end"] = False
+                else:
+                    self.model_wrapper.model_runner.clear_internal_tensors()
                 if (self.plugin_list and "mtp" not in self.plugin_list) or self.is_mix_model:
                     result = self.generator_backend.forward(model_inputs, q_lens=self.plugin_data_param.q_len,
                                                             attn_mask=self.plugin_data_param.mask,
@@ -249,12 +250,15 @@ class PluginManager:
             else:
                 logits = result
             span_end(prof, True)
+            if warmup:
+                torch.npu.synchronize()
+                torch.npu.empty_cache()
             self.watcher.watch_npu_mem(self.rank, f'After forward', trigger_count=self.mem_det_trigger_counter)
 
             prof = span_start("sample")
             draft_filtered_logits = self.sample_preprocess_manager(logits, result, sampling_metadata, input_metadata)
             sampling_output = self.generator_backend.sample(draft_filtered_logits, sampling_metadata)
-            if ENV.framework_backend == BackendType.ATB:
+            if ENV.framework_backend == BackendType.ATB and not warmup:
                 self.model_wrapper.model_runner.clear_internal_tensors()
             span_end(prof)
             self.watcher.watch_npu_mem(self.rank, f'After sample', trigger_count=self.mem_det_trigger_counter)

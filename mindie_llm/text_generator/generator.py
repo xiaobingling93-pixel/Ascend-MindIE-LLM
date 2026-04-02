@@ -675,23 +675,19 @@ class Generator(PDInterface):
                 npu_mem = KV_HALF_BYTE * num_hidden_layers * kv_hidden_dim * total_tokens / self.world_size
                 return math.ceil(gb(npu_mem))
 
-            with memory_profiling(
-                baseline_non_torch=0,
-                weights_memory=self.model_memory_usage,
-                backend_type=self.backend_type
-            ) as profile_result:
-                if self.pd_config.model_role in {STANDARD_TAG, DmiModeNodeRole.FLEX}:
-                    self._warmup_standard(warmup_params)
-                elif self.pd_config.model_role == DmiModeNodeRole.PREFILL:
-                    self._warmup_prefill(warmup_params)
-                elif self.pd_config.model_role == DmiModeNodeRole.DECODER:
-                    self._warmup_decode(warmup_params)
-            requested_memory = profile_result.total_memory * ENV.memory_fraction
-            npu_mem = requested_memory - profile_result.non_kv_cache_memory
-            print_log(self.rank, logger.info,
-                      f'Requested memory: {ENV.memory_fraction} (util), {gb(requested_memory):.2f} GiB')
-            print_log(self.rank, logger.info, profile_result)
+            if self.pd_config.model_role in {STANDARD_TAG, DmiModeNodeRole.FLEX}:
+                self._warmup_standard(warmup_params)
+            elif self.pd_config.model_role == DmiModeNodeRole.PREFILL:
+                self._warmup_prefill(warmup_params)
+            elif self.pd_config.model_role == DmiModeNodeRole.DECODER:
+                self._warmup_decode(warmup_params)
+            free_mem, total_mem, _ = acl.rt.get_mem_info(1)
+            requested_memory = total_mem * ENV.memory_fraction
+            npu_mem = requested_memory - (total_mem - free_mem)
             npu_mem = self._validate_warmup_memory(warmup_params, npu_mem)
+            print_log(self.rank, logger.info,
+                      f'Requested memory: {ENV.memory_fraction} (util), {gb(requested_memory):.2f} GiB'
+                      f'npu_mem: {Npu_mem} GiB')
         return npu_mem
 
     def swap(self, block_operation: Any) -> None:
@@ -983,8 +979,9 @@ class Generator(PDInterface):
         return prefill_reqs
 
     def _warmup_prefill(self, warmup_params: WarmupParams):
-        self._auto_warmup_prefill(warmup_params)
-        if self.enable_prefix_cache and self.backend_type != "torch":
+        if not self.enable_prefix_cache:
+            self._auto_warmup_prefill(warmup_params)
+        elif self.backend_type != "torch":
             self._auto_warmup_prefill(warmup_params, do_prefix_cache_warmup=True)
         if self.backend_type == "torch":
             self._auto_warmup_prefill(warmup_params)
@@ -1000,9 +997,10 @@ class Generator(PDInterface):
         with self._temporarily_disable(
             dap=self.enable_dap
         ):
-            self._auto_warmup(warmup_params)
-        if self.enable_prefix_cache and self.backend_type != "torch":
-            self._auto_warmup(warmup_params, do_prefix_cache_warmup=True)
+            if not self.enable_prefix_cache:
+                self._auto_warmup(warmup_params)
+            elif self.backend_type != "torch":
+                self._auto_warmup(warmup_params, do_prefix_cache_warmup=True)
 
     def _warmup_specified(self, warmup_params: WarmupParams):
         self._auto_warmup(warmup_params)
@@ -1304,14 +1302,20 @@ class Generator(PDInterface):
             )
 
         request_num_per_dp = len(prefill_reqs) // self.dp_size
-        
-        if self.scp_size > 1:
-            warmup_blocks = [0] * self.scp_size
-            warmup_blocks[0] = 1
-        else:
-            warmup_blocks = 1
 
+        global_index = 0   
         for dp_rank in range(self.dp_size):
             req = prefill_reqs[dp_rank * request_num_per_dp]
-            req.computed_blocks = warmup_blocks
-            req.remote_computed_blocks = warmup_blocks
+            if self.scp_size > 1:
+                warmup_blocks = [0] * self.scp_size
+                num_blocks = len(req.input_ids) // self.cp_size // self.block_size
+                for _ in range(num_blocks):
+                    warmup_blocks[global_index] += 1
+                    global_index = (global_index + 1) % self.scp_size
+                
+                req.computed_blocks = warmup_blocks
+                req.remote_computed_blocks = warmup_blocks
+            else:
+                # When q_len equals context_len, it goes into the prefix handling logic.
+                req.computed_blocks = 0
+                req.remote_computed_blocks = 0
