@@ -40,6 +40,13 @@ std::pair<size_t, size_t> PolicyHelper::GetNumComputeNewUnCachedAndCachedTokens(
     size_t numUncachedNewTokens = 0;
 
     std::vector<SequenceSPtr> seqs = seqGroup->GetSequences(status);
+
+    // beamsearch请求的running/swapped状态的token计数需要考虑所有分支
+    if (seqGroup->sampling && seqGroup->sampling->enableParallelSampling &&
+        (status == SequenceStatus::RUNNING || status == SequenceStatus::SWAPPED)) {
+        seqs = seqGroup->GetParallelSequences(SequenceStatus::ALL_STATUS);
+    }
+
     for (SequenceSPtr &seq : seqs) {
         if (!seq) {
             throw std::runtime_error("Found null sequence in sequence group");
