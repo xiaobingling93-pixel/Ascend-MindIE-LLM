@@ -11,8 +11,10 @@ KV Cache池化特性依赖于Prefix Cache特性。此外，通过在MindIE的con
 ```json
 "kvPoolConfig" : {"backend":"", "configPath":""}
 ```
+
 或者
-```
+
+```json
 "kvPoolConfig" : {"backend":"", "configPath":"", "asyncWrite": true}
 ```
 

@@ -68,10 +68,10 @@
 
 3. 安装依赖。
 
-    使用模型进行推理前需要安装对应的依赖，各模型的依赖安装文件（requirements\__xxx_.txt）所在路径为/usr/local/lib/python3.11/site-package/requirements/models。以LLaMA3系列模型为例，使用以下命令安装依赖。
+    使用模型进行推理前需要安装对应的依赖，各模型的依赖安装文件（requirements\__xxx_.txt）所在路径，以Python 3.11为例：/usr/local/lib/python3.11/site-packages/atb_llm/requirements/models。以LLaMA3系列模型为例，使用以下命令安装依赖。
 
     ```bash
-    cd /usr/local/lib/python3.11/site-package/requirements/models
+    cd /usr/local/lib/python3.11/site-packages/atb_llm/requirements/models
     pip3 install -r requirements_llama3.txt
     ```
 
