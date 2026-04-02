@@ -40,6 +40,7 @@ from mindie_llm.runtime.layers.attention.sparse_attention_layer import SFA
 from mindie_llm.runtime.config.mindie_llm_config import SpeculativeConfig
 from mindie_llm.runtime.layers.sampling.sampler import Sampler
 from mindie_llm.runtime.model_runner.spec_worker import auto_speculative_method_router, speculative_worker_selector
+from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info
 
 # Allow tensor initialization and casting with internal format(e.g., NZ)
 torch.npu.config.allow_internal_format = True
@@ -131,6 +132,7 @@ class ModelRunnerExp:
             raise ValueError(f"block_size must be greater than 0, but got {self._block_size}")
         self._max_block_per_seq = (self._max_seq_len + self._block_size - 1) // self._block_size
         self.is_draft_model = kwargs.get("is_draft_model", False)
+        self.soc_info = get_npu_node_info()
 
         # bin cpus to the NUMA
         if ENV.bind_cpu:

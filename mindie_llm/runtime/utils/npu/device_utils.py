@@ -317,6 +317,9 @@ class _NPUNodeInfo:
         else:
             raise RuntimeError(f"Can not support soc_name: {self.soc_name}.")
 
+    def is_300i(self):
+        return self.get_device_type() == DeviceType.ASCEND_310P
+
 
 def get_npu_node_info() -> _NPUNodeInfo:
     """Returns the singleton instance of _NPUNodeInfo.
