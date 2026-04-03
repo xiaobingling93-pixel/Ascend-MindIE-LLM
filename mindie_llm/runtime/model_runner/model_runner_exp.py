@@ -167,7 +167,7 @@ class ModelRunnerExp:
         self.input_builder = router_ins.input_builder
         self.config_dict = router_ins.config_dict
         self.llm_config = router_ins.llm_config
-        self.enable_nz = self.llm_config.llm.kv_cache_options.enable_nz
+        self.enable_nz = False # NOTE: This feature should be decided by models, this will be refactored later.
         init_distributed(rank, world_size, local_rank, llm_config=self.llm_config, server_config=kwargs)
         self.head_size = self.config.head_dim
         self.num_heads = self.config.get_num_attention_heads_per_rank()

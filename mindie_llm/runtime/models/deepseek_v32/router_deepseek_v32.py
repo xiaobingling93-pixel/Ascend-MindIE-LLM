@@ -9,8 +9,11 @@
 # See the Mulan PSL v2 for more details.
 
 from dataclasses import dataclass
-import os
+
 from mindie_llm.runtime.models.deepseek_v3.router_deepseek_v3 import DeepseekV3Router
+from mindie_llm.runtime.models.deepseek_v3.deepseek_v3 import DeepseekV3ForCausalLM
+from mindie_llm.runtime.models.deepseek_v3.deepseek_v3_mtp import DeepseekV3MTP
+from mindie_llm.runtime.models.deepseek_v3.config_deepseek_v3 import DeepseekV3Config
 from mindie_llm.runtime.models.deepseek_v32.input_builder_deepseekv32 import Deepseekv32InputBuilder
 
 
@@ -24,19 +27,6 @@ class DeepseekV32Router(DeepseekV3Router):
     to match the underlying DeepSeek V3 implementation while maintaining
     V3.2-specific functionality.
     """
-    def __post_init__(self):
-        """
-        Post-initialization method to adjust model type for compatibility.
-        
-        Converts model_type from "deepseek_v32" to "deepseek_v3" to ensure compatibility
-        with the underlying DeepSeek V3 implementation, while preserving the model type
-        for tool call parsing.
-        """
-        super().__post_init__()
-        if self._model_type == "deepseek_v32":
-            self._model_type = "deepseek_v3"
-            self._model_type_cap = ''.join(part.capitalize() for part in self._model_type.split('_'))
-    
     def _get_input_builder(self):
         """
         Creates and returns the input builder for DeepSeek V3.2 model.
@@ -51,6 +41,18 @@ class DeepseekV32Router(DeepseekV3Router):
             kwargs["max_length"] = self.config.max_position_embeddings
         return Deepseekv32InputBuilder(self.tokenizer, **kwargs)
 
+    def _get_model_cls(self):
+        """Returns model cls of DeepSeek V3.2, where we reuse DeepSeek V3 model."""
+        return DeepseekV3ForCausalLM
+
+    def _get_draft_cls(self):
+        """Returns mtp model cls of DeepSeek V3.2, where we reuse DeepSeek V3 mtp model."""
+        return DeepseekV3MTP
+
+    def _get_config_cls(self):
+        """Returns config cls of DeepSeek V3.2, where we reuse DeepSeek V3 config."""
+        return DeepseekV3Config
+    
     def _get_tool_calls_parser(self):
         """
         Returns the tool call parser identifier for DeepSeek V3.2.

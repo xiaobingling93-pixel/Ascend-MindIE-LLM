@@ -321,9 +321,9 @@ class TokenizerWrapper:
     def _is_use_reasoning_parser(self, metadata: dict) -> bool:
         """
         judge need to post-thinking analysis.
-        True, the model must support thinking and llm_config.llm.enable_reasoning is opened
+        True, the model must support thinking and llm_config.enable_reasoning is opened
         """
-        if not self.llm_config.llm.enable_reasoning:
+        if not self.llm_config.enable_reasoning:
             return False
         if self.reasoning_parser is None:
             return False

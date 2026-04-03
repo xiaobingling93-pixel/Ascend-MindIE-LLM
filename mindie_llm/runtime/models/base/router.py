@@ -18,8 +18,8 @@ from functools import cached_property
 from mindie_llm.runtime.utils.helpers.safety.file import safe_open
 from mindie_llm.runtime.utils.helpers.safety.hf import safe_get_tokenizer_from_pretrained, safe_get_config_dict
 from mindie_llm.runtime.utils.helpers.parameter_validators import (
-    IntParameterValidator, DictionaryParameterValidator, BooleanParameterValidator,
-    RangeParamaterValidator, FileParameterValidator, StringParameterValidator, Field
+    DictionaryParameterValidator, BooleanParameterValidator,
+    FileParameterValidator, StringParameterValidator, Field
 )
 from mindie_llm.runtime.models.base.input_builder import InputBuilder
 from mindie_llm.runtime.models.base.reasoning_parser import CommonReasoningParser
@@ -69,46 +69,15 @@ class BaseRouter:
         Returns:
             Dictionary of validators for LLMConfig parameters
         """
-        llm_config_validators = {"models": {}}
         llm_validators = DictionaryParameterValidator({
-            "ccl": DictionaryParameterValidator({
-                "enable_mc2": BooleanParameterValidator()
-            }),
-            "stream_options": DictionaryParameterValidator({
-                "micro_batch": BooleanParameterValidator()
-            }),
-            "engine": DictionaryParameterValidator({
-                "graph": RangeParamaterValidator(range_list=["cpp", "python"])
-            }),
-            "parallel_options": DictionaryParameterValidator({
-                "o_proj_local_tp": IntParameterValidator(Field(ge=1, le=16), special_values=[-1]),
-                "lm_head_local_tp": IntParameterValidator(Field(ge=1, le=16), special_values=[-1]),
-                "hccl_buffer": IntParameterValidator(Field(ge=1)),
-                "hccl_moe_ep_buffer": IntParameterValidator(Field(ge=512)),
-                "hccl_moe_tp_buffer": IntParameterValidator(Field(ge=64)),
-            }),
-            "pmcc_obfuscation_options": DictionaryParameterValidator({
-                "enable_model_obfuscation": BooleanParameterValidator(),
-                "data_obfuscation_ca_dir": FileParameterValidator(allow_none=True),
-                "kms_agent_port": IntParameterValidator(Field(ge=1, le=65535)),
-            }),
-            "kv_cache_options": DictionaryParameterValidator({
-                "enable_nz": BooleanParameterValidator()
-            }),
-            "weights_options": DictionaryParameterValidator(
-                element_validator_mapping={
-                    "low_cpu_memory_mode": BooleanParameterValidator()
-                },
-                allow_addition_key=False
-            ),
             "enable_reasoning": BooleanParameterValidator(),
             "tool_call_options": DictionaryParameterValidator({
                 "tool_call_parser": StringParameterValidator(Field(max_length=1024), allow_none=True),
             }),
             "chat_template": FileParameterValidator(allow_none=True)
         })
-        llm_config_validators["llm"] = llm_validators
-        return llm_config_validators
+
+        return llm_validators
 
     @cached_property
     def llm_config(self):
@@ -197,7 +166,7 @@ class BaseRouter:
             Custom chat template string if configured, otherwise None
         """
         custom_chat_template = ""
-        if getattr(self.llm_config.llm, "chat_template", ""):
+        if getattr(self.llm_config, "chat_template", ""):
             custom_chat_template = self._get_custom_chat_template()
         return custom_chat_template
 
@@ -230,7 +199,7 @@ class BaseRouter:
         debug_msg = f"The valid registered ToolCallsProcessors are: {valid_tool_call_processors}"
         logger.debug(message_filter(debug_msg))
 
-        tool_call_options = getattr(self.llm_config.llm, "tool_call_options", None)
+        tool_call_options = getattr(self.llm_config, "tool_call_options", None)
         if not tool_call_options:
             return
 
@@ -271,7 +240,7 @@ class BaseRouter:
         Returns:
             Chat template string if successfully loaded, otherwise empty string
         """
-        custom_chat_template_file = getattr(self.llm_config.llm, "chat_template")
+        custom_chat_template_file = getattr(self.llm_config, "chat_template")
         chat_template = ""
         if custom_chat_template_file and os.path.exists(custom_chat_template_file):
             try:
@@ -429,7 +398,7 @@ class BaseRouter:
                 message = "The 'models' field does not conform to JSON format. Please check."
                 logger.warning(f'{message}, exception info: {e}')
                 self.load_config.models_dict = None
-        llm_config.update(self.load_config.models_dict, allow_new_keys=True, current_path='models')
+        llm_config.update(self.load_config.models_dict, allow_new_keys=True)
         llm_config.merge_models_config(self._model_type)
 
         llm_config_validators = self.get_llm_config_validators()

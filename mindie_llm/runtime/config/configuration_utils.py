@@ -21,13 +21,6 @@ class LLMConfig:
         config = ConfigParser("config.json")
         value = config.get("section.key", default="default value")
     """
-    _DEFAULT_CONFIG = {
-        "llm": {
-            "engine": {
-                "graph": "cpp"
-            }
-        }
-    }
 
     def __init__(self, config_path: str) -> None:
         """
@@ -37,7 +30,6 @@ class LLMConfig:
         """
         self._config_path = config_path
         self._config_dict: Dict[str, Any] = {}
-        self._init_default_config()
         self._load_config()
 
     def __repr__(self):
@@ -75,30 +67,23 @@ class LLMConfig:
 
     def merge_models_config(self, model_name: str) -> None:
         """merge model.model_name config to llm config"""
-        if not hasattr(self, 'models'):
-            return
-
-        model_key = f'models.{model_name}'
+        model_key = f'{model_name}'
         model_config = self.get(model_key)
         if model_config is None:
             return
         model_config_dict = model_config.to_dict()
-        self.update(model_config_dict, current_path='llm', allow_new_keys=False)
+        self.update(model_config_dict, allow_new_keys=False)
 
     def check_config(self, validators: Dict):
         """check config's type and range"""
         sections = {}
-        models_key = "models"
-        llm_key = "llm"
 
         for key, value in vars(self).items():
             if not key.startswith('_'):
-                sections[key] = value.to_dict()
+                sections[key] = value.to_dict() if isinstance(value, SectionConfig) else value
 
         try:
-            validators[llm_key].validate(sections[llm_key])
-            for key in validators[models_key].keys():
-                validators[models_key][key].validate(sections[models_key][key])
+            validators.validate(sections)
         except KeyError as ke:
             raise KeyError(f"Validation failed, because some keys are missing: {str(ke)}") from ke
         except Exception as e:
@@ -121,10 +106,6 @@ class LLMConfig:
             current = getattr(current, key)
 
         return current
-
-    def _init_default_config(self):
-        """Initialize the default configuration structure"""
-        self._apply_config(self._DEFAULT_CONFIG)
 
     def _load_config(self) -> None:
         """

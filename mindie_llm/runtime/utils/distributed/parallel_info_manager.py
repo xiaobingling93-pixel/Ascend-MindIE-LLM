@@ -8,6 +8,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+import os
 from dataclasses import dataclass
 from typing import List
 from enum import Enum, unique
@@ -92,14 +93,7 @@ class ParallelInfoManager:
         hccl_buffer (int): Default HCCL buffer size.
     """
     def __init__(self, local_rank: int, llm_config=None, server_config=None):
-        if llm_config is not None:
-            self.parallel_config = llm_config.llm.parallel_options
-        else:
-            self.parallel_config = None
-        if self.parallel_config is None:
-            self.hccl_buffer = DEFAULT_BUFFER_SIZE
-        else:
-            self.hccl_buffer = self.parallel_config.hccl_buffer
+        self.hccl_buffer = DEFAULT_BUFFER_SIZE
         self.server_config = {} if server_config is None else server_config
 
         self.world_size: int = torch.distributed.get_world_size()
@@ -114,9 +108,9 @@ class ParallelInfoManager:
         self.attn_dp = self._init_dp_parallel_info(server_config.get("dp", -1))
         self.attn_cp = self._init_dp_parallel_info(server_config.get("cp", -1))
         # NOTE: buffer_size needs to be calculated by a formula
-        moe_tp_buffer_size = 64 if self.parallel_config is None else self.parallel_config.hccl_moe_tp_buffer
+        moe_tp_buffer_size = 64 # moe_tp uses 64M buffer, no matter how long the seq is.
         self.moe_tp = self._init_tp_parallel_info(server_config.get("moe_tp", -1), moe_tp_buffer_size)
-        moe_ep_buffer_size = 512 if self.parallel_config is None else self.parallel_config.hccl_moe_ep_buffer
+        moe_ep_buffer_size = 256 # moe_ep uses 256M buffer, no matter how long the seq is.
         self.moe_ep = self._init_dp_parallel_info(server_config.get("moe_ep", -1), moe_ep_buffer_size)
         if self.moe_tp.group_size * self.moe_ep.group_size != self.world_size:
             error_msg = (
@@ -125,7 +119,8 @@ class ParallelInfoManager:
                 f"moe_tp.group_size({self.moe_tp.group_size}) × moe_ep.group_size({self.moe_ep.group_size})"
             )
             raise ValueError(error_msg)
-        self.moe_ep_mc2 = self._init_dp_parallel_info(server_config.get("moe_ep", -1), moe_ep_buffer_size)
+        moe_ep_mc2_buffer_size = int(os.getenv("HCCL_BUFFSIZE"))
+        self.moe_ep_mc2 = self._init_dp_parallel_info(server_config.get("moe_ep", -1), moe_ep_mc2_buffer_size)
         # NOTE: --- Legacy convenience attributes (deprecated) end---
 
         group_size = server_config.get("sp", -1)
