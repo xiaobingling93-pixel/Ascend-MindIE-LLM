@@ -141,6 +141,7 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
     response.set_errormessage("");
     response.set_isvaliddecodeparameters(true);
     if (inferInterface != nullptr) {
+        ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "D rcv requestId: " << serverInfo.reqId << ", total " << ++receiveCnt);
         inferInterface->SetDMIReComputeBuilder();
         inferInterface->DecodeProcess(response);
     } else {
@@ -153,7 +154,8 @@ void HandleKvRelease(const std::string &requestId)
 {
     RequestIdNew reqId(requestId);
     static uint64_t releaseCnt = 0;
-
+    
+    ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "P rcv release kv requestId: " << requestId << ", total " << ++releaseCnt);
     Status status = GetInferInstance()->ControlRequest(reqId, OperationV2::RELEASE_KV);
     if (status.StatusCode() != Error::Code::OK) {
         ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
