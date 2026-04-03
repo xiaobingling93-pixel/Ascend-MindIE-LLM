@@ -818,6 +818,16 @@ void DmiRole::UpdateHostIpInfo(
             ++it;
         }
     }
+    
+    auto successIt = this->successHostIP_.begin();
+    while (successIt != this->successHostIP_.end()) {
+        auto key = successIt->first;
+        if (currentLinkHostIpInfo.find(key) == currentLinkHostIpInfo.cend()) {
+            successIt = this->successHostIP_.erase(successIt);
+        } else {
+            ++successIt;
+        }
+    }
 }
 
 void DmiRole::HandlePDRoleV1(const ReqCtxPtr &ctx, const std::string &roleName)
