@@ -101,10 +101,7 @@ class Request:
         is_multimodal: bool = False
     ):
         req_id = next(Request.counter)
-        if is_multimodal:
-            input_ids = np.ones(input_len, dtype=np.int64)
-        else:
-            input_ids = np.random.randint(low=1, high=vocab_size, size=input_len, dtype=np.int64)
+        input_ids = np.ones(input_len, dtype=np.int64)
         sampling_params_ins = np.array([(1.1, 0.1, 0.1, 0.9, warmup_topk_size, 0.8, True, False)], SAMPLING_DTYPE)
         if not enable_warmup_sampling:
             sampling_params_ins = np.array([(1.0, 0.0, 0.0, 1.0, warmup_topk_size, 1.0, False, False)], SAMPLING_DTYPE)

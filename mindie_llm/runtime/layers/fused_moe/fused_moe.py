@@ -35,7 +35,7 @@ from mindie_llm.runtime.model_runner.forward_context import get_forward_context
 
 # Recommended value for fused operator output buffer size (in elements).
 # Determined empirically based on current npu_dispatch_ffn_combine operator constraints.
-MAX_OUTPUT_SIZE: int = 65536
+MAX_OUTPUT_SIZE: int = 65536 * 2
 
 
 class FusedMoE(CustomLayer):
