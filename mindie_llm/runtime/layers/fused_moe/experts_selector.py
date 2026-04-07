@@ -56,7 +56,7 @@ def select_experts(hidden_states: torch.Tensor,
         eps=float(1e-20)
     )
 
-    if scoring_func == SOFTMAX and renormalize:
+    if renormalize:
         topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
 
     return topk_weights, topk_ids

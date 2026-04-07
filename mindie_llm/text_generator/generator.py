@@ -1053,7 +1053,7 @@ class Generator(PDInterface):
                         model_id=3,
                         num_tensors=kvcache_settings.num_layers,
                         num_blocks=kvcache_settings.num_npu_blocks,
-                        blockshape=kvcache_settings.v_block_shape,
+                        blockshape=kvcache_settings.index_block_shape,
                         dtype=kvcache_settings.dtype_str,
                     )
             else:
