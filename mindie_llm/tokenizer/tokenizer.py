@@ -35,8 +35,6 @@ once_flag = threading.Event()
 
 _DURATION = 30  # check undeleted cache dir pre 30 seconds
 _DELET_DURATION = 2 ** 16  # delete dirs in the cache that are older than 2**16 seconds, which is equal to e2eTimeout
-_SINGLE_IMAGE_LIMIT = 20 * 1024 * 1024  # 20 MB
-_SINGLE_AUDIO_LIMIT = 20 * 1024 * 1024  # 20 MB
 _SINGLE_VIDEO_LIMIT = 512 * 1024 * 1024  # 512 MB
 _MEDIA_SIZE_LIMIT = 1000 * 1024 * 1024 # 1 GB
 _URL_LENGTH_LIMIT = 4096
@@ -56,12 +54,6 @@ _MEDIA_TYPE = {
     _INPUT_AUDIO_KEY: ['.mp3', '.wav', '.flac'],
 }
 
-_SIZE_LIMITS = {
-    _IMAGE_KEY: _SINGLE_IMAGE_LIMIT,
-    _AUDIO_KEY: _SINGLE_AUDIO_LIMIT,
-    _VIDEO_KEY: _SINGLE_VIDEO_LIMIT,
-    _INPUT_AUDIO_KEY: _SINGLE_AUDIO_LIMIT,
-}
 
 _MIME_TYPE2EXT = {
     "jpeg": ".jpg",
@@ -147,7 +139,7 @@ class IbisTokenizer:
             raise ValueError(f"'{path}' path not exist.")
 
     @staticmethod
-    def _process_url_path(media_url, ext, input_type, cache_dir, total_start_time):
+    def _process_url_path(media_url, ext, input_type, cache_dir, limit_params):
         try:
             parsed_url = parse_url(media_url)
             scheme = parsed_url.scheme if parsed_url.scheme else ""
@@ -161,18 +153,20 @@ class IbisTokenizer:
             logger.error(f"Failed to parse URL: {media_url}")
             raise ValueError(f"Invalid URL: {media_url}") from e
 
-        limit_params = (_SIZE_LIMITS, total_start_time)
+        size_limit, total_start_time = limit_params
+        max_size = _SINGLE_VIDEO_LIMIT if input_type == _VIDEO_KEY else size_limit
+        limit_params = (max_size, total_start_time)
         media_content, media_size = io_utils.fetch_media_url(media_url, input_type, ext, limit_params, _MEDIA_TYPE)
         if input_type == _IMAGE_KEY:
             image_count = len(os.listdir(cache_dir))
             image_save_path = os.path.join(cache_dir, f"{image_count + 1}.jpg")
-            io_utils.save_image(media_content, image_save_path)
+            io_utils.save_image(media_content, image_save_path, max_size)
         else:
             io_utils.save_media(media_content, cache_dir, ext)
         return media_size
 
     @staticmethod
-    def _process_local_path(media_url, ext, input_type, cache_dir):
+    def _process_local_path(media_url, ext, input_type, cache_dir, size_limit):
         if not os.path.exists(media_url):
             logger.error("Can not find the input media file.")
             raise FileNotFoundError("Can not find the input media file.")
@@ -188,11 +182,12 @@ class IbisTokenizer:
         
         file_utils.check_path_permission(media_url, mode=0o640)
         media_size = os.path.getsize(media_url)
-        if media_size > _SIZE_LIMITS.get(input_type):
+        max_size = _SINGLE_VIDEO_LIMIT if input_type == _VIDEO_KEY else size_limit
+        if media_size > max_size:
             logger.error(f'The size of {input_type} cannot exceed '
-                         f'{_SIZE_LIMITS.get(input_type) / (1024 * 1024)} MB')
+                         f'{max_size / (1024 * 1024)} MB')
             raise ValueError(f'The size of {input_type} cannot exceed '
-                             f'{_SIZE_LIMITS.get(input_type) / (1024 * 1024)} MB')
+                             f'{max_size / (1024 * 1024)} MB')
         io_utils.copy_media(media_url, cache_dir, ext)
         return media_size
 
@@ -298,12 +293,12 @@ class IbisTokenizer:
                 if time.time() - (req_time / 1_000_000_000) > _DELET_DURATION:
                     self.delete_multimodal_cache(req_time, split_text[0] + '_')
 
-    def download_url(self, prompt: str, timestamp: int):
-        def download_elems(elem_list):
+    def download_url(self, prompt: str, timestamp: int, size_limit: int):
+        def download_elems(elem_list, size_limit: int):
             media_size = 0
             total_start_time = time.time()
             for elem in elem_list:
-                media_size += self._download(elem, total_start_time)
+                media_size += self._download(elem, total_start_time, size_limit)
                 if media_size > _MEDIA_SIZE_LIMIT:
                     err_str = f'The total media input cannot exceed {_MEDIA_SIZE_LIMIT / (1024 * 1024)} MB.'
                     logger.error(err_str)
@@ -317,11 +312,11 @@ class IbisTokenizer:
 
         try:
             if _CONTENT_NAME_KEY not in prompt_obj[0]:
-                download_elems(prompt_obj)
+                download_elems(prompt_obj, size_limit)
                 return
             for single in prompt_obj:
                 if isinstance(single.get(_CONTENT_NAME_KEY), list):
-                    download_elems(single.get(_CONTENT_NAME_KEY))
+                    download_elems(single.get(_CONTENT_NAME_KEY), size_limit)
         except ValueError as value_error:
             logger.error("Download url failed: %s", value_error)
             self.delete_multimodal_cache(timestamp, self.cache_prefix)
@@ -538,7 +533,7 @@ class IbisTokenizer:
             _AUDIO_KEY: os.path.join(dir_path, "audio"),
         }
 
-    def _download(self, info, total_start_time):
+    def _download(self, info, total_start_time, size_limit):
         media_size = 0
         input_type = info['type']
         if input_type == 'text':
@@ -588,7 +583,8 @@ class IbisTokenizer:
                             )
                             once_flag.set()
             
-            media_size = self._process_url_path(media_url, ext, input_type, cache_dir, total_start_time)
+            limit_params = (size_limit, total_start_time)
+            media_size = self._process_url_path(media_url, ext, input_type, cache_dir, limit_params)
         elif ext.lower() in _MEDIA_TYPE.get(input_type):  # local path
             if media_url.startswith("file://"):
                 _, media_url = media_url.split("file://", 1)
@@ -603,13 +599,13 @@ class IbisTokenizer:
                 raise ValueError(f"Your input local file path is not allowed!"
                   f"please ensure your multimedia files are placed under {_ALLOWED_LOCAL_MEDIA_PATH}")
                   
-            media_size = self._process_local_path(media_url, ext, input_type, cache_dir)
+            media_size = self._process_local_path(media_url, ext, input_type, cache_dir, size_limit)
         else:
-            media_size = self._process_base64(info, media_url, input_type)
+            media_size = self._process_base64(info, media_url, input_type, size_limit)
 
         return media_size
 
-    def _process_base64(self, info, media_url, input_type):
+    def _process_base64(self, info, media_url, input_type, size_limit):
 
         if media_url.startswith("data:"):  # {"xxx_url": "data:{MIME};base64,{base64_encoded_data}"}
             pattern = r"data:(image|video|audio)/" \
@@ -643,17 +639,13 @@ class IbisTokenizer:
 
         data_content = io_utils.decode_base64_content(base64_data)
         media_size = len(data_content)
-        if media_size > _SIZE_LIMITS.get(input_type):
-            logger.error(f'The size of {input_type} cannot exceed '
-                         f'{_SIZE_LIMITS.get(input_type) / (1024 * 1024)} MB')
-            raise ValueError(f'The size of {input_type} cannot exceed '
-                            f'{_SIZE_LIMITS.get(input_type) / (1024 * 1024)} MB')
         cache_dir = file_utils.standardize_path(cache_dir)
         file_utils.check_path_permission(cache_dir)
         data_count = len(os.listdir(cache_dir))
         if input_type == _IMAGE_KEY:
             data_save_path = os.path.join(cache_dir, f"{data_count + 1}{ext}")
-            io_utils.save_image(data_content, data_save_path)
+            max_size = size_limit
+            io_utils.save_image(data_content, data_save_path, max_size)
         else:
             io_utils.save_media(data_content, cache_dir, ext)
         return media_size

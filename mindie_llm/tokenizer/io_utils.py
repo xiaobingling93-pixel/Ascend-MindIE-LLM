@@ -64,8 +64,7 @@ def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple,
                     media_type_dict: dict[str, list[str]]):
     if ext.lower() not in media_type_dict.get(input_type):
         raise ValueError(f"The media type is {input_type}, url must end with one of {media_type_dict.get(input_type)}.")
-    size_limit_dict, total_start_time = limit_params
-    size_limit = size_limit_dict.get(input_type, 0)
+    size_limit, total_start_time = limit_params
     if size_limit <= 0:
         raise ValueError(f'Invalid size limit for input type: {input_type}.')
 
@@ -119,10 +118,13 @@ def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple,
         raise RuntimeError("Download error") from e
 
 
-def save_image(image_byte_data, image_save_path):
-    single_image_limit = 20 * 1024 * 1024  # 20 MB
-    if len(image_byte_data) > single_image_limit:
-        raise ValueError('The size of image cannot exceed 20MB')
+def save_image(image_byte_data, image_save_path, size_limit: int):
+    if size_limit <= 0:
+        raise ValueError('Invalid size limit for image.')
+    if len(image_byte_data) > size_limit:
+        raise ValueError(
+            f'The size of image cannot exceed {size_limit / (1024 * 1024)} MB'
+        )
     try:
         # Image.open will check whether the binary content is a valid picture content.
         # verify() can check the integrity of content.

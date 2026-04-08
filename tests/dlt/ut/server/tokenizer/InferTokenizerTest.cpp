@@ -358,7 +358,7 @@ class IbisTokenizer:
         print('decode_one')
         return "decode_one_result"
 
-    def download_url(self, prompt: str, timestamp: int):
+    def download_url(self, prompt: str, timestamp: int, size_limit: int):
         if "DOWNLOAD_BAD" in prompt:
             raise RuntimeError("bad url \n details...")
 
@@ -396,7 +396,7 @@ class IbisTokenizer:
     def encode_chat(self, prompt, kwargs: dict=None): return [0, 1]
     def decode(self, input_tokens, kwargs: dict=None): return "decode_result"
     def decode_one(self, input_tokens, kwargs: dict=None): return "decode_one_result"
-    def download_url(self, prompt: str, timestamp: int):
+    def download_url(self, prompt: str, timestamp: int, size_limit: int):
         if "DOWNLOAD_BAD" in prompt: raise RuntimeError("bad url \n details...")
     def delete_multimodal_cache(self, req_id: int): return
 )" << std::endl;
