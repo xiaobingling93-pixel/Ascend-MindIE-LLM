@@ -260,6 +260,49 @@ bash ${script_path}/run_pa.sh --performance --trust_remote_code ${weight_path} $
 
 注：性能测试结果保存在 ${script_path} 目录下
 
+## Aisbench精度测试
+
+- 首先按照[服务化推理](#服务化推理)，启动服务端进程
+
+- 参考[Aisbench/benchmark](https://github.com/AISBench/benchmark/)安装精度性能评测工具
+- 参考[开源数据集](https://github.com/AISBench/benchmark/blob/master/ais_bench/benchmark/configs/datasets/textvqa/README.md)下载TextVQA数据集
+- 精度测试使用 `glm4v_textvqa_gen_base64` 数据集任务
+- 配置测试任务 `ais_bench/benchmark/configs/models/vllm_api/vllm_api_stream_chat.py`
+
+```python
+from ais_bench.benchmark.models import VLLMCustomAPIChat
+
+models = [
+    dict(
+        attr="service",
+        type=VLLMCustomAPIChat,
+        abbr='vllm-api-stream-chat',
+        path="/data_mm/weights/glm-4v-9b", # 自定义本地权重路径
+        model="glm4v", # 模型名称配置为glm4v
+        stream=True,
+        request_rate=0,
+        retry=2,
+        api_key="",
+        host_ip="localhost", # 服务IP地址
+        host_port=1040, # 服务业务面端口号，与服务化推理配置保持一致
+        url="",
+        max_out_len=16384,
+        batch_size=32,
+        trust_remote_code=False,
+        generation_kwargs=dict(
+            temperature=0.0,
+            ignore_eos=False
+        )
+    )
+]
+```
+
+执行命令开始精度测试
+
+```shell
+ais_bench --models vllm_api_stream_chat --datasets glm4v_textvqa_gen_base64 --mode all --debug
+```
+
 ## Benchmark精度测试
 
 - 首先按照[服务化推理](#服务化推理)，启动服务端进程

@@ -173,6 +173,60 @@ curl 127.0.0.1:1040/v1/chat/completions -d ' {
 }'
 ```
 
+## Aisbench精度测试
+
+- 首先按照[服务化推理](#服务化推理)，拉起服务化
+
+- 参考[Aisbench/benchmark](https://github.com/AISBench/benchmark/)安装精度性能评测工具
+- 数据准备
+  - 数据集下载 [Eval_QA](https://huggingface.co/datasets/maoxx241/videobench_subset) && [Video-Bench](https://huggingface.co/datasets/LanguageBind/Video-Bench/tree/main)
+  - 将 `Eval_QA/` 目录下各 json 文件中的 `vid_path` 属性值改为相应视频的绝对路径
+
+  ```json
+  ...
+  "v_C7yd6yEkxXE_4": {
+    "vid_path": "/data_mm/Eval_video/ActivityNet/v_C7yd6yEkxXE.mp4"
+  }
+  ...
+  ```
+
+- 使用 `videobench` 数据集任务进行精度测试
+- 配置测试任务 `ais_bench/benchmark/configs/models/vllm_api/vllm_api_general_chat.py`
+
+```python
+from ais_bench.benchmark.models import VLLMCustomAPIChat
+
+models = [
+    dict(
+        attr="service",
+        type=VLLMCustomAPIChat,
+        abbr='vllm-api-general-chat',
+        path="/data_mm/weights/MiniCPM-V-2_6", # 自定义本地权重路径
+        model="minicpm_qwen2_v2", # 模型名称配置为minicpm_qwen2_v2
+        stream=False,
+        request_rate=0,
+        retry=2,
+        api_key="",
+        host_ip="localhost", # 服务IP地址
+        host_port=1040, # 服务业务面端口号，与服务化推理配置保持一致
+        url="",
+        max_out_len=16384,
+        batch_size=1,
+        trust_remote_code=False,
+        generation_kwargs=dict(
+            temperature=0.01,
+            ignore_eos=False
+        )
+    )
+]
+```
+
+执行命令开始精度测试
+
+```shell
+ais_bench --models vllm_api_general_chat --datasets videobench --mode all --debug
+```
+
 ## benchmark精度测试方案
 
 - 首先按照[服务化推理](#服务化推理)，拉起服务化
