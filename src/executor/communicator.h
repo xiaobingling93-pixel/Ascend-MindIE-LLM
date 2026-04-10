@@ -62,8 +62,9 @@ private:
     bool LwdGRPCCommunicatorInit(std::unordered_map<std::string, std::string> &config,
                                 uint32_t grpcCommunicatorNum);
     std::unique_ptr<IPCCommunicator> InitSingleIPCCommunicator(const std::string &sharedMemName,
-                                                              const SemaphoreConfig &semConfig,
-                                                              const ShmSizeConfig &shmSizeConfig) const;
+                                                               const SemaphoreConfig &semConfig,
+                                                               const ShmSizeConfig &shmSizeConfig,
+                                                               bool receiveAllRank = false) const;
 
     bool RegisterAndStartIPCHandler(std::shared_ptr<IPCCommunicator> ipcCommunicator, ResponseHandler handler) const;
 

@@ -255,7 +255,7 @@ std::string InferTokenizer::MaskPathsInString(const std::string &input) const
 bool InferTokenizer::DownloadUrl(std::string &prompt, uint64_t reqId, std::string &msg)
 {
     try {
-        autoTokenizer->attr("download_url")(prompt, reqId);
+        autoTokenizer->attr("download_url")(prompt, reqId, GetMaxTextLength());
         return true;
     } catch (const std::exception &e) {
         std::ostringstream oss;

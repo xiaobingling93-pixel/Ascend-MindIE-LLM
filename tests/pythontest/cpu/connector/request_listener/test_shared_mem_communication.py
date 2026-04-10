@@ -375,7 +375,7 @@ class TestSharedMemCommunication(unittest.TestCase):
     def test_send_response_recover_command(self, mock_channel_cls):
         """测试 is_recover_command=True 分支"""
         # 设置 mock 类的常量值
-        mock_channel_cls.RECOVER_COMMAND_RESP_SIZE = 1024 * 512 # 假设的实际值
+        mock_channel_cls.EXECUTE_RESP_SLOT_SIZE = 1024 * 512 # 假设的实际值
         
         mock_shared_sync_link_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
@@ -388,7 +388,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         
         comm.send_response(mock_response, is_recover_command=True)
         
-        expected_offset = (1 % 4) * mock_channel_cls.RECOVER_COMMAND_RESP_SIZE
+        expected_offset = (1 % 4) * mock_channel_cls.EXECUTE_RESP_SLOT_SIZE
         mock_shared_sync_link_channel.send_message.assert_called_once_with(
             mock_response, buffer_offset=expected_offset
         )

@@ -149,19 +149,6 @@ class PluginManager:
                 setattr(new_instance, field.name, host_array)
         return new_instance
 
-    def clear_cache(
-        self,
-        sequence_ids: Iterable[int],
-        cache_ids: Optional[Iterable[int]] = None,
-        has_sampling: bool = True
-    ):
-        if cache_ids is None:
-            self.infer_context.clear_context_by_seq_ids(sequence_ids)
-        else:
-            self.infer_context.clear_finished_context(sequence_ids, cache_ids)
-        if has_sampling:
-            self.sampler.clear_cache(sequence_ids)
-
     def initialize(self):
         if self.is_mix_model:
             from .splitfuse.splitfuse_plugin import SplitfusePlugin
@@ -555,8 +542,8 @@ class PluginManager:
         # 不清理dummy batch 的 cache id
         if not input_metadata.is_dummy_batch:
             sequence_ids_to_clear = self.infer_context.clear_finished_context(finished_sequence_ids, finished_cache_ids)
-            if has_sampling and finished_sequence_ids.size != 0:
-                self.sampler.clear_cache(finished_sequence_ids)
+            if has_sampling and sequence_ids_to_clear.size != 0:
+                self.sampler.clear_cache(sequence_ids_to_clear)
             self.plugin_cache_clear_manager(cache_ids, finish_reason)
         self.infer_context.clear_aborted_context()
         token_indices = self.infer_context.get_output_len_count(cache_ids)
@@ -770,6 +757,8 @@ class PluginManager:
 
                 if self.is_inference_pause or self.error_code_collected_in_async is not None:
                     logger.info(f"Mocking response due to inference pause for trace_ids={trace_ids}.")
+                    if self.error_code_collected_in_async and launch_done is not None:
+                        launch_done.set()
                     model_output_wrapper = ModelOutputWrapper(
                         cache_ids=model_input_wrapper.cache_ids,
                         input_metadata=model_input_wrapper.input_metadata,

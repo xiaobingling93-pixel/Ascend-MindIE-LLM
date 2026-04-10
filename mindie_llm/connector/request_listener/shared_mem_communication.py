@@ -50,7 +50,6 @@ class SharedMemoryChannel:
     DEFAULT_SHARED_MEMORY_SIZE = 1024 * 1024 * 32
     # Maximum buffer size for model initialization response (0.5 MB) - must match C++ setting
     MODEL_INIT_RESP_SIZE = 1024 * 512
-    RECOVER_COMMAND_RESP_SIZE = 1024 * 512
     EXECUTE_RESP_SLOT_SIZE = 1024 * 512
 
     def __init__(self, name_prefix: str, local_rank_id: int):
@@ -252,6 +251,10 @@ class SharedMemCommunication:
         cls._instance.send_response(response, is_transfer=True)
 
     @classmethod
+    def send_link_response_cls(cls, response: ExecuteModelResponse):
+        cls._instance.send_response(response, is_link=True)
+
+    @classmethod
     def send_command_response_cls(cls, response: ExecuteModelResponse):
         """
         Send command request response, including lora_load, lora_unload, etc.
@@ -277,6 +280,7 @@ class SharedMemCommunication:
         response: ExecuteResponse,
         is_transfer: bool = False,
         is_command: bool = False,
+        is_link: bool = False,
         is_recover_command: bool = False
         ):
         shared_sync_link_key = "shared_sync_link"
@@ -292,22 +296,21 @@ class SharedMemCommunication:
 
         if response.HasField("init_results"):
             # For initialization results, each rank writes to its own offset
-            execute_channel = self._channels["execute"][response_key]
-            offset = (self.config.local_rank % self.config.npu_num_per_dp) * SharedMemoryChannel.MODEL_INIT_RESP_SIZE
-            execute_channel.send_message(response, buffer_offset=offset)
+            slot_size = SharedMemoryChannel.MODEL_INIT_RESP_SIZE
+            self._send_response_to_channel("execute", response, slot_size)
             return
 
         if is_recover_command:
-            response_channel = self._channels["recover_command"][response_key]
-            offset = (self.config.local_rank % self.config.npu_num_per_dp) * \
-                SharedMemoryChannel.RECOVER_COMMAND_RESP_SIZE
-            response_channel.send_message(response, buffer_offset=offset)
+            slot_size = SharedMemoryChannel.EXECUTE_RESP_SLOT_SIZE
+            self._send_response_to_channel("recover_command", response, slot_size)
             return
 
-        # Determine the correct channel based on response content
         if is_transfer:
-            target_channel = shared_sync_link_key if response.HasField("pd_link_status_response") else "transfer"
-        elif is_command:
+            slot_size = SharedMemoryChannel.EXECUTE_RESP_SLOT_SIZE
+            self._send_response_to_channel("transfer", response, slot_size)
+            return
+
+        if is_link or is_command:
             target_channel = shared_sync_link_key
         else:
             target_channel = "execute"
@@ -346,6 +349,11 @@ class SharedMemCommunication:
     def is_running(self) -> bool:
         return self._is_running
 
+    def _send_response_to_channel(self, channel_name, response, slot_size):
+        response_channel = self._channels[channel_name]["response"]
+        buffer_offset = (self.config.local_rank % self.config.npu_num_per_dp) * slot_size
+        response_channel.send_message(response, buffer_offset=buffer_offset)
+    
     def _process_incoming_requests(self, channel_name: str):
         channel: SharedMemoryChannel = self._channels[channel_name]["request"]
         while self._is_running:

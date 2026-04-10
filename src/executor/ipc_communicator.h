@@ -40,7 +40,7 @@ struct IPCSharedMemory {
 
 class IPCCommunicator {
 public:
-    IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig);
+    IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig, bool receiveAllRank = false);
     ~IPCCommunicator() = default;
 
     bool SetupChannel(const ShmSizeConfig &shmSizeConfig);
@@ -53,7 +53,7 @@ public:
 
     bool ReceiveInitResponses(std::vector<ExecuteResponse> &responses);
 
-    bool ReceiveRecoverCommandResponses(std::vector<ExecuteResponse> &responses);
+    bool ReceiveAllRankResponses(std::vector<ExecuteResponse> &responses);
 
     bool ReceiveResponse(ExecuteResponse &response);
 
@@ -67,6 +67,7 @@ private:
     bool ParseResponse(ExecuteResponse &executeResponse, char *sharedBuf) const;
     bool HandleRcvMsg();
 
+    ExecuteResponse AggregateToOneResponse(const std::vector<ExecuteResponse> &responses);
     bool CheckSemaphoreOwnerAndPermission(const std::string &semName) const;
     bool CreateSharedMemory(IPCSharedMemory &iPCSharedMemory, const size_t sharedMemorySize) const;
     void CreateSemaphores(IPCSharedMemory &iPCSharedMemory) const;
@@ -83,6 +84,7 @@ private:
     ResponseHandler responseHandler_ = nullptr;
     size_t requestShmSize_ = DEFAULT_SHARED_MEMORY_SIZE;
     size_t responseShmSize_ = DEFAULT_SHARED_MEMORY_SIZE;
+    bool receiveAllRank_{false};
 };
 
 bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf);

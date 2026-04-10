@@ -1,4 +1,5 @@
 posix_ipc==1.2.0
+pybind11==3.0.1
 networkx>=3.3
 pytz>=2024.2
 setuptools>=68.2.2

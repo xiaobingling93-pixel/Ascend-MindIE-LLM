@@ -16,7 +16,13 @@ import json
 import numpy as np
 
 from transformers import AutoTokenizer
-from mindie_llm.connector.common import send_model_execute_response, send_transfer_response, send_command_response, send_recover_command_response
+from mindie_llm.connector.common import (
+    send_model_execute_response,
+    send_transfer_response,
+    send_command_response,
+    send_recover_command_response,
+    send_link_response,
+)
 from mindie_llm.connector.common.response_builder import ExecuteResponseBuilder
 from mindie_llm.connector.common.input_metadata_builder import (
     convert_execute_model_request_to_input_metadata_composite,
@@ -371,7 +377,7 @@ class RouterImpl:
                         )
                         pd_link_status_response.failed_link_info.append(failed_info)
             
-            return send_transfer_response(
+            return send_link_response(
                 ExecuteResponse(msg_type=ExecuteType.PD_LINK_STATUS_QUERY, 
                             pd_link_status_response=pd_link_status_response)
             )
@@ -379,7 +385,7 @@ class RouterImpl:
             _print_component_error_log(e)
             logger.error("[Model]\t>>> query link status failed.")
             logger.exception(f"[Model]\t>>> Exception:{e}")
-            return send_transfer_response(
+            return send_link_response(
                 ExecuteResponse(msg_type=ExecuteType.PD_LINK_STATUS_QUERY,
                                 status=ModelWrapperErrorCode.PD_Link_QUERY_ERROR.value,
                                 pd_link_status_response=PDLinkStatusResponse())

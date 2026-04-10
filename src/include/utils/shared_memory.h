@@ -31,9 +31,7 @@ const size_t TOTAL_SHARED_MEMORY_PER_DP = 2 * SHARED_MEMORY_256MB + 4 * DEFAULT_
 // This is set to 0.5MB. Since a single machine can host up to 16 NPUs, the total maximum memory required is 0.5MB * 16
 // = 8MB, which aligns with DEFAULT_SHARED_MEMORY_SIZE.
 const size_t MODEL_INIT_RESP_SIZE = 1024 * 512;
-// This is set to 0.5MB. Since a single machine can host up to 16 NPUs, the total maximum memory required is 0.5MB * 16
-// = 8MB, which aligns with RECOVER_SHARED_MEMORY_SIZE.
-const size_t RECOVER_COMMAND_RESP_SIZE = 1024 * 512;
+// This is each rank's response buffer size for Kvtransfer & recover_commannd response
 const size_t EXECUTE_RESP_SLOT_SIZE = 1024 * 512;
 struct ShmSizeConfig {
     size_t requestShmSize;

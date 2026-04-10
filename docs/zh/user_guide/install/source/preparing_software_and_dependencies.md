@@ -83,3 +83,4 @@ MindIE所需依赖如[表3](#table3)所示。
 |posix_ipc|1.2.0|MindIE 2.2.RC1版本新增|
 |fastapi|0.115.11|MindIE 2.3.0版本新增|
 |uvicorn|0.34.3|MindIE 2.3.0版本新增|
+|pybind11|3.0.1|MindIE 2.3.0版本新增|

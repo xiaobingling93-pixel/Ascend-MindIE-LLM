@@ -19,6 +19,7 @@ using model_execute_data::ExecuteRequest;
 using model_execute_data::ExecuteResponse;
 using model_execute_data::ExecuteType_IsValid;
 namespace fs = std::experimental::filesystem;
+using namespace model_execute_data;
 constexpr mode_t FULL_PERMISSION_MASK = 0777;
 constexpr mode_t REQUIRED_PERMISSION = 0600;
 namespace mindie_llm {
@@ -39,7 +40,8 @@ bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf)
     return true;
 }
 
-IPCCommunicator::IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig)
+IPCCommunicator::IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig, bool receiveAllRank)
+    : receiveAllRank_(receiveAllRank)
 {
     requestSharedMemory_ =
         IPCSharedMemory(IPCSharedMemoryType::REQUEST, prefixName + "_request", semConfig.requestSemNum);
@@ -284,14 +286,14 @@ bool IPCCommunicator::ReceiveInitResponses(std::vector<ExecuteResponse> &respons
     return true;
 }
 
-bool IPCCommunicator::ReceiveRecoverCommandResponses(std::vector<ExecuteResponse> &responses)
+bool IPCCommunicator::ReceiveAllRankResponses(std::vector<ExecuteResponse> &responses)
 {
     // Wait until all consume semaphores reach 1,
     // then decrement each of them to mark the response buffer as being read.
     WaitOnAllSemaphores(responseSharedMemory_.semConsumeVec);
     for (size_t i = 0; i < responseWorkerNum_; ++i) {
         ExecuteResponse response;
-        if (!ParseResponse(response, responseSharedMemory_.sharedMemory->GetBuf() + i * RECOVER_COMMAND_RESP_SIZE)) {
+        if (!ParseResponse(response, responseSharedMemory_.sharedMemory->GetBuf() + i * EXECUTE_RESP_SLOT_SIZE)) {
             MINDIE_LLM_LOG_ERROR("Failed to parse recover command response at index: " << i);
             // Release buffer anyway so the producer isn't stuck: increment all produce semaphores by 1.
             SignalAllSemaphores(responseSharedMemory_.semProduceVec);
@@ -322,14 +324,45 @@ bool IPCCommunicator::HandleRcvMsg()
     pthread_setname_np(pthread_self(), "HandleRcvMsg");
     while (recvChannelActive_) {
         ExecuteResponse response;
-        if (!ReceiveResponse(response)) {
-            MINDIE_LLM_LOG_ERROR("Failed to receive response.");
-            continue;
+        if (!receiveAllRank_) {
+            if (!ReceiveResponse(response)) {
+                MINDIE_LLM_LOG_ERROR("Failed to receive response.");
+                continue;
+            }
+        } else {
+            // currently only kvtransfer channel need to receive all rank results in HandleRcvMsg
+            std::vector<ExecuteResponse> responses;
+            if (!ReceiveAllRankResponses(responses)) {
+                MINDIE_LLM_LOG_ERROR("Failed to receive all ranks' responses.");
+                continue;
+            }
+            response = AggregateToOneResponse(responses);
         }
+
         responseHandler_(response);
     }
     MINDIE_LLM_LOG_WARN("Terminating HandleRcvMsg");
     return true;
+}
+ExecuteResponse IPCCommunicator::AggregateToOneResponse(const std::vector<ExecuteResponse> &responses)
+{
+    // In pullkv responses, if one request pulls failed, all resquests are considered as failed.
+    // In KV transfer scenario, for the same request, pullkv could succeed on some ranks and fail on others.
+    // So if we find one failed response, we return; Otherwise we return the first response (they should be the same if
+    // all succeed).
+    for (const auto &response : responses) {
+        if (response.has_pull_kv_response()) {
+            PullKVResponseSPtr pullKVResponse = std::make_shared<PullKVResponse>(response.pull_kv_response());
+            for (int i = 0; i < pullKVResponse->pull_kv_results_size(); ++i) {
+                const auto &result = pullKVResponse->pull_kv_results(i);
+                PDErrorCode errorCode = result.pd_error_code();
+                if (errorCode != PDErrorCode::SUCCESS) {
+                    return response;
+                }
+            }
+        }
+    }
+    return responses[0];
 }
 
 void IPCCommunicator::CleanUp()

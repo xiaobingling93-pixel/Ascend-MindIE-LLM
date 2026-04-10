@@ -25,6 +25,11 @@ def send_command_response(proto):
     SharedMemCommunication.send_command_response_cls(proto)
 
 
+def send_link_response(proto):
+    from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+    SharedMemCommunication.send_link_response_cls(proto)
+
+
 def send_recover_command_response(proto):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
     SharedMemCommunication.send_recover_command_response_cls(proto)

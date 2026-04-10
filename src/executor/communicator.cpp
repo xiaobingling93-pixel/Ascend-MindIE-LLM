@@ -95,7 +95,7 @@ bool Communicator::InitIPCCommunicators(const std::string &sharedMemPrefix, uint
 
     ShmSizeConfig kvTransferShmConfig{SHARED_MEMORY_256MB, DEFAULT_SHARED_MEMORY_SIZE};
     ipcCommunicatorKVTransfer_ =
-        InitSingleIPCCommunicator(sharedMemPrefix + "_transfer", semConfig, kvTransferShmConfig);
+        InitSingleIPCCommunicator(sharedMemPrefix + "_transfer", semConfig, kvTransferShmConfig, true);
     if (ipcCommunicatorKVTransfer_ == nullptr) {
         MINDIE_LLM_LOG_ERROR("Failed to initialize IPC Communicator for KV Transfer channel.");
         return false;
@@ -291,7 +291,7 @@ bool Communicator::SendRecoverCommandRequestAndReceive(ExecuteRequest &request, 
 
     // Wait until the responses are received.
     if (ipcCommunicatorRecoverCommand_ != nullptr) {
-        if (!ipcCommunicatorRecoverCommand_->ReceiveRecoverCommandResponses(responses)) {
+        if (!ipcCommunicatorRecoverCommand_->ReceiveAllRankResponses(responses)) {
             MINDIE_LLM_LOG_ERROR("Failed to receive a sync recover command responses from local executors.");
             return false;
         }
@@ -395,7 +395,7 @@ bool Communicator::SlaveNodeGRPCRecoverRequestHandler(ExecuteRequest &request)
     // Wait until the responses are received.
     std::vector<ExecuteResponse> responses;
     if (ipcCommunicatorRecoverCommand_ != nullptr) {
-        if (!ipcCommunicatorRecoverCommand_->ReceiveRecoverCommandResponses(responses)) {
+        if (!ipcCommunicatorRecoverCommand_->ReceiveAllRankResponses(responses)) {
             MINDIE_LLM_LOG_ERROR("Failed to receive a sync recover command responses from local executors.");
             return false;
         }
@@ -447,9 +447,11 @@ bool Communicator::GRPCGetSyncResponse(ExecuteResponse &response)
 
 std::unique_ptr<IPCCommunicator> Communicator::InitSingleIPCCommunicator(const std::string &sharedMemName,
                                                                          const SemaphoreConfig &semConfig,
-                                                                         const ShmSizeConfig &shmSizeConfig) const
+                                                                         const ShmSizeConfig &shmSizeConfig,
+                                                                         bool receiveAllRank) const
 {
-    std::unique_ptr<IPCCommunicator> ipcCommunicator = std::make_unique<IPCCommunicator>(sharedMemName, semConfig);
+    std::unique_ptr<IPCCommunicator> ipcCommunicator =
+        std::make_unique<IPCCommunicator>(sharedMemName, semConfig, receiveAllRank);
     if (!ipcCommunicator->SetupChannel(shmSizeConfig)) {
         MINDIE_LLM_LOG_ERROR("Failed to initialize Execute channel.");
         return nullptr;

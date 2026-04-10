@@ -452,6 +452,7 @@ class Generator(PDInterface):
         """Clear the cache of certain `Request` objects."""
         logger.debug(f"Rank-{self.rank} is clearing the cache of {sequence_ids}.")
         self.infer_context.clear_context_by_seq_ids(sequence_ids)
+        self.generator_backend.clear_cache(sequence_ids)
 
     def copy_blocks(self, src_dst_map):
         if self.copy_blocks_ops is None:
