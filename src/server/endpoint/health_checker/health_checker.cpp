@@ -298,6 +298,9 @@ bool HealthChecker::ShouldSkipHealthCheck()
 
         // 堵塞10分钟以内跳过健康检查
         mServiceStatus.store(SERVICE_NORMAL);
+        std::string errCode = GenerateHealthCheckerErrCode(INFO, SUBMODLE_FEATURE_SECURE, SIMULATE_NORMAL);
+        ErrorQueue::GetInstance().EnqueueErrorMessage(errCode, SUBMODLE_NAME_HEALTHCHECKER);
+
         ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
             "HealthChecker: LLM engine not ready, skip health check");
         return true;
@@ -322,8 +325,10 @@ void HealthChecker::HandleHealthStatus()
         if (!mFirstSimulateAbnormalSuppressed) {
             mFirstSimulateAbnormalSuppressed = true;
             status = SERVICE_NORMAL;
+            errCode = GenerateHealthCheckerErrCode(INFO, SUBMODLE_FEATURE_SECURE, SIMULATE_NORMAL);
         } else if (isSending) {
             status = SERVICE_NORMAL;
+            errCode = GenerateHealthCheckerErrCode(INFO, SUBMODLE_FEATURE_SECURE, SIMULATE_NORMAL);
             ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
                 GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
                 "P node is sending a request to D. gRPC may block."
