@@ -39,7 +39,7 @@ MindIE中各组件依赖PyTorch框架和torch\_npu插件，依赖情况如下表
 |MindIE SD|**必装**|**必装**|
 
 > **注意**：使用 Python 3.10 环境编译，需配套 torch 2.9.0 版本 + torch_npu 2.9.0 版本,
-否则会导致 _bz2 模块缺失，从而导致编译失败。
+否则会导致 \_bz2 模块缺失，从而导致编译失败。
 
 ## 安装ATB Models
 
@@ -93,6 +93,7 @@ pip install atb_llm-<*version>*-cp*xxx*-cp*xxx*-linux_<*arch>*.whl
     posix_ipc==1.2.0
     fastapi==0.115.11
     uvicorn==0.34.3
+    pybind11==3.0.1
     ```
 
 3. 执行以下命令进行安装。如下命令如果使用非root用户安装，需要在安装命令后加上**--user**，安装命令需在`requirements.txt`所在目录执行。
