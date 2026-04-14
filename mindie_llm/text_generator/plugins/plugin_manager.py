@@ -810,6 +810,10 @@ class PluginManager:
         self.generator_backend.set_device()
         launch_done = None
         model_output_wrapper = None
+        logger.info("[ForwardLoop][Diag] forward_loop started, async_inference=%s, "
+                    "structured_output_manager=%s",
+                    self.async_inference,
+                    "initialized" if self._structured_output_manager is not None else "None")
         while True:
             prof = span_start("get_from_input_queue")
             model_input_wrapper: ModelInputWrapper = self.input_queue.get()
@@ -859,8 +863,20 @@ class PluginManager:
                     model_input_wrapper.sampling_metadata,
                     model_input_wrapper.input_metadata,
                 )
+                has_bitmask_before_sample = getattr(
+                    model_input_wrapper.sampling_metadata, 'guided_bitmask', None
+                ) is not None
+                logger.info(
+                    "[ForwardLoop][Diag] before sample: logits_shape=%s has_bitmask=%s",
+                    draft_filtered_logits.shape if hasattr(draft_filtered_logits, 'shape') else 'N/A',
+                    has_bitmask_before_sample,
+                )
                 sampling_output = self.generator_backend.sample(
                     draft_filtered_logits, model_input_wrapper.sampling_metadata
+                )
+                logger.info(
+                    "[ForwardLoop][Diag] after sample: token_ids=%s",
+                    sampling_output.token_ids[:5] if sampling_output.token_ids is not None else 'None',
                 )
                 if self._structured_output_manager is not None:
                     async_is_structured_accepted = self._structured_output_manager.compute_structured_output_accepted(

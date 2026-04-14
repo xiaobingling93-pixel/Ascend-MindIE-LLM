@@ -77,11 +77,28 @@ class Sampler:
         prof = span_start(name="Sampler", level=Level.DETAILED)
         prof = span_attr(prof, "batch_logits", lambda: tensor_attr(batch_logits))
         prof = span_attr(prof, "sampling_metadata", lambda: str(sampling_metadata))
-        if id(sampling_metadata) != id(self.metadata_cache):
+        id_match = id(sampling_metadata) == id(self.metadata_cache)
+        has_bitmask = getattr(sampling_metadata, 'guided_bitmask', None) is not None
+        had_bitmask = (
+            self.metadata_cache is not None
+            and getattr(self.metadata_cache, 'guided_bitmask', None) is not None
+        )
+        bitmask_changed = has_bitmask != had_bitmask
+        need_rebuild = (not id_match) or bitmask_changed
+        if need_rebuild:
             self.metadata_cache = sampling_metadata
             self.handler_params.batch_size, self.handler_params.vocab_size = batch_logits.shape
             self.switch_handlers(sampling_metadata)
             self.switch_selector(sampling_metadata)
+
+        from mindie_llm.utils.log.logging import logger as _sampler_logger
+        handler_names = [type(h).__name__ if h is not None else "None" for h in self.handlers]
+        _sampler_logger.info(
+            "[Sampler][Diag] id_match=%s has_bitmask=%s bitmask_changed=%s need_rebuild=%s "
+            "handler_count=%s handlers=%s",
+            id_match, has_bitmask, bitmask_changed, need_rebuild,
+            len(self.handlers), handler_names,
+        )
 
         batch_logits = self.handlers(batch_logits, sampling_metadata)
         output = self.selector(batch_logits, sampling_metadata)

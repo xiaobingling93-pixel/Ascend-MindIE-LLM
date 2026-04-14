@@ -94,18 +94,29 @@ class GuidedDecodingLogitsHandler(LogitsHandler):
     def __call__(self, logits: torch.Tensor, metadata: SamplingMetadata) -> torch.Tensor:
         bitmask = metadata.guided_bitmask
         if bitmask is None:
+            logger.info("[GuidedDecoding][Diag] handler called but bitmask is None, skip")
             return logits
 
-        _, vocab_size = logits.shape
+        batch_size, vocab_size = logits.shape
+        logger.info(
+            "[GuidedDecoding][Diag] applying bitmask: logits_shape=(%s, %s) bitmask_shape=%s dtype=%s device=%s",
+            batch_size, vocab_size, bitmask.shape, logits.dtype, logits.device,
+        )
 
         try:
             import_success = self._lazy_import()
             if not import_success:
-                logger.warning("[GuidedDecoding] Failed to import apply_token_bitmask_inplace," \
+                logger.warning("[GuidedDecoding] Failed to import apply_token_bitmask_inplace,"
                     " returning original logits")
                 return logits
 
+            pre_argmax = logits[0].argmax().item()
             self._apply_token_bitmask_inplace(logits, bitmask, vocab_size)
+            post_argmax = logits[0].argmax().item()
+            logger.info(
+                "[GuidedDecoding][Diag] bitmask applied: pre_argmax=%s post_argmax=%s changed=%s",
+                pre_argmax, post_argmax, pre_argmax != post_argmax,
+            )
 
         except Exception as e:
             logger.warning(f"[GuidedDecoding] Failed to apply grammar bitmask: {e}")

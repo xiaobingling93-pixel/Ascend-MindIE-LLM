@@ -56,6 +56,7 @@ def apply_token_bitmask_inplace_npu(
 
     mask_coverage_len = bit_masks.shape[-1]
     effective_len = min(vocab_size, mask_coverage_len)
+    bit_masks = bit_masks[..., :effective_len]
     logits[..., :effective_len] = logits[..., :effective_len].masked_fill_(bit_masks == 0, float("-inf"))
 
     if vocab_size > effective_len:
