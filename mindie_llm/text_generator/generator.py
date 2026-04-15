@@ -562,13 +562,17 @@ class Generator(PDInterface):
             )
         self.copy_blocks_ops.copy_blocks(src_dst_map)
 
-    def check_batch_size_limit(self, is_prefill: bool, batch_size: int) -> None:
-        if is_prefill:
-            max_allowed = self.max_prefill_batch_size
-            stage_name = "prefill"
+    def check_batch_size_limit(self, is_prefill: bool, is_mix: bool, batch_size: int) -> None:
+        if not is_mix:
+            if is_prefill:
+                max_allowed = self.max_prefill_batch_size
+                stage_name = "prefill"
+            else:
+                max_allowed = self.max_batch_size
+                stage_name = "Decode"
         else:
             max_allowed = self.max_batch_size
-            stage_name = "Decode"
+            stage_name = "is_mix"
 
         if batch_size > max_allowed:
             message = (
@@ -609,7 +613,7 @@ class Generator(PDInterface):
                     f"`input_id` should be less than 'max_prefill_tokens'."
                 )
                 logger.warning(message)
-            self.check_batch_size_limit(input_metadata.is_prefill, batch_size)
+            self.check_batch_size_limit(input_metadata.is_prefill, input_metadata.is_mix, batch_size)
 
         from ..utils.prof.profiler import span_start, span_end, span_attr, Level
 
