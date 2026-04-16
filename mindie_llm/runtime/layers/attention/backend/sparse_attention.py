@@ -39,9 +39,8 @@ from mindie_llm.runtime.layers.linear.linear_op import maybe_all_gather_and_mayb
 from mindie_llm.runtime.utils.distributed.communication_op import gather_tensor, allgather_and_reorder
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
 
-from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext, get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext, get_forward_context, AttentionMetadata
 from mindie_llm.runtime.model_runner.input_buffer import input_buffer
-from mindie_llm.runtime.model_runner.forward_context import AttentionMetadata
 from .abstract import AttentionBackend, AttentionLayer, SelectAttentionImpl
 
 
@@ -173,12 +172,15 @@ def prepare_cp_prefill_inputs(cp_size, input_ids, position_ids, input_lengths_cu
     return cp_input_dict
 
 
-def get_speculative_reqs_padding_length(num_tokens, num_actual_tokens):
-    reqs_padding_length = num_tokens // num_actual_tokens
-    last_req_tokens = num_tokens % num_actual_tokens
-    if last_req_tokens > 0:
-        reqs_padding_length += 1
-    return reqs_padding_length, last_req_tokens
+def get_speculative_reqs_padding_length(num_tokens, num_actual_tokens, num_token_per_batch):
+    if num_actual_tokens < num_token_per_batch:
+        actual_reqs_num = 1
+    else:
+        actual_reqs_num = num_actual_tokens // num_token_per_batch
+    padding_tokens = num_tokens - num_actual_tokens
+    if padding_tokens > 0:
+        actual_reqs_num += 1
+    return actual_reqs_num, padding_tokens
 
 
 class SfaBackend(AttentionBackend):
@@ -278,8 +280,6 @@ class SfaMetadata(AttentionMetadata):
 
     def copy(self, num_actual_tokens, num_tokens):
         # NOTE: only D2D operation is allowed, should be refactored later
-        # only D2D operation is allowed, should be refactored later. max_len = self.seq_lens_list.max()
-        # only D2D operation is allowed, should be refactored later. max_seq_pages = (max_len + 128 - 1) // 128
         num_reqs = num_actual_tokens // (self.num_speculative_tokens + 1)
 
         input_buffer_slot_mapping = input_buffer.get("slot_mapping")
@@ -288,7 +288,9 @@ class SfaMetadata(AttentionMetadata):
         self.slot_mapping = input_buffer_slot_mapping[:num_tokens]
 
         actual_len, last_req_tokens = get_speculative_reqs_padding_length(
-            num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+            num_tokens=num_tokens,
+            num_actual_tokens=num_actual_tokens,
+            num_token_per_batch=self.num_speculative_tokens + 1,
         )
 
         input_buffer_seq_lens = input_buffer.get("seq_lens")
@@ -328,9 +330,9 @@ class SfaMetadata(AttentionMetadata):
 
     def prepare_dummy_input(self, num_tokens):
         num_actual_tokens = self.num_speculative_tokens + 1
-        reqs_padding_length, _ = get_speculative_reqs_padding_length(
-            num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
-        )
+        reqs_padding_length = num_tokens // num_actual_tokens
+        if num_tokens % num_actual_tokens > 0:
+            reqs_padding_length += 1
         self.seq_lens = self.seq_lens[:reqs_padding_length]
         self.block_tables = self.block_tables[:reqs_padding_length, :]
         self.actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")[:reqs_padding_length]
@@ -468,7 +470,7 @@ class SfaBackendImpl(SelectAttentionImpl):
 
         self.enable_mlapo = kwargs["enable_mlapo"]
         if self.enable_mlapo:
-            pass
+            from mindie_llm.runtime.ops import mie_ops  # noqa
         self.input_layernorm = kwargs.get("input_layernorm", None)
         self.mlapo_weight_pack = MlapoWeightPack()
 

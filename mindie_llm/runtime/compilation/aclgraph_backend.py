@@ -10,7 +10,7 @@
 
 from typing import Optional, Any, Dict
 import torch
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.utils.log.logging import logger
 
 # Status indicating whether aclgraph can be captured.

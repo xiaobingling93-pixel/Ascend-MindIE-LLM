@@ -21,7 +21,7 @@ from mindie_llm.runtime.utils.helpers.env import ENV
 from mindie_llm.runtime.utils.cpu.affinity import bind_cpus
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_hbm_info
 from mindie_llm.runtime.models import get_router_ins
-from mindie_llm.runtime.model_runner.forward_context import (
+from mindie_llm.runtime.model_runner.forward_context_exp import (
     create_forward_context,
     set_forward_context,
     get_forward_context,

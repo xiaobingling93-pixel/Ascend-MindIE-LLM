@@ -519,6 +519,7 @@ class MtpWorkerExp(BaseWorkerProxy):
                 if get_parallel_info_manager().get(ParallelType.ATTN_DP).is_enabled():
                     padding_tokens = forward_context.dp_metadata.num_tokens_across_dp_cpu.max().item()
                     num_tokens = self.draft_model_runner.model.get_padded_graph_size(padding_tokens)
+                    forward_context.dp_metadata.copy(num_actual_tokens, num_tokens)
 
                 input_buffer_slot_mapping = input_buffer.get("slot_mapping")
                 input_buffer_slot_mapping[:num_actual_tokens].copy_(slot_mapping[:num_actual_tokens])

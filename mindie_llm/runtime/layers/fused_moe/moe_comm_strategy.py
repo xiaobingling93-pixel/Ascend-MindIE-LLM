@@ -14,7 +14,7 @@ from mindie_llm.runtime.utils.npu.device_utils import DeviceType
 from mindie_llm.runtime.model_runner.forward_context_exp import get_mc2_token_capacity
 from mindie_llm.utils.log.logging import logger
 
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info

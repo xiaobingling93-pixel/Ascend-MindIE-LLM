@@ -36,7 +36,7 @@ from mindie_llm.runtime.layers.quantization.unquantized import UnquantizedFusedM
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.distributed.utils import even_divide
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 
 # Recommended value for fused operator output buffer size (in elements).
 # Determined empirically based on current npu_dispatch_ffn_combine operator constraints.

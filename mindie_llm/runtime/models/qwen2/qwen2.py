@@ -25,7 +25,7 @@ from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.layers.quantization.quantization_config_base import QuantizationConfigBase
 from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.layers.embedding.rotary_embedding import get_rope
 
 

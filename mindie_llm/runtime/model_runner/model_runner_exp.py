@@ -312,6 +312,7 @@ class ModelRunnerExp:
         attn_metadata_dict = build_layerwise_attn_metadata(attn_metadata)
         forward_context.attn_metadata_dict = attn_metadata_dict
 
+        torch.npu.current_stream().synchronize()
         set_forward_context(forward_context)
 
         hidden_states = self.model(input_ids, position_ids)
@@ -513,6 +514,7 @@ class ModelRunnerExp:
 
         attn_metadata_dict = build_layerwise_attn_metadata(forward_context.attn_metadata)
         forward_context.attn_metadata_dict = attn_metadata_dict
+        torch.npu.current_stream().synchronize()
         set_forward_context(forward_context)
 
         return input_ids, position_ids

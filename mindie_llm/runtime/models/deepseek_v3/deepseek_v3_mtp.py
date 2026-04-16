@@ -13,7 +13,7 @@ from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
 from mindie_llm.runtime.layers.normalization import RMSNorm
 from mindie_llm.runtime.layers.linear.linear import ReplicatedLinear
 from mindie_llm.runtime.layers.embedding.embedding import VocabParallelEmbedding, ParallelLMHead, maybe_slice_cross_tp
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
 from .deepseek_v3 import DeepseekV3Layer

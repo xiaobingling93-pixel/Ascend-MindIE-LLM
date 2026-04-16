@@ -20,7 +20,7 @@ from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
 from mindie_llm.runtime.models.qwen3.qwen3 import Qwen3Attention
 from mindie_llm.runtime.layers.fused_moe.experts_selector import select_experts
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.layers.quantization.quantization_config_base import QuantizationConfigBase
 

@@ -23,7 +23,7 @@ from mindie_llm.runtime.layers.attention.sparse_attention_layer import SFA
 from mindie_llm.runtime.layers.attention.attention_mask import AttentionMask
 from mindie_llm.runtime.layers.fused_moe.experts_selector import select_experts
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE, assign_experts
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
 from mindie_llm.runtime.layers.parameter import BaseParameter

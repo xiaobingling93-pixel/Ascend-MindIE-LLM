@@ -32,8 +32,7 @@ import torch
 import torch_npu
 
 from mindie_llm.runtime.layers.quantization.ms_model_slim.c8 import AttnQuantMethodBase
-from mindie_llm.runtime.model_runner.forward_context import AttentionMetadata
-from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext, get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext, get_forward_context, AttentionMetadata
 from mindie_llm.runtime.model_runner.input_buffer import input_buffer
 from .abstract import AttentionBackend, AttentionImpl, AttentionLayer
 
