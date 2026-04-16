@@ -52,9 +52,7 @@ def yarn_find_correction_dim(
     max_position_embeddings: int = 2048,
 ) -> float:
     """Compute dimension index for given number of rotations."""
-    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (
-        2 * math.log(base)
-    )
+    return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
 
 
 def yarn_find_correction_range(
@@ -74,9 +72,7 @@ def yarn_find_correction_range(
     return max(low, 0), min(high, dim - 1)  # Clamp values just in case
 
 
-def yarn_linear_ramp_mask(
-    low: float, high: float, dim: int, dtype: torch.dtype = torch.float32
-) -> torch.Tensor:
+def yarn_linear_ramp_mask(low: float, high: float, dim: int, dtype: torch.dtype = torch.float32) -> torch.Tensor:
     """Linear ramp mask from 1 (at low) to 0 (at high)."""
     if low == high:
         high += 0.001  # Prevent singularity
@@ -100,6 +96,7 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
 
     Inherits from `RotaryEmbedding` and overrides cache computation to support scaled context.
     """
+
     def __init__(
         self,
         head_size: int,
@@ -116,7 +113,7 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
         beta_slow: int = 1,
         apply_yarn_scaling: bool = True,
         truncate: bool = True,
-        mscale: float | None = 1.0
+        mscale: float | None = 1.0,
     ) -> None:
         """Initialize YaRN rotary embedding.
 
@@ -141,10 +138,14 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
         self.beta_fast = beta_fast
         self.beta_slow = beta_slow
         self.truncate = truncate
-        self.mscale = mscale if mscale else (
-            float(yarn_get_mscale(self.scaling_factor) * self.attention_factor)
-            if apply_yarn_scaling
-            else float(self.attention_factor)
+        self.mscale = (
+            mscale
+            if mscale
+            else (
+                float(yarn_get_mscale(self.scaling_factor) * self.attention_factor)
+                if apply_yarn_scaling
+                else float(self.attention_factor)
+            )
         )
         self.original_max_position_embeddings = original_max_position_embeddings
         max_position_embeddings = int(self.scaling_factor * original_max_position_embeddings)
@@ -159,9 +160,7 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
         Returns:
             inv_freq: Blended inverse frequencies of shape `[rotary_dim // 2]`.
         """
-        pos_freqs = self.base ** (
-            torch.arange(0, self.rotary_dim, 2).to(torch.float32) / self.rotary_dim
-        )
+        pos_freqs = self.base ** (torch.arange(0, self.rotary_dim, 2).to(torch.float32) / self.rotary_dim)
         inv_freq_extrapolation = 1.0 / pos_freqs
         inv_freq_interpolation = 1.0 / (self.scaling_factor * pos_freqs)
 
@@ -175,13 +174,9 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
         )
         # Get n-d rotational scaling corrected for extrapolation
         inv_freq_mask = (
-            1
-            - yarn_linear_ramp_mask(low, high, self.rotary_dim // 2, dtype=torch.float32)
+            1 - yarn_linear_ramp_mask(low, high, self.rotary_dim // 2, dtype=torch.float32)
         ) * self.extrapolation_factor
-        inv_freq = (
-            inv_freq_interpolation * (1 - inv_freq_mask)
-            + inv_freq_extrapolation * inv_freq_mask
-        )
+        inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def _compute_cos_sin_cache(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -194,11 +189,9 @@ class YarnScalingRotaryEmbedding(RotaryEmbedding):
             A tuple of (cos, sin, cos_sin) tensors, where:
                 - cos/sin: Shape `[max_position_embeddings, rotary_dim // 2]`
         """
-        t = torch.arange(
-            self.max_position_embeddings
-        ).to(torch.float32)
+        t = torch.arange(self.max_position_embeddings).to(torch.float32)
         freqs = torch.einsum("i,j -> ij", t, self.inv_freq)
         cos = freqs.cos().to(self.dtype) * self.mscale
         sin = freqs.sin().to(self.dtype) * self.mscale
-        self.register_buffer("cos_cache", cos, persistent=False) # [max_position_embeddings, rotary_dim // 2]
-        self.register_buffer("sin_cache", sin, persistent=False) # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("cos_cache", cos, persistent=False)  # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("sin_cache", sin, persistent=False)  # [max_position_embeddings, rotary_dim // 2]

@@ -13,15 +13,11 @@
 #include "tpt_stage_policy.h"
 
 namespace mindie_llm {
-TptStagePolicy::TptStagePolicy(const SchedulerConfigSPtr schedulerConfig)
-    : schedulerConfig_(schedulerConfig)
-{
-}
+TptStagePolicy::TptStagePolicy(const SchedulerConfigSPtr schedulerConfig) : schedulerConfig_(schedulerConfig) {}
 
 PDPriorityType TptStagePolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting,
                                      ConcurrentDeque<SequenceGroupSPtr> &running,
-                                     [[maybe_unused]]ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                     [[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     if (waiting.Size() > 0) {
         uint64_t prefillCostTime = schedulerConfig_->prefillTimeMsPerReq * running.Size();
         if (running.Size() <= schedulerConfig_->maxBatchSize) {
@@ -40,4 +36,4 @@ PDPriorityType TptStagePolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting
     }
     return PDPriorityType::PREFILL_FIRST;
 }
-}
+}  // namespace mindie_llm

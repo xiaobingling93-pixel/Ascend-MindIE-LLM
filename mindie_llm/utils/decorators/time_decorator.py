@@ -45,16 +45,16 @@ class Timer:
         create_log_dir_and_check_permission(ENV.benchmark_filepath)
 
         if os.path.exists(ENV.benchmark_filepath) and os.path.getsize(ENV.benchmark_filepath) > MAX_FILE_SIZE:
-            with safe_open(ENV.benchmark_filepath, 'r', encoding='utf-8', max_file_size=2 * MAX_FILE_SIZE) as file:
+            with safe_open(ENV.benchmark_filepath, "r", encoding="utf-8", max_file_size=2 * MAX_FILE_SIZE) as file:
                 lines = file.readlines()
-                reserved_lines = lines[-int(ENV.benchmark_reserving_ratio * len(lines)):]
+                reserved_lines = lines[-int(ENV.benchmark_reserving_ratio * len(lines)) :]
             os.remove(ENV.benchmark_filepath)
 
-        with safe_open(ENV.benchmark_filepath, 'a', encoding='utf-8', max_file_size=2 * MAX_FILE_SIZE) as file:
+        with safe_open(ENV.benchmark_filepath, "a", encoding="utf-8", max_file_size=2 * MAX_FILE_SIZE) as file:
             if reserved_lines is not None:
                 file.writelines(reserved_lines)
             for log_entry in cache_to_write:
-                file.write(json.dumps(log_entry) + '\n')
+                file.write(json.dumps(log_entry) + "\n")
 
     def track_time(self, logging_name):
         def decorator(func):
@@ -79,7 +79,7 @@ class Timer:
             return wrapper
 
         return decorator
-    
+
     def track_time_async(self, logging_name):
         def decorator(func):
             @functools.wraps(func)
@@ -101,7 +101,7 @@ class Timer:
             return wrapper
 
         return decorator
-    
+
     def flush_to_file(self):
         with self.cache_lock:
             if not self.cache:
@@ -118,17 +118,17 @@ class Timer:
             for i, request_id in enumerate(request_ids):
                 token_idx = token_indices[i]
                 request_time_info = {
-                    'is_prefill': input_metadata.is_prefill,
-                    'batch_id': batch_id,
-                    'request_id': str(request_id),
-                    'token_idx': int(token_idx),
-                    'unit': 'ms'
+                    "is_prefill": input_metadata.is_prefill,
+                    "batch_id": batch_id,
+                    "request_id": str(request_id),
+                    "token_idx": int(token_idx),
+                    "unit": "ms",
                 }
                 request_time_info.update(time_info)
 
                 with self.cache_lock:
                     self.cache.append(request_time_info)
-                    
+
                     # if cache meets the threshold, write data to file
                     if len(self.cache) >= self.max_cache_size:
                         self.flush_condition.notify()
@@ -140,30 +140,25 @@ class Timer:
             reserved_lines = None
             create_log_dir_and_check_permission(ENV.benchmark_filepath)
             if os.path.exists(ENV.benchmark_filepath) and os.path.getsize(ENV.benchmark_filepath) > MAX_FILE_SIZE:
-                with safe_open(ENV.benchmark_filepath, 'r', encoding='utf-8', max_file_size=2 * MAX_FILE_SIZE) as file:
+                with safe_open(ENV.benchmark_filepath, "r", encoding="utf-8", max_file_size=2 * MAX_FILE_SIZE) as file:
                     lines = file.readlines()
-                    reserved_lines = lines[-int(ENV.benchmark_reserving_ratio * len(lines)):]
+                    reserved_lines = lines[-int(ENV.benchmark_reserving_ratio * len(lines)) :]
                 os.remove(ENV.benchmark_filepath)
             batch_id = str(uuid.uuid4())
             time_info = {k: v[-1] * 1000 for k, v in self.time_cache.items()}
-            with safe_open(
-                ENV.benchmark_filepath,
-                'a',
-                encoding='utf-8',
-                max_file_size=2 * MAX_FILE_SIZE
-            ) as file:
+            with safe_open(ENV.benchmark_filepath, "a", encoding="utf-8", max_file_size=2 * MAX_FILE_SIZE) as file:
                 if reserved_lines is not None:
                     file.writelines(reserved_lines)
                 for i, request_id in enumerate(request_ids):
                     token_idx = token_indices[i]
                     request_time_info = {
-                        'batch_id': batch_id,
-                        'request_id': str(request_id),
-                        'token_idx': int(token_idx),
-                        'unit': 'ms'
+                        "batch_id": batch_id,
+                        "request_id": str(request_id),
+                        "token_idx": int(token_idx),
+                        "unit": "ms",
                     }
                     request_time_info.update(time_info)
-                    file.write(json.dumps(request_time_info) + '\n')
+                    file.write(json.dumps(request_time_info) + "\n")
         self.time_cache = {}
 
     def _periodic_flush(self):

@@ -46,7 +46,7 @@ enum class LwdPDelayType : uint8_t {
 };
 
 class SeqGroupCollection {
-public:
+   public:
     SeqGroupCollection() = default;
 
     explicit SeqGroupCollection(PDPriorityType pdPriorityType);
@@ -66,6 +66,6 @@ public:
 };
 
 using ISeqGroupCollectionSPtr = std::shared_ptr<SeqGroupCollection>;
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -10,9 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "base_config_manager.h"
 #include "common_util.h"
 #include "param_checker.h"
-#include "base_config_manager.h"
 
 using Json = nlohmann::json;
 using namespace nlohmann::literals;
@@ -21,31 +21,22 @@ namespace mindie_llm {
 
 constexpr int MAX_FILE_LIST_SIZE = 3;
 static std::vector<ParamSpec> g_backendConfigConstraint = {
-    {"backendName", "string", true},
-    {"tokenizerProcessNumber", "uint32_t", true},
-    {"multiNodesInferEnabled", "bool", false},
-    {"multiNodesInferPort", "int32_t", false},
-    {"interNodeTLSEnabled", "bool", false},
-    {"interNodeTlsCaPath", "string", false},
-    {"interNodeTlsCert", "string", false},
-    {"interNodeTlsPk", "string", false},
-    {"modelInstanceNumber", "uint32_t", true},
-    {"npuDeviceIds", "array", true},
-    {"ScheduleConfig", "object", true},
-    {"interNodeTlsCaFiles", "array", false},
-    {"interNodeTlsCrlFiles", "array", false},
-    {"interNodeTlsCrlPath", "string", false},
-    {"kvPoolConfig", "object", false},
-    {"layerwiseDisaggregated", "object", false},
+    {"backendName", "string", true},           {"tokenizerProcessNumber", "uint32_t", true},
+    {"multiNodesInferEnabled", "bool", false}, {"multiNodesInferPort", "int32_t", false},
+    {"interNodeTLSEnabled", "bool", false},    {"interNodeTlsCaPath", "string", false},
+    {"interNodeTlsCert", "string", false},     {"interNodeTlsPk", "string", false},
+    {"modelInstanceNumber", "uint32_t", true}, {"npuDeviceIds", "array", true},
+    {"ScheduleConfig", "object", true},        {"interNodeTlsCaFiles", "array", false},
+    {"interNodeTlsCrlFiles", "array", false},  {"interNodeTlsCrlPath", "string", false},
+    {"kvPoolConfig", "object", false},         {"layerwiseDisaggregated", "object", false},
 };
 
-void BackendConfigManager::InitKvPoolConfigFromJson(Json &backendConfigData)
-{
+void BackendConfigManager::InitKvPoolConfigFromJson(Json &backendConfigData) {
     std::string backend{};
     std::string configPath{};
     bool asyncWrite = false;
     if (backendConfigData.contains("kvPoolConfig")) {
-        Json& kvPoolConfig = backendConfigData["kvPoolConfig"];
+        Json &kvPoolConfig = backendConfigData["kvPoolConfig"];
         if (kvPoolConfig.contains("backend")) {
             backend = kvPoolConfig["backend"];
         }
@@ -61,8 +52,7 @@ void BackendConfigManager::InitKvPoolConfigFromJson(Json &backendConfigData)
     backendConfig_.kvPoolConfig.asyncWrite = asyncWrite;
 }
 
-bool BackendConfigManager::InitTlsConfigFromJson(Json &backendConfigData)
-{
+bool BackendConfigManager::InitTlsConfigFromJson(Json &backendConfigData) {
     backendConfig_.interNodeTlsCert = backendConfigData["interNodeTlsCert"];
     backendConfig_.interNodeTlsPk = backendConfigData["interNodeTlsPk"];
     backendConfig_.interNodeTlsCaPath = backendConfigData["interNodeTlsCaPath"];
@@ -102,8 +92,7 @@ bool BackendConfigManager::InitTlsConfigFromJson(Json &backendConfigData)
     return true;
 }
 
-bool BackendConfigManager::CheckInterTlsParam()
-{
+bool BackendConfigManager::CheckInterTlsParam() {
     std::string homePath{};
     if (!GetHomePath(homePath).IsOk()) {
         std::cout << "Failed to get home path" << std::endl;
@@ -140,10 +129,9 @@ bool BackendConfigManager::CheckInterTlsParam()
     return checkRes;
 }
 
-void BackendConfigManager::InitLwdConfigFromJson(Json &backendConfigData)
-{
+void BackendConfigManager::InitLwdConfigFromJson(Json &backendConfigData) {
     if (backendConfigData.contains("layerwiseDisaggregated")) {
-        Json& lwdConfig = backendConfigData["layerwiseDisaggregated"];
+        Json &lwdConfig = backendConfigData["layerwiseDisaggregated"];
         if (lwdConfig.contains("layerwiseDisaggregatedMultiNodesInferEnabled")) {
             backendConfig_.lwdMultiNodesEnable = lwdConfig["layerwiseDisaggregatedMultiNodesInferEnabled"];
             backendConfig_.lwdMultiNodesCtrlPort = lwdConfig["layerwiseDisaggregatedMultiNodesCtrlPort"];
@@ -151,8 +139,7 @@ void BackendConfigManager::InitLwdConfigFromJson(Json &backendConfigData)
     }
 }
 
-bool BackendConfigManager::InitFromJson()
-{
+bool BackendConfigManager::InitFromJson() {
     Json backendConfigData;
     if (!CheckSystemConfig(jsonPath_, backendConfigData, "BackendConfig")) {
         return false;
@@ -211,8 +198,7 @@ bool BackendConfigManager::InitFromJson()
     return true;
 }
 
-bool BackendConfigManager::CheckParam()
-{
+bool BackendConfigManager::CheckParam() {
     CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckEngineName(backendConfig_.backendName));
     CHECK_CONFIG_VALIDATION(initFlag,
                             ParamChecker::CheckMaxMinValue<uint32_t>(backendConfig_.modelInstanceNumber, 10U, 1U,
@@ -232,14 +218,14 @@ bool BackendConfigManager::CheckParam()
     CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckKvPoolBackend(backendConfig_.kvPoolConfig.backend));
     CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckKvPoolConfigPath(backendConfig_.kvPoolConfig.configPath));
     if (backendConfig_.lwdMultiNodesEnable) {
-        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<int32_t>(backendConfig_.lwdMultiNodesCtrlPort,
-            65535U, 1024U, "backendConfig.layerwiseDisaggregatedMultiNodesCtrlPort"));
+        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<int32_t>(
+                                              backendConfig_.lwdMultiNodesCtrlPort, 65535U, 1024U,
+                                              "backendConfig.layerwiseDisaggregatedMultiNodesCtrlPort"));
     }
     return initFlag;
 }
 
-bool BackendConfigManager::CheckBackendInterTlsParam()
-{
+bool BackendConfigManager::CheckBackendInterTlsParam() {
     if (!backendConfig_.interNodeTLSEnabled) {
         return true;
     }
@@ -252,8 +238,7 @@ bool BackendConfigManager::CheckBackendInterTlsParam()
 
 const struct BackendConfig &BackendConfigManager::GetParam() { return backendConfig_; }
 
-void BackendConfigManager::UpdateMultiNodesInfer(const RanktableParam &ranktableParam)
-{
+void BackendConfigManager::UpdateMultiNodesInfer(const RanktableParam &ranktableParam) {
     for (auto &npuDeviceId : backendConfig_.npuDeviceIds) {
         backendConfig_.worldSize = ranktableParam.worldSize;
         npuDeviceId.clear();
@@ -278,4 +263,4 @@ void BackendConfigManager::UpdateMultiNodesInfer(const RanktableParam &ranktable
     std::cout << "Update worldSize and npuDeviceIds of backend config successfully for Multi Nodes Inference."
               << std::endl;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

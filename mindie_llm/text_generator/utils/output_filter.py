@@ -24,13 +24,18 @@ from ...utils.env import ENV
 def check_column_equals_numba(array, indices, value):
     result = np.empty(array.shape[0], dtype=np.bool_)
     for i in range(array.shape[0]):
-        result[i] = (array[i, indices[i]] == value)
+        result[i] = array[i, indices[i]] == value
     return result
 
 
 class OutputFilter:
-    def __init__(self, cache_config: CacheConfig, tg_infer_context: TGInferContextStore, tokenizer: Any,
-                 async_inference: bool = False):
+    def __init__(
+        self,
+        cache_config: CacheConfig,
+        tg_infer_context: TGInferContextStore,
+        tokenizer: Any,
+        async_inference: bool = False,
+    ):
         self.cache_config = cache_config
         self.tg_infer_context = tg_infer_context
         self.tokenizer = tokenizer
@@ -58,7 +63,9 @@ class OutputFilter:
         根据结构化输出的接受状态过滤序列。
         当 is_structured_accepted 为 False 时，拒绝该序列。
         """
-        rejected_mask = ~is_structured_accepted  # 拒绝accepted为False的请求（取反accepted. rejected_mask True 表示被拒绝）
+        rejected_mask = (
+            ~is_structured_accepted
+        )  # 拒绝accepted为False的请求（取反accepted. rejected_mask True 表示被拒绝）
         rejected_indices = np.nonzero(rejected_mask)[0]  # 获取被拒绝的索引
         if rejected_indices.size != 0:
             filter_ids_arr = np.union1d(filter_ids_arr, rejected_indices)
@@ -91,8 +98,9 @@ class OutputFilter:
                     eos_length = len(eos)
                     res = []
                     for i, output_ids in enumerate(self.tg_infer_context.get_all_output_ids(cache_ids)):
-                        input_ids_without_padding = np.concatenate([output_ids[:output_len_count[i]],
-                                                                    next_token_ids[i]])
+                        input_ids_without_padding = np.concatenate(
+                            [output_ids[: output_len_count[i]], next_token_ids[i]]
+                        )
                         if len(input_ids_without_padding) < eos_length:
                             res.append(False)
                         else:
@@ -110,12 +118,12 @@ class OutputFilter:
         def adjust_num_new_tokens(cached_lens, num_new_tokens, max_seq_len):
             """
             调整 num_new_tokens 的值，确保 cached_seq_lens + num_new_tokens <= max_seq_len。
-            
+
             参数:
                 cached_seq_lens (np.ndarray): 已缓存的序列长度数组。
                 num_new_tokens (np.ndarray): 新的 token 数量数组。
                 max_seq_len (int): 最大序列长度。
-            
+
             返回:
                 np.ndarray: 调整后的 num_new_tokens。
             """
@@ -124,21 +132,28 @@ class OutputFilter:
             adjusted_num_new_tokens = np.minimum(num_new_tokens, available_tokens)
             adjusted_num_new_tokens = np.maximum(adjusted_num_new_tokens, 0)
             return adjusted_num_new_tokens
+
         output_len_count = self.tg_infer_context.get_output_len_count(cache_ids)
         cached_seq_lens = self.tg_infer_context.get_seq_lens(cache_ids)
         if ENV.model_runner_exp:
             sampling_output.num_new_tokens = adjust_num_new_tokens(
-                cached_seq_lens, sampling_output.num_new_tokens, self.cache_config.max_seq_len)
+                cached_seq_lens, sampling_output.num_new_tokens, self.cache_config.max_seq_len
+            )
             sampling_output.num_new_tokens = adjust_num_new_tokens(
-                output_len_count, sampling_output.num_new_tokens, batch_max_output_lens)
+                output_len_count, sampling_output.num_new_tokens, batch_max_output_lens
+            )
             sampling_output.num_new_tokens = adjust_num_new_tokens(
-                output_len_count, sampling_output.num_new_tokens, self.cache_config.max_gen_len)
+                output_len_count, sampling_output.num_new_tokens, self.cache_config.max_gen_len
+            )
         exceed_seq_limit_idx = np.nonzero(
-            cached_seq_lens + sampling_output.num_new_tokens >= self.cache_config.max_seq_len)[0]
+            cached_seq_lens + sampling_output.num_new_tokens >= self.cache_config.max_seq_len
+        )[0]
         exceed_user_output_limit_idx = np.nonzero(
-            output_len_count + sampling_output.num_new_tokens >= batch_max_output_lens)[0]
+            output_len_count + sampling_output.num_new_tokens >= batch_max_output_lens
+        )[0]
         exceed_global_output_limit_idx = np.nonzero(
-            output_len_count + sampling_output.num_new_tokens >= self.cache_config.max_gen_len)[0]
+            output_len_count + sampling_output.num_new_tokens >= self.cache_config.max_gen_len
+        )[0]
 
         if exceed_seq_limit_idx.size != 0:
             filter_ids_arr = np.union1d(filter_ids_arr, exceed_seq_limit_idx)
@@ -154,8 +169,10 @@ class OutputFilter:
 
     def filter_by_stop(self, cache_ids, next_token_ids, num_new_tokens, filter_ids_arr, end_reason):
         truncation_indices = np.zeros(len(cache_ids), dtype=np.int_)
-        if (self.tg_infer_context.is_empty_string_stopping_criteria() and
-                self.tg_infer_context.is_empty_stopping_criteria()):
+        if (
+            self.tg_infer_context.is_empty_string_stopping_criteria()
+            and self.tg_infer_context.is_empty_stopping_criteria()
+        ):
             return filter_ids_arr, truncation_indices
         checked_strings = np.zeros(len(cache_ids), dtype=np.bool_)
         checked_ids = np.zeros(len(cache_ids), dtype=np.bool_)
@@ -174,14 +191,17 @@ class OutputFilter:
                     total_len = self.tg_infer_context.get_output_len_count(cache_id)
                     cur_len = len_tmp + 1
                     new_token_ids = np.concatenate(
-                        [self.tg_infer_context.get_all_output_ids(cache_id)[:total_len], next_token_ids[i][:cur_len]])
-                    new_token = self.decode_one(new_token_ids,
-                        bool(self.tg_infer_context.get_skip_special_tokens(cache_id)))
+                        [self.tg_infer_context.get_all_output_ids(cache_id)[:total_len], next_token_ids[i][:cur_len]]
+                    )
+                    new_token = self.decode_one(
+                        new_token_ids, bool(self.tg_infer_context.get_skip_special_tokens(cache_id))
+                    )
                     cached_output_text = self.tg_infer_context.append_and_return_output_text(cache_id, new_token)
 
                     if switch_stop_string:
-                        truncation_idx = string_stopping_criterion(cached_output_text, new_token,
-                                                    include_stop=self.tg_infer_context.get_include_stop(cache_id))
+                        truncation_idx = string_stopping_criterion(
+                            cached_output_text, new_token, include_stop=self.tg_infer_context.get_include_stop(cache_id)
+                        )
                         if truncation_idx is not None:
                             checked_strings[i] = True
                             truncation_indices[i] = truncation_idx
@@ -194,7 +214,7 @@ class OutputFilter:
                                 truncation_indices[i] = -len(new_token)
                             break
                 if cur_len == 0:
-                    raise RuntimeError('Empty `token_ids` generated!')
+                    raise RuntimeError("Empty `token_ids` generated!")
                 num_new_tokens[i] = cur_len
         stop_strings_idx = np.nonzero(checked_strings)[0]
         stop_ids_idx = np.nonzero(checked_ids)[0]
@@ -227,14 +247,16 @@ class OutputFilter:
             filter_ids_arr = self.filter_by_async(cache_ids, filter_ids_arr, end_reason)
         is_layerwise_slave = self.layerwise_disaggregated and self.layerwise_disaggregated_role_type == "slave"
         if not self.ignore_eos and not is_layerwise_slave:
-            filter_ids_arr = self.filter_by_eos(cache_ids, sampling_output.token_ids,
-                                                sampling_output.num_new_tokens, filter_ids_arr, end_reason)
+            filter_ids_arr = self.filter_by_eos(
+                cache_ids, sampling_output.token_ids, sampling_output.num_new_tokens, filter_ids_arr, end_reason
+            )
         filter_ids_arr, truncation_indices = self.filter_by_stop(
-            cache_ids, sampling_output.token_ids, sampling_output.num_new_tokens, filter_ids_arr, end_reason)
+            cache_ids, sampling_output.token_ids, sampling_output.num_new_tokens, filter_ids_arr, end_reason
+        )
         filter_ids_arr = self.filter_by_length(
-            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason)
-        filter_ids_arr = OutputFilter.filter_by_structure(
-            cache_ids, is_structured_accepted, filter_ids_arr, end_reason)
+            cache_ids, batch_max_output_lens, sampling_output, filter_ids_arr, end_reason
+        )
+        filter_ids_arr = OutputFilter.filter_by_structure(cache_ids, is_structured_accepted, filter_ids_arr, end_reason)
 
         # 对于没有完成prefill的req，不可以清除后处理参数
         if metadata.is_mix is not None:

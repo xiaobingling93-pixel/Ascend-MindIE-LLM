@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef COPY_ON_WRITE_TRACKER_H
 #define COPY_ON_WRITE_TRACKER_H
 
@@ -22,21 +22,21 @@ namespace mindie_llm {
 // Since only fully filled blocks can be shared and fully filled blocks will not be appended, this CowTracker is not
 // used now.
 class CopyOnWriteTracker {
-public:
+   public:
     CopyOnWriteTracker() = default;
 
     explicit CopyOnWriteTracker(RefCounterProtocolSPtr &refCounterSPtr) : refCounterSPtr_(refCounterSPtr) {}
 
-    bool IsAppendable(BlockId blockId) const; // block id with refcount == 1 is appendable
+    bool IsAppendable(BlockId blockId) const;  // block id with refcount == 1 is appendable
 
     void RecordCow(BlockId srcBlockId, BlockId targetBlockId);
 
     std::vector<std::pair<BlockId, BlockId>> ClearCows();
 
-private:
+   private:
     RefCounterProtocolSPtr refCounterSPtr_;
     std::vector<std::pair<BlockId, BlockId>> copyOnWrites_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -10,6 +10,7 @@
 """
 To replace CacheManager
 """
+
 import math
 from dataclasses import dataclass
 from typing import Tuple
@@ -116,7 +117,7 @@ class KVCacheSettings:
         self.npu_info.need_nz |= model_info.enable_nz
         self.dtype_str = self.dtype_to_str(self.backend_type, self.dtype)
         self.num_speculative_tokens = 0 if num_speculative_tokens is None else num_speculative_tokens
-        self.num_layers += (self.num_speculative_tokens >= 1)
+        self.num_layers += self.num_speculative_tokens >= 1
 
         self.need_nz = self.npu_info.need_nz or model_info.enable_nz
         if NZ_KV_CACHE_FORMAT == 0:
@@ -124,8 +125,9 @@ class KVCacheSettings:
         if NZ_KV_CACHE_INT8_FORMAT == 0:
             raise ZeroDivisionError("NZ_KV_CACHE_INT8_FORMAT should not be 0")
 
-        total_head_size, k_total_head_size, v_total_head_size, k_total_head_size_quant, \
-            index_total_head_size = self._cal_kv_total_head_size()
+        total_head_size, k_total_head_size, v_total_head_size, k_total_head_size_quant, index_total_head_size = (
+            self._cal_kv_total_head_size()
+        )
         self.mini_block_bytes = self.block_size * self.data_byte_size * total_head_size
         self.k_mini_block_bytes = self.block_size * self.data_byte_size * k_total_head_size
         self.k_mini_block_bytes_quant = self.block_size * INT8_BYTES_SIZE * k_total_head_size_quant
@@ -146,14 +148,18 @@ class KVCacheSettings:
 
         self.num_npu_blocks = self.npu_mem // self.cache_block_bytes
         self.num_cpu_blocks = self.cpu_mem // self.cache_block_bytes
-        self.npu_row_bytes = self.num_npu_blocks * \
-                            (self.k_mini_block_bytes + self.v_mini_block_bytes + self.index_mini_block_bytes)
-        self.cpu_row_bytes = self.num_cpu_blocks * \
-                            (self.k_mini_block_bytes + self.v_mini_block_bytes + self.index_mini_block_bytes)
-        self.npu_row_bytes_quant = self.num_npu_blocks * \
-                            (self.k_mini_block_bytes_quant + self.v_mini_block_bytes + self.index_mini_block_bytes)
-        self.cpu_row_bytes_quant = self.num_cpu_blocks * \
-                            (self.k_mini_block_bytes_quant + self.v_mini_block_bytes + self.index_mini_block_bytes)
+        self.npu_row_bytes = self.num_npu_blocks * (
+            self.k_mini_block_bytes + self.v_mini_block_bytes + self.index_mini_block_bytes
+        )
+        self.cpu_row_bytes = self.num_cpu_blocks * (
+            self.k_mini_block_bytes + self.v_mini_block_bytes + self.index_mini_block_bytes
+        )
+        self.npu_row_bytes_quant = self.num_npu_blocks * (
+            self.k_mini_block_bytes_quant + self.v_mini_block_bytes + self.index_mini_block_bytes
+        )
+        self.cpu_row_bytes_quant = self.num_cpu_blocks * (
+            self.k_mini_block_bytes_quant + self.v_mini_block_bytes + self.index_mini_block_bytes
+        )
         logger.debug(
             f"block_size:{self.block_size},num_heads:{self.num_heads},head_size:{self.head_size},"
             f"k_head_size:{self.k_head_size},v_head_size:{self.v_head_size},"
@@ -224,7 +230,7 @@ class KVCacheSettings:
 
         if self.index_head_dim is not None:
             self.index_block_shape = (
-                ( 
+                (
                     math.ceil(self.num_index_heads * self.index_head_dim / NZ_KV_CACHE_FORMAT),
                     self.block_size,
                     NZ_KV_CACHE_FORMAT,

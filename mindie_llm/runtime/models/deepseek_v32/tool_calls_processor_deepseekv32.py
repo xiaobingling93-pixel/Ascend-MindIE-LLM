@@ -15,8 +15,12 @@
 import json
 import re
 from typing import Pattern, Any
-from ..base.tool_calls_processor import ToolCallsProcessorWithXml, \
-DeltaFunctionCall, DeltaToolCall, ToolCallsProcessorManager
+from ..base.tool_calls_processor import (
+    ToolCallsProcessorWithXml,
+    DeltaFunctionCall,
+    DeltaToolCall,
+    ToolCallsProcessorManager,
+)
 
 
 INIT_RETURN_NONE = {}
@@ -90,9 +94,7 @@ class ToolCallsProcessorDeepseekv3Base(ToolCallsProcessorWithXml):
 
     def _preprocess_delta_text(self, delta_text):
         if self.tool_calls_start_token is not None:
-            delta_text = delta_text.replace(self.tool_calls_start_token,
-                                            "").replace(self.tool_call_end_token,
-                                                        "")
+            delta_text = delta_text.replace(self.tool_calls_start_token, "").replace(self.tool_call_end_token, "")
         return delta_text
 
     def _decode_stream_tool_calls(self, tool_call_portion_dict):
@@ -109,50 +111,54 @@ class ToolCallsProcessorDeepseekv3Base(ToolCallsProcessorWithXml):
             if current_tool_call is None or not current_tool_call.get(NAME):
                 return INIT_RETURN_NONE
             self.current_tool_name_sent = True
-            return {TOOL_CALLS: [
-                DeltaToolCall(index=self.current_tool_id, type="function", id=self._random_tool_calls_id(),
-                                function=DeltaFunctionCall(name=current_tool_call.get(NAME))).model_dump(
-                    exclude_none=True)
-            ]}
+            return {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id,
+                        type="function",
+                        id=self._random_tool_calls_id(),
+                        function=DeltaFunctionCall(name=current_tool_call.get(NAME)),
+                    ).model_dump(exclude_none=True)
+                ]
+            }
 
         delta = {}
         # case2：send param
         cur_arguments = current_tool_call.get(ARGUMENTS)
         if cur_arguments and not self.current_tool_arguments_sent:
             # case2-1:send arguments contains structure.example {"arguments":"{\"order_id\": \""}
-            delta = {TOOL_CALLS: [
-                DeltaToolCall(index=self.current_tool_id,
-                                function=DeltaFunctionCall(arguments=cur_arguments).model_dump(exclude_none=True))
-                .model_dump(exclude_none=True)
-            ]}
+            delta = {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id,
+                        function=DeltaFunctionCall(arguments=cur_arguments).model_dump(exclude_none=True),
+                    ).model_dump(exclude_none=True)
+                ]
+            }
             self.current_tool_arguments_sent = True
         elif cur_arguments and self.current_tool_arguments_sent:
             # case2-2:arguments delta content
             delta_arguments_text = _find_overlapping(cur_arguments, delta_text)
-            delta = {TOOL_CALLS: [
-                DeltaToolCall(index=self.current_tool_id,
-                                function=DeltaFunctionCall(arguments=delta_arguments_text)).\
-                                model_dump(exclude_none=True)
-            ]}
+            delta = {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id, function=DeltaFunctionCall(arguments=delta_arguments_text)
+                    ).model_dump(exclude_none=True)
+                ]
+            }
         return delta
 
     def _get_current_tool_call_with_regex(self, tool_call_portion):
         current_tool_call = {}
-        current_tool_call_matches = (
-            self.stream_tool_call_portion_regex.match(
-                tool_call_portion))
+        current_tool_call_matches = self.stream_tool_call_portion_regex.match(tool_call_portion)
         if current_tool_call_matches:
-            _, tool_name, tool_args = (
-                current_tool_call_matches.groups())
+            _, tool_name, tool_args = current_tool_call_matches.groups()
             current_tool_call[NAME] = tool_name
             current_tool_call[ARGUMENTS] = tool_args
         else:
-            current_tool_call_name_matches = (
-                self.stream_tool_call_name_regex.match(
-                    tool_call_portion))
+            current_tool_call_name_matches = self.stream_tool_call_name_regex.match(tool_call_portion)
             if current_tool_call_name_matches:
-                _, tool_name = (
-                    current_tool_call_name_matches.groups())
+                _, tool_name = current_tool_call_name_matches.groups()
                 current_tool_call[NAME] = tool_name
                 current_tool_call[ARGUMENTS] = ""
         return current_tool_call
@@ -161,7 +167,7 @@ class ToolCallsProcessorDeepseekv3Base(ToolCallsProcessorWithXml):
 def _find_overlapping(str_a, str_b):
     max_possible = min(len(str_a), len(str_b))
     a_suffix_b_prefix = ""
-    
+
     for length in range(max_possible, 0, -1):
         if str_a.endswith(str_b[:length]):
             a_suffix_b_prefix = str_b[:length]
@@ -181,52 +187,46 @@ class ToolsCallProcessorDeepseekv3(ToolCallsProcessorDeepseekv3Base):
 
     @property
     def stream_tool_call_portion_regex(self) -> Pattern:
-        return re.compile(
-            r"(?P<type>.*)<｜tool▁sep｜>(?P<function_name>.*)\n```json\n(?P<function_arguments>.*[^\n`])"
-        )
+        return re.compile(r"(?P<type>.*)<｜tool▁sep｜>(?P<function_name>.*)\n```json\n(?P<function_arguments>.*[^\n`])")
 
     @property
     def stream_tool_call_name_regex(self) -> Pattern:
-        return re.compile(
-            r"(?P<type>.*)<｜tool▁sep｜>(?P<function_name>.*)\n"
-        )
+        return re.compile(r"(?P<type>.*)<｜tool▁sep｜>(?P<function_name>.*)\n")
 
 
 @ToolCallsProcessorManager.register_module(["deepseek_v32", "deepseekv32"])
 class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
     """
     A processor for extracting and parsing tool calls generated by DeepSeek V3/V3.2 models.
-    
-    This class supports both streaming and non-streaming modes. It parses XML-like 
-    structures output by the model, accommodating both standard tags and tags with 
-    the optional `｜DSML｜` prefix. It handles type casting based on provided tool schemas 
+
+    This class supports both streaming and non-streaming modes. It parses XML-like
+    structures output by the model, accommodating both standard tags and tags with
+    the optional `｜DSML｜` prefix. It handles type casting based on provided tool schemas
     or explicit tag attributes.
     """
 
     def __init__(self, tokenizer):
         super().__init__(tokenizer)
-        
-        # Regex for matching complete tool call blocks. 
+
+        # Regex for matching complete tool call blocks.
         # (?:｜DSML｜)? makes the DSML prefix optional.
         self.tool_call_complete_regex = re.compile(
-            r'<(?:｜DSML｜)?function_calls>(.*?)</(?:｜DSML｜)?function_calls>', 
-            re.DOTALL | re.IGNORECASE
+            r"<(?:｜DSML｜)?function_calls>(.*?)</(?:｜DSML｜)?function_calls>", re.DOTALL | re.IGNORECASE
         )
         self.invoke_complete_regex = re.compile(
-            r'<(?:｜DSML｜)?invoke\s+name="([^"]+)"\s*>(.*?)</(?:｜DSML｜)?invoke>', 
-            re.DOTALL | re.IGNORECASE
+            r'<(?:｜DSML｜)?invoke\s+name="([^"]+)"\s*>(.*?)</(?:｜DSML｜)?invoke>', re.DOTALL | re.IGNORECASE
         )
-        
+
         # Broad regex for parameter tags to accommodate attributes like string="true"
         self.parameter_complete_regex = re.compile(
-            r'<(?:｜DSML｜)?parameter[^>]*?name="([^"]+)"[^>]*>(.*?)</(?:｜DSML｜)?parameter>', 
-            re.DOTALL | re.IGNORECASE
+            r'<(?:｜DSML｜)?parameter[^>]*?name="([^"]+)"[^>]*>(.*?)</(?:｜DSML｜)?parameter>',
+            re.DOTALL | re.IGNORECASE,
         )
-        
+
         # Dedicated regex patterns for streaming boundaries
-        self.stream_start_tag_regex = re.compile(r'<(?:｜DSML｜)?function_calls>', re.IGNORECASE)
-        self.stream_end_tag_regex = re.compile(r'</(?:｜DSML｜)?function_calls>', re.IGNORECASE)
-        self.stream_invoke_split_regex = re.compile(r'<(?:｜DSML｜)?invoke', re.IGNORECASE)
+        self.stream_start_tag_regex = re.compile(r"<(?:｜DSML｜)?function_calls>", re.IGNORECASE)
+        self.stream_end_tag_regex = re.compile(r"</(?:｜DSML｜)?function_calls>", re.IGNORECASE)
+        self.stream_invoke_split_regex = re.compile(r"<(?:｜DSML｜)?invoke", re.IGNORECASE)
 
     def parse_tool_calls_v32(self, text: str) -> list[dict[str, Any]]:
         """
@@ -236,33 +236,33 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             text (str): The raw text generated by the model.
 
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries, each containing the 'name' 
+            List[Dict[str, Any]]: A list of dictionaries, each containing the 'name'
             and strongly-typed 'arguments' of a tool call.
         """
         tool_call_match = self.tool_call_complete_regex.search(text)
         if not tool_call_match:
             return []
-        
+
         tool_call_content = tool_call_match.group(1)
         tool_calls = []
-        
+
         invoke_matches = self.invoke_complete_regex.findall(tool_call_content)
         for tool_name, parameter_content in invoke_matches:
             arguments = {}
-            
+
             # Use finditer to retrieve the full tag string for attribute parsing
             matches = list(self.parameter_complete_regex.finditer(parameter_content))
             for match in matches:
                 p_name = match.group(1).strip()
                 p_value = match.group(2).strip()
-                
+
                 # 1. Attempt to resolve strict type from the provided schema
                 schema_type = self._get_param_type_from_schema(tool_name, p_name)
                 is_string_type = schema_type in [STRING_TYPE, "str"]
 
                 # 2. Schema fallback strategy: check for explicit string attributes in the XML tag
                 if not getattr(self, "tools", None):
-                    tag_str = match.group(0).split('>')[0]
+                    tag_str = match.group(0).split(">")[0]
                     if 'string="false"' in tag_str:
                         is_string_type = False
                     elif 'string="true"' in tag_str:
@@ -287,12 +287,9 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
                         except Exception:
                             # Fallback to string if parsing fails (e.g., malformed output)
                             arguments[p_name] = p_value
-            
-            tool_calls.append({
-                NAME: tool_name,
-                ARGUMENTS: arguments
-            })
-            
+
+            tool_calls.append({NAME: tool_name, ARGUMENTS: arguments})
+
         return tool_calls
 
     def decode(self, content: str) -> dict[str, Any]:
@@ -303,43 +300,43 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             content (str): The complete string output from the model.
 
         Returns:
-            Dict[str, Any]: A dictionary containing the main text 'content' and 
+            Dict[str, Any]: A dictionary containing the main text 'content' and
             a 'tool_calls' list formatted for standard API consumption.
         """
         lines = content.strip()
-        
+
         # tool_calls ARGUMENTS are strictly typed (int/bool/dict) at this point
         tool_calls = self.parse_tool_calls_v32(lines)
-    
+
         if not tool_calls:
             return {CONTENT: lines}
-            
+
         call_res = []
         for item in tool_calls:
             tool_call = {
                 NAME: item[NAME],
                 # Serialize dicts to JSON strings; primitive types retain native formatting
-                ARGUMENTS: json.dumps(item[ARGUMENTS], ensure_ascii=False) \
-                    if isinstance(item[ARGUMENTS], dict) else item[ARGUMENTS]
+                ARGUMENTS: json.dumps(item[ARGUMENTS], ensure_ascii=False)
+                if isinstance(item[ARGUMENTS], dict)
+                else item[ARGUMENTS],
             }
-            res = {
-                "type": "function",
-                "id": self._random_tool_calls_id(),
-                "function": tool_call
-            }
+            res = {"type": "function", "id": self._random_tool_calls_id(), "function": tool_call}
             call_res.append(res)
-            
+
         # Truncate any hallucinated text following the function calls block
         start_match = self.stream_start_tag_regex.search(content)
-        main_content = content[:start_match.start()].strip() if start_match else content
-        
+        main_content = content[: start_match.start()].strip() if start_match else content
+
         return {CONTENT: main_content, TOOL_CALLS: call_res}
 
-    def decode_stream(self, all_token_ids: list[int], 
-                      prev_decode_index: int, 
-                      curr_decode_index: int,
-                      skip_special_tokens: bool, 
-                      delta_text: str) -> dict[str, Any]:
+    def decode_stream(
+        self,
+        all_token_ids: list[int],
+        prev_decode_index: int,
+        curr_decode_index: int,
+        skip_special_tokens: bool,
+        delta_text: str,
+    ) -> dict[str, Any]:
         """
         Decodes incoming token streams, yielding text or tool call deltas.
 
@@ -351,13 +348,13 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             delta_text (str): The newly generated text delta.
 
         Returns:
-            Dict[str, Any]: A delta dictionary containing either partial text content 
+            Dict[str, Any]: A delta dictionary containing either partial text content
             or partial tool call arguments.
         """
         try:
             full_text = self.tokenizer.decode(all_token_ids, skip_special_tokens=skip_special_tokens)
             start_match = self.stream_start_tag_regex.search(full_text)
-            
+
             # Phase 1: Buffering strategy to prevent emitting incomplete tag snippets to the client
             if not start_match:
                 prefixes = ["<｜DSML｜function_calls>", "<function_calls>"]
@@ -367,7 +364,7 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
                             return INIT_RETURN_NONE
                 return {CONTENT: delta_text}
 
-            tool_call_portion = full_text[start_match.end():]
+            tool_call_portion = full_text[start_match.end() :]
 
             # Phase 2: Hard truncation to prevent trailing hallucinations
             if self.stream_end_tag_regex.search(tool_call_portion):
@@ -391,26 +388,26 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
         """
         if not getattr(self, "tools", None):
             return STRING_TYPE
-            
+
         for tool in self.tools:
             func = tool.get("function", {}) if isinstance(tool, dict) else getattr(tool, "function", None)
             if not func:
                 continue
-                
+
             t_name = func.get("name") if isinstance(func, dict) else getattr(func, "name", "")
             if t_name == tool_name:
                 params = func.get("parameters", {}) if isinstance(func, dict) else getattr(func, "parameters", {})
                 props = params.get("properties", {}) if isinstance(params, dict) else getattr(params, "properties", {})
-                
+
                 if isinstance(props, dict):
                     param_info = props.get(param_name, {})
                 else:
                     param_info = getattr(props, "get", lambda x, y: {})(param_name, {})
-                    
+
                 if isinstance(param_info, dict):
                     return param_info.get("type", STRING_TYPE)
                 return STRING_TYPE
-                
+
         return STRING_TYPE
 
     def _parse_dsml_stream_xml(self, xml_text: str, delta_text: str) -> dict[str, Any]:
@@ -426,11 +423,11 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
         """
         invokes = self.stream_invoke_split_regex.split(xml_text)
         if len(invokes) < 2:
-            return INIT_RETURN_NONE 
+            return INIT_RETURN_NONE
 
         # Reconstruct the fragmented tag header
         current_invoke_xml = "<invoke" + invokes[-1]
-        tool_index = len(invokes) - 2  
+        tool_index = len(invokes) - 2
 
         if getattr(self, "current_tool_id", -1) != tool_index:
             self.current_tool_id = tool_index
@@ -443,37 +440,40 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             if not name_match:
                 return INIT_RETURN_NONE
             self.current_tool_name_sent = True
-            return {TOOL_CALLS: [
-                DeltaToolCall(
-                    index=self.current_tool_id,
-                    type="function",
-                    id=self._random_tool_calls_id(),
-                    function=DeltaFunctionCall(name=name_match.group(1))
-                ).model_dump(exclude_none=True)
-            ]}
+            return {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id,
+                        type="function",
+                        id=self._random_tool_calls_id(),
+                        function=DeltaFunctionCall(name=name_match.group(1)),
+                    ).model_dump(exclude_none=True)
+                ]
+            }
 
         if delta_text and current_invoke_xml.endswith(delta_text):
-            prev_xml = current_invoke_xml[:-len(delta_text)]
+            prev_xml = current_invoke_xml[: -len(delta_text)]
         else:
-            prev_xml = current_invoke_xml[:max(0, len(current_invoke_xml) - len(delta_text))]
+            prev_xml = current_invoke_xml[: max(0, len(current_invoke_xml) - len(delta_text))]
 
         # Compare previously parsed JSON state with current to extract the delta difference
         prev_json = self._convert_xml_to_json_string(prev_xml)
         curr_json = self._convert_xml_to_json_string(current_invoke_xml)
 
-        delta_args = curr_json[len(prev_json):]
+        delta_args = curr_json[len(prev_json) :]
 
         if delta_args:
             if not self.current_tool_arguments_sent:
                 delta_args = "{" + delta_args
-                
+
             self.current_tool_arguments_sent = True
-            return {TOOL_CALLS: [
-                DeltaToolCall(
-                    index=self.current_tool_id,
-                    function=DeltaFunctionCall(arguments=delta_args)
-                ).model_dump(exclude_none=True)
-            ]}
+            return {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id, function=DeltaFunctionCall(arguments=delta_args)
+                    ).model_dump(exclude_none=True)
+                ]
+            }
 
         return INIT_RETURN_NONE
 
@@ -488,7 +488,7 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             str: A JSON string representation of the parsed XML.
         """
         # Ensure regex captures both standard and DSML prefixed tags
-        if not re.search(r'<(?:｜DSML｜)?invoke', xml_text, re.IGNORECASE):
+        if not re.search(r"<(?:｜DSML｜)?invoke", xml_text, re.IGNORECASE):
             return ""
 
         tool_name_match = re.search(r'<(?:｜DSML｜)?invoke\s+name="([^"]+)"', xml_text, re.IGNORECASE)
@@ -496,7 +496,7 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
 
         stream_param_pattern = re.compile(
             r'<(?:｜DSML｜)?parameter[^>]*?name="([^"]+)"[^>]*>(.*?)(</(?:｜DSML｜)?parameter>|$)',
-            re.DOTALL | re.IGNORECASE
+            re.DOTALL | re.IGNORECASE,
         )
         matches = list(stream_param_pattern.finditer(xml_text))
 
@@ -519,14 +519,14 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
             is_string_type = schema_type in [STRING_TYPE, "str"]
 
             if not getattr(self, "tools", None):
-                tag_str = match.group(0).split('>')[0]
+                tag_str = match.group(0).split(">")[0]
                 if 'string="false"' in tag_str:
                     is_string_type = False
                 elif 'string="true"' in tag_str:
                     is_string_type = True
 
             if is_string_type:
-                escaped_val = p_value.replace('"', '\\"').replace('\n', '\\n')
+                escaped_val = p_value.replace('"', '\\"').replace("\n", "\\n")
                 part = f'"{p_name}": "{escaped_val}'
                 if is_closed:
                     part += '"'
@@ -536,13 +536,13 @@ class ToolCallsProcessorDeepseekv32(ToolCallsProcessorDeepseekv3Base):
                     part = f'"{p_name}": '
                 else:
                     part = f'"{p_name}": {clean_val}'
-                
+
             json_parts.append(part)
 
         json_str = "{" + ", ".join(json_parts)
-        
+
         # Append closing brace if the invoke block is explicitly closed
-        if re.search(r'</(?:｜DSML｜)?invoke>', xml_text, re.IGNORECASE):
+        if re.search(r"</(?:｜DSML｜)?invoke>", xml_text, re.IGNORECASE):
             json_str += "}"
-            
+
         return json_str

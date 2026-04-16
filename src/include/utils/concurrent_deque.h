@@ -12,32 +12,31 @@
 
 #ifndef LOCKED_DEQUE_H
 #define LOCKED_DEQUE_H
-#include <deque>
 #include <pthread.h>
 
+#include <deque>
+
 namespace mindie_llm {
-template <typename T> class ConcurrentDeque {
-public:
+template <typename T>
+class ConcurrentDeque {
+   public:
     ConcurrentDeque() { pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE); }
 
     ~ConcurrentDeque() { pthread_spin_destroy(&spinlock); }
 
-    void PushFront(const T &value)
-    {
+    void PushFront(const T &value) {
         pthread_spin_lock(&spinlock);
         deque.push_front(value);
         pthread_spin_unlock(&spinlock);
     }
 
-    void PushBack(const T &value)
-    {
+    void PushBack(const T &value) {
         pthread_spin_lock(&spinlock);
         deque.push_back(value);
         pthread_spin_unlock(&spinlock);
     }
 
-    bool PopFront(T &result)
-    {
+    bool PopFront(T &result) {
         pthread_spin_lock(&spinlock);
         if (deque.empty()) {
             pthread_spin_unlock(&spinlock);
@@ -49,8 +48,7 @@ public:
         return true;
     }
 
-    T Front()
-    {
+    T Front() {
         pthread_spin_lock(&spinlock);
         if (deque.empty()) {
             pthread_spin_unlock(&spinlock);
@@ -62,8 +60,7 @@ public:
     }
 
     // 边云动态切块新增
-    T Back()
-    {
+    T Back() {
         pthread_spin_lock(&spinlock);
         if (deque.empty()) {
             pthread_spin_unlock(&spinlock);
@@ -74,8 +71,7 @@ public:
         return result;
     }
 
-    bool PopBack(T &result)
-    {
+    bool PopBack(T &result) {
         pthread_spin_lock(&spinlock);
         if (deque.empty()) {
             pthread_spin_unlock(&spinlock);
@@ -87,16 +83,14 @@ public:
         return true;
     }
 
-    bool Empty()
-    {
+    bool Empty() {
         pthread_spin_lock(&spinlock);
         bool is_empty = deque.empty();
         pthread_spin_unlock(&spinlock);
         return is_empty;
     }
 
-    bool Clear()
-    {
+    bool Clear() {
         pthread_spin_lock(&spinlock);
         deque.clear();
         bool ret = deque.size() == 0;
@@ -104,8 +98,7 @@ public:
         return ret;
     }
 
-    size_t Size()
-    {
+    size_t Size() {
         pthread_spin_lock(&spinlock);
         size_t ret = deque.size();
         pthread_spin_unlock(&spinlock);
@@ -114,8 +107,7 @@ public:
 
     // 遍历并发队列，统计队列中请求的指标
     template <typename Func>
-    void ForEach(Func func, size_t limit = 0)
-    {
+    void ForEach(Func func, size_t limit = 0) {
         if (Empty()) {
             return;
         }
@@ -134,9 +126,9 @@ public:
         pthread_spin_unlock(&spinlock);
     }
 
-private:
+   private:
     std::deque<T> deque;
     pthread_spinlock_t spinlock;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

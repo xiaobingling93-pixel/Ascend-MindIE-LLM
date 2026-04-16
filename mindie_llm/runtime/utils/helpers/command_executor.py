@@ -27,10 +27,7 @@ def execute_command(cmd_list: list[str]) -> str:
         str: The decoded stdout output from the command.
     """
 
-    with subprocess.Popen(cmd_list,
-                          shell=False,
-                          stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE) as p:
+    with subprocess.Popen(cmd_list, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as p:
         out, _ = p.communicate(timeout=1000)
     res = out.decode()
     return res

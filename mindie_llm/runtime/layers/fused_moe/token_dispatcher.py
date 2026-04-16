@@ -21,7 +21,7 @@
 # See the Mulan PSL v2 for more details.
 
 from abc import ABC, abstractmethod
-from typing import Optional, List, Any
+from typing import Any
 from dataclasses import dataclass
 
 import torch
@@ -105,57 +105,44 @@ class All2AllVDispatchContext(DispatchContextBase):
 
 
 class MoETokenDispatcher(ABC):
-
     @abstractmethod
-    def token_dispatch(
-        self,
-        args: MoeDispatchArgsBase
-    ):
+    def token_dispatch(self, args: MoeDispatchArgsBase):
         raise NotImplementedError("Dispatch function not implemented.")
 
     @abstractmethod
-    def token_combine(
-        self,
-        hidden_states: torch.Tensor,
-        ctx: DispatchContextBase
-    ):
+    def token_combine(self, hidden_states: torch.Tensor, ctx: DispatchContextBase):
         raise NotImplementedError("Combine function not implemented.")
 
 
 class TokenDispatcherWithAllGather(Singleton, MoETokenDispatcher):
-
     def __init__(self):
         super().__init__()
         self.parallel_info = get_parallel_info_manager()
         self.ep_size = self.parallel_info.get(ParallelType.MOE_EP).group_size
 
-    def token_dispatch(
-        self,
-        args: MoeAllGatherArgs
-    ):
+    def token_dispatch(self, args: MoeAllGatherArgs):
         num_tokens = args.hidden_states.shape[0]
         num_local_experts = args.num_experts // self.ep_size
 
         if args.expert_list is not None:
             first_expert_idx = args.expert_list[0]
             last_expert_idx = args.expert_list[-1] + 1
-            mask = (args.expert_map[args.topk_ids] != -1)
+            mask = args.expert_map[args.topk_ids] != -1
             args.topk_weights = args.topk_weights * mask
         else:
             first_expert_idx = 0
             last_expert_idx = num_local_experts
 
-        sorted_hidden_states, expanded_row_idx, expert_tokens, pertoken_scale = (
-            torch_npu.npu_moe_init_routing_v2(
-                args.hidden_states,
-                args.topk_ids,
-                active_num=num_tokens * args.top_k,
-                expert_num=args.num_experts,
-                expert_tokens_num_type=1,
-                expert_tokens_num_flag=True,
-                active_expert_range=[first_expert_idx, last_expert_idx],
-                quant_mode=1 if args.with_quant else -1,
-            ))
+        sorted_hidden_states, expanded_row_idx, expert_tokens, pertoken_scale = torch_npu.npu_moe_init_routing_v2(
+            args.hidden_states,
+            args.topk_ids,
+            active_num=num_tokens * args.top_k,
+            expert_num=args.num_experts,
+            expert_tokens_num_type=1,
+            expert_tokens_num_flag=True,
+            active_expert_range=[first_expert_idx, last_expert_idx],
+            quant_mode=1 if args.with_quant else -1,
+        )
         expert_tokens = expert_tokens.to(torch.int64)
         # group_list_type代表group_list的表达形式:
         # 0: group_list中数值为分组轴大小的cumsum结果（累积和）。
@@ -173,18 +160,14 @@ class TokenDispatcherWithAllGather(Singleton, MoETokenDispatcher):
         )
         return dispatch_output, context
 
-    def token_combine(self,
-                      hidden_states: torch.Tensor,
-                      ctx: AllGatherDispatchContext):
+    def token_combine(self, hidden_states: torch.Tensor, ctx: AllGatherDispatchContext):
         final_hidden_states = torch_npu.npu_moe_token_unpermute(
-            permuted_tokens=hidden_states,
-            sorted_indices=ctx.expanded_row_idx,
-            probs=ctx.topk_weights)
+            permuted_tokens=hidden_states, sorted_indices=ctx.expanded_row_idx, probs=ctx.topk_weights
+        )
         return final_hidden_states
 
 
 class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
-
     def __init__(self):
         self.parallel_info = get_parallel_info_manager()
         device_group = self.parallel_info.get(ParallelType.MOE_EP_MC2).process_group
@@ -196,10 +179,7 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
         self.enable_dispatch_v2 = hasattr(torch_npu, "npu_moe_distribute_dispatch_v2")
         self.ascend_device_type = get_npu_node_info().get_device_type()
 
-    def select_dispatch_mc2_kwargs(
-            self,
-            args: MoeMC2Args
-    ):
+    def select_dispatch_mc2_kwargs(self, args: MoeMC2Args):
         if args.with_quant:
             quant_mode = 2
         else:
@@ -222,44 +202,44 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
             "ep_rank_id": self.ep_rank_id,
         }
         if self.ascend_device_type in {DeviceType.ASCEND_910_93}:
-            stage1_kwargs.update({
-                "group_tp": self.moe_all_to_all_group_name,
-                "tp_world_size": 1,
-                "tp_rank_id": 0,
-            })
+            stage1_kwargs.update(
+                {
+                    "group_tp": self.moe_all_to_all_group_name,
+                    "tp_world_size": 1,
+                    "tp_rank_id": 0,
+                }
+            )
             if self.enable_dispatch_v2:
-                stage1_kwargs.update({
-                    "x_active_mask": args.mc2_mask,
-                })
+                stage1_kwargs.update(
+                    {
+                        "x_active_mask": args.mc2_mask,
+                    }
+                )
         kwargs_mc2_dispatch.update(stage1_kwargs)
         return kwargs_mc2_dispatch
 
-    def token_dispatch(
-            self,
-            args: MoeMC2Args
-    ):
-
+    def token_dispatch(self, args: MoeMC2Args):
         kwargs_mc2_dispatch = self.select_dispatch_mc2_kwargs(args)
 
-        operator_output = torch_npu.npu_moe_distribute_dispatch_v2(
-            **kwargs_mc2_dispatch
-        ) if self.enable_dispatch_v2 else torch_npu.npu_moe_distribute_dispatch(
-            **kwargs_mc2_dispatch)
-        expand_x, dynamic_scale, assist_info_for_combine, \
-            expert_token_nums, ep_recv_counts, tp_recv_counts = operator_output[0:6]
+        operator_output = (
+            torch_npu.npu_moe_distribute_dispatch_v2(**kwargs_mc2_dispatch)
+            if self.enable_dispatch_v2
+            else torch_npu.npu_moe_distribute_dispatch(**kwargs_mc2_dispatch)
+        )
+        expand_x, dynamic_scale, assist_info_for_combine, expert_token_nums, ep_recv_counts, tp_recv_counts = (
+            operator_output[0:6]
+        )
 
         shared_act, swiglu_out_scale = None, None
         if args.with_quant:
             if args.shared_experts is not None:
                 share_up_out, _ = args.shared_experts.gate_up_proj(
-                    (args.quantized_x_for_share, args.dynamic_scale_for_share))
-                shared_gate_up, shared_dequant_scale = share_up_out[
-                    0], share_up_out[1]
+                    (args.quantized_x_for_share, args.dynamic_scale_for_share)
+                )
+                shared_gate_up, shared_dequant_scale = share_up_out[0], share_up_out[1]
 
-                shared_act_out = args.shared_experts.act_fn(
-                    (shared_gate_up, shared_dequant_scale))
-                shared_act, swiglu_out_scale = \
-                    shared_act_out[0], shared_act_out[1]
+                shared_act_out = args.shared_experts.act_fn((shared_gate_up, shared_dequant_scale))
+                shared_act, swiglu_out_scale = shared_act_out[0], shared_act_out[1]
 
         else:
             if args.shared_experts is not None:
@@ -290,9 +270,7 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
 
         return dispatch_output, context
 
-    def get_combine_mc_kwargs(self,
-                              hidden_states: torch.Tensor,
-                              ctx: MC2DispatchContext):
+    def get_combine_mc_kwargs(self, hidden_states: torch.Tensor, ctx: MC2DispatchContext):
         # moeCombine
         kwargs_mc2_combine = {
             "expand_x": hidden_states,
@@ -304,9 +282,7 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
             "global_bs": ctx.global_bs,
         }
         if ctx.with_quant:
-            tp_recv_counts = torch.empty(1,
-                                         dtype=torch.int32,
-                                         device=hidden_states.device)
+            tp_recv_counts = torch.empty(1, dtype=torch.int32, device=hidden_states.device)
         else:
             tp_recv_counts = ctx.tp_recv_counts
         stage3_kwargs = {
@@ -316,55 +292,58 @@ class TokenDispatcherWithMC2(Singleton, MoETokenDispatcher):
             "ep_rank_id": self.ep_rank_id,
         }
         if self.enable_dispatch_v2:
-            stage3_kwargs.update({
-                "assist_info_for_combine":
-                    ctx.assist_info_for_combine,
-            })
+            stage3_kwargs.update(
+                {
+                    "assist_info_for_combine": ctx.assist_info_for_combine,
+                }
+            )
         else:
-            stage3_kwargs.update({
-                "expand_idx": ctx.assist_info_for_combine,
-            })
+            stage3_kwargs.update(
+                {
+                    "expand_idx": ctx.assist_info_for_combine,
+                }
+            )
         if self.ascend_device_type in {DeviceType.ASCEND_910_93}:
-            stage3_kwargs.update({
-                "tp_send_counts": tp_recv_counts,
-                "group_tp": self.moe_all_to_all_group_name,
-                "tp_world_size": 1,
-                "tp_rank_id": 0,
-            })
+            stage3_kwargs.update(
+                {
+                    "tp_send_counts": tp_recv_counts,
+                    "group_tp": self.moe_all_to_all_group_name,
+                    "tp_world_size": 1,
+                    "tp_rank_id": 0,
+                }
+            )
             if self.enable_dispatch_v2:
-                stage3_kwargs.update({
-                    "x_active_mask": ctx.mc2_mask,
-                })
+                stage3_kwargs.update(
+                    {
+                        "x_active_mask": ctx.mc2_mask,
+                    }
+                )
         kwargs_mc2_combine.update(stage3_kwargs)
         return kwargs_mc2_combine
 
-    def token_combine(
-            self,
-            hidden_states: torch.Tensor,
-            ctx: MC2DispatchContext
-    ):
+    def token_combine(self, hidden_states: torch.Tensor, ctx: MC2DispatchContext):
         kwargs_mc2_combine = self.get_combine_mc_kwargs(hidden_states, ctx)
-        hidden_states = torch_npu.npu_moe_distribute_combine_v2(
-            **kwargs_mc2_combine
-        ) if self.enable_dispatch_v2 else torch_npu.npu_moe_distribute_combine(
-            **kwargs_mc2_combine)
+        hidden_states = (
+            torch_npu.npu_moe_distribute_combine_v2(**kwargs_mc2_combine)
+            if self.enable_dispatch_v2
+            else torch_npu.npu_moe_distribute_combine(**kwargs_mc2_combine)
+        )
         if ctx.shared_experts is None:
             return hidden_states
         else:
             if ctx.with_quant:
-                shared_hidden_states, _ = ctx.shared_experts.down_proj(
-                    (ctx.shared_act, ctx.swiglu_out_scale))
+                shared_hidden_states, _ = ctx.shared_experts.down_proj((ctx.shared_act, ctx.swiglu_out_scale))
             else:
-                shared_hidden_states, _ = ctx.shared_experts.down_proj(
-                    ctx.shared_act)
+                shared_hidden_states, _ = ctx.shared_experts.down_proj(ctx.shared_act)
             return hidden_states, shared_hidden_states
 
 
-def async_all_to_all(input_,
-                     output_split_sizes,
-                     input_split_sizes,
-                     group,
-                     ):
+def async_all_to_all(
+    input_,
+    output_split_sizes,
+    input_split_sizes,
+    group,
+):
     if output_split_sizes is None:
         # Equal split (all2all)
         a2a_out = torch.empty_like(input_)
@@ -376,12 +355,14 @@ def async_all_to_all(input_,
             device=input_.device,
         )
 
-    handle = dist.all_to_all_single(a2a_out,
-                                    input_.contiguous(),
-                                    output_split_sizes=output_split_sizes,
-                                    input_split_sizes=input_split_sizes,
-                                    group=group,
-                                    async_op=True)
+    handle = dist.all_to_all_single(
+        a2a_out,
+        input_.contiguous(),
+        output_split_sizes=output_split_sizes,
+        input_split_sizes=input_split_sizes,
+        group=group,
+        async_op=True,
+    )
     return input_, a2a_out, handle
 
 
@@ -407,19 +388,12 @@ def _gather_along_first_dim(input_, group, output_split_sizes=None):
     if output_split_sizes is None:
         dim_size[0] = dim_size[0] * world_size
 
-        output = torch.empty(dim_size,
-                             dtype=input_.dtype,
-                             device=input_.device)
-        dist.all_gather_into_tensor(output,
-                                    input_.contiguous(),
-                                    group=group)
+        output = torch.empty(dim_size, dtype=input_.dtype, device=input_.device)
+        dist.all_gather_into_tensor(output, input_.contiguous(), group=group)
     else:
         dim_size[0] = sum(output_split_sizes)
-        output = torch.empty(dim_size,
-                             dtype=input_.dtype,
-                             device=input_.device)
-        output_tensor_list = list(
-            torch.split(output, output_split_sizes, dim=0))
+        output = torch.empty(dim_size, dtype=input_.dtype, device=input_.device)
+        output_tensor_list = list(torch.split(output, output_split_sizes, dim=0))
         dist.all_gather(output_tensor_list, input_, group=group)
 
     return output
@@ -449,12 +423,11 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         self.ep_size = self.parallel_info.moe_ep.group_size
         self.with_quant = False
 
-    def token_dispatch(self,
-                       args: MoeAll2AllVArgs):
-
+    def token_dispatch(self, args: MoeAll2AllVArgs):
         num_local_experts = args.num_experts // self.ep_size
         preprocess_result = self._dispatch_preprocess(
-            args.hidden_states, args.topk_ids, args.num_experts, num_local_experts)
+            args.hidden_states, args.topk_ids, args.num_experts, num_local_experts
+        )
 
         _, global_input_tokens, permute1_ep_all_to_all_handle = async_all_to_all(
             preprocess_result.permutated_local_input_tokens,
@@ -467,14 +440,17 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         preprocess_result.permutated_local_input_tokens.untyped_storage().resize_(0)
 
         (global_input_tokens, dynamic_scale, reversed_global_input_permutation_mapping) = self._dispatch_postprocess(
-            global_input_tokens, dynamic_scale_after_all2all, num_local_experts,
-            preprocess_result.global_input_tokens_local_experts_indices)
+            global_input_tokens,
+            dynamic_scale_after_all2all,
+            num_local_experts,
+            preprocess_result.global_input_tokens_local_experts_indices,
+        )
 
         dispatch_output = {
             "hidden_states": global_input_tokens,
             "group_list": preprocess_result.tokens_per_expert,
             "dynamic_scale": dynamic_scale,
-            "group_list_type": 1
+            "group_list_type": 1,
         }
         context = All2AllVDispatchContext(
             topk_weights=args.topk_weights,
@@ -489,23 +465,26 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         )
         return dispatch_output, context
 
-    def token_combine(self,
-                      hidden_states: torch.Tensor,
-                      ctx: All2AllVDispatchContext):
-
-        hidden_states = self._combine_preprocess(hidden_states, ctx.num_local_experts,
-                                                 ctx.reversed_global_input_permutation_mapping)
+    def token_combine(self, hidden_states: torch.Tensor, ctx: All2AllVDispatchContext):
+        hidden_states = self._combine_preprocess(
+            hidden_states, ctx.num_local_experts, ctx.reversed_global_input_permutation_mapping
+        )
 
         # Perform expert parallel AlltoAll communication
         # hidden_states: [SEQL, H] -> [SEQL, H/TP]
         _, permutated_local_input_tokens, handle = async_all_to_all(
-            hidden_states, ctx.input_splits, ctx.output_splits,
-            self.ep_group)
+            hidden_states, ctx.input_splits, ctx.output_splits, self.ep_group
+        )
         handle.wait()
         hidden_states.untyped_storage().resize_(0)
 
-        output = self._combine_postprocess(permutated_local_input_tokens, ctx.reversed_local_input_permutation_mapping,
-                                           ctx.topk_weights, ctx.hidden_shape_before_permute, ctx.hidden_shape)
+        output = self._combine_postprocess(
+            permutated_local_input_tokens,
+            ctx.reversed_local_input_permutation_mapping,
+            ctx.topk_weights,
+            ctx.hidden_shape_before_permute,
+            ctx.hidden_shape,
+        )
 
         return output
 
@@ -520,12 +499,12 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         hidden_shape_before_permute: torch.Size
         global_input_tokens_local_experts_indices: torch.Tensor
 
-
     def _dispatch_preprocess(self, hidden_states, topk_ids, num_experts, num_local_experts):
         hidden_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_shape[-1])
         tokens_per_expert, input_splits, output_splits, global_input_tokens_local_experts_indices = self._preprocess(
-            topk_ids, num_experts, num_local_experts)
+            topk_ids, num_experts, num_local_experts
+        )
 
         hidden_shape_before_permute = hidden_shape
 
@@ -546,35 +525,34 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         )
 
     def _preprocess(self, topk_ids: torch.Tensor, num_experts, num_local_experts) -> torch.Tensor:
-        num_local_tokens_per_expert = torch.histc(topk_ids,
-                                                  bins=num_experts,
-                                                  min=0,
-                                                  max=num_experts)
+        num_local_tokens_per_expert = torch.histc(topk_ids, bins=num_experts, min=0, max=num_experts)
 
         ep_size = self.ep_size
 
         # ===================================================
         # Calculate input_splits, output_splits for alltoall-v.
         # ===================================================
-        input_splits = (num_local_tokens_per_expert.reshape(
-            ep_size,
-            num_local_experts).sum(axis=1).to(torch.device("cpu"),
-                                                   non_blocking=True).numpy())
+        input_splits = (
+            num_local_tokens_per_expert.reshape(ep_size, num_local_experts)
+            .sum(axis=1)
+            .to(torch.device("cpu"), non_blocking=True)
+            .numpy()
+        )
         num_global_tokens_per_expert = gather_from_sequence_parallel_region(
-            num_local_tokens_per_expert,
-            group=self.ep_group).reshape(ep_size, num_experts)
+            num_local_tokens_per_expert, group=self.ep_group
+        ).reshape(ep_size, num_experts)
 
-        local_expert_indices_offset = (self.ep_rank * num_local_experts)
+        local_expert_indices_offset = self.ep_rank * num_local_experts
         local_expert_indices = [local_expert_indices_offset + i for i in range(num_local_experts)]
-        num_global_tokens_per_local_expert = num_global_tokens_per_expert[:, local_expert_indices[
-            0]:local_expert_indices[-1] + 1]
+        num_global_tokens_per_local_expert = num_global_tokens_per_expert[
+            :, local_expert_indices[0] : local_expert_indices[-1] + 1
+        ]
         if num_global_tokens_per_local_expert is None:
-            raise ValueError(
-                "num_global_tokens_per_local_expert must be set before sum.")
-        output_splits = (num_global_tokens_per_local_expert.sum(
-            axis=-1).to(torch.device("cpu"), non_blocking=True).numpy())
-        num_tokens_per_local_expert = num_global_tokens_per_local_expert.sum(
-            axis=0)
+            raise ValueError("num_global_tokens_per_local_expert must be set before sum.")
+        output_splits = (
+            num_global_tokens_per_local_expert.sum(axis=-1).to(torch.device("cpu"), non_blocking=True).numpy()
+        )
+        num_tokens_per_local_expert = num_global_tokens_per_local_expert.sum(axis=0)
         # ===================================================
         # num_global_tokens_per_expert shape: [ep_size, num_experts]
         # num_global_tokens_per_local_expert shape: [ep_size, num_local_experts]
@@ -582,19 +560,18 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
         # ===================================================
         global_input_tokens_local_experts_indices = None
         if num_local_experts > 1:
-            expert_ids_per_ep_rank = (torch.arange(num_experts, dtype=torch.int32, device="npu") % num_local_experts)
+            expert_ids_per_ep_rank = torch.arange(num_experts, dtype=torch.int32, device="npu") % num_local_experts
             if num_global_tokens_per_local_expert is None:
-                raise ValueError(
-                    "num_global_tokens_per_local_expert must be set before operations."
-                )
+                raise ValueError("num_global_tokens_per_local_expert must be set before operations.")
             global_input_tokens_local_experts_indices = torch.repeat_interleave(
-                expert_ids_per_ep_rank,
-                num_global_tokens_per_local_expert.ravel())
+                expert_ids_per_ep_rank, num_global_tokens_per_local_expert.ravel()
+            )
 
         return num_tokens_per_local_expert, input_splits, output_splits, global_input_tokens_local_experts_indices
 
-    def _dispatch_postprocess(self, global_input_tokens, dynamic_scale, num_local_experts,
-                              global_input_tokens_local_experts_indices):
+    def _dispatch_postprocess(
+        self, global_input_tokens, dynamic_scale, num_local_experts, global_input_tokens_local_experts_indices
+    ):
         # Early return if no local experts or no tokens
         if num_local_experts <= 1:
             return global_input_tokens, None
@@ -610,44 +587,51 @@ class TokenDispatcherWithAll2AllV(Singleton, MoETokenDispatcher):
                 return global_input_tokens, dynamic_scale, reversed_global_input_permutation_mapping
 
             # Process with active tokens
-            (global_input_tokens, reversed_global_input_permutation_mapping,
-             _, expanded_scale) = torch_npu.npu_moe_init_routing_v2(
-                global_input_tokens,
-                expert_idx_2d,
-                scale=dynamic_scale,
-                active_num=active_num,
-                expert_capacity=0,
-                expert_num=num_local_experts,
-                expert_tokens_num_type=1,
-                expert_tokens_num_flag=True,
-                active_expert_range=[0, num_local_experts],
-                quant_mode=-1,
-                row_idx_type=0)
+            (global_input_tokens, reversed_global_input_permutation_mapping, _, expanded_scale) = (
+                torch_npu.npu_moe_init_routing_v2(
+                    global_input_tokens,
+                    expert_idx_2d,
+                    scale=dynamic_scale,
+                    active_num=active_num,
+                    expert_capacity=0,
+                    expert_num=num_local_experts,
+                    expert_tokens_num_type=1,
+                    expert_tokens_num_flag=True,
+                    active_expert_range=[0, num_local_experts],
+                    quant_mode=-1,
+                    row_idx_type=0,
+                )
+            )
             return global_input_tokens, expanded_scale, reversed_global_input_permutation_mapping
 
         # Handle non-quantized case
         global_input_tokens, reversed_global_input_permutation_mapping = torch_npu.npu_moe_token_permute(
-            global_input_tokens,
-            global_input_tokens_local_experts_indices)
+            global_input_tokens, global_input_tokens_local_experts_indices
+        )
         return global_input_tokens, None, reversed_global_input_permutation_mapping
 
     def _combine_preprocess(self, hidden_states, num_local_experts, reversed_global_input_permutation_mapping):
         # Unpermutation 2: expert output to AlltoAll input
         if hidden_states.shape[0] > 0 and num_local_experts > 1:
-            hidden_states = torch_npu.npu_moe_token_unpermute(
-                hidden_states, reversed_global_input_permutation_mapping)
+            hidden_states = torch_npu.npu_moe_token_unpermute(hidden_states, reversed_global_input_permutation_mapping)
 
         return hidden_states
 
-    def _combine_postprocess(self, permutated_local_input_tokens, reversed_local_input_permutation_mapping,
-                             topk_weights, hidden_shape_before_permute, hidden_shape):
+    def _combine_postprocess(
+        self,
+        permutated_local_input_tokens,
+        reversed_local_input_permutation_mapping,
+        topk_weights,
+        hidden_shape_before_permute,
+        hidden_shape,
+    ):
         # Unpermutation 1: AlltoAll output to output
         output = torch_npu.npu_moe_token_unpermute(
             permuted_tokens=permutated_local_input_tokens,
-            sorted_indices=reversed_local_input_permutation_mapping.to(
-                torch.int32),
+            sorted_indices=reversed_local_input_permutation_mapping.to(torch.int32),
             probs=topk_weights,
-            restore_shape=hidden_shape_before_permute)
+            restore_shape=hidden_shape_before_permute,
+        )
 
         # Reshape the output tensor
         output = output.view(hidden_shape)

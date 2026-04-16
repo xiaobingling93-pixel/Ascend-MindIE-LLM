@@ -35,7 +35,7 @@ from mindie_llm.runtime.layers.parameter import (
     PerTensorScaleParameter,
     ColumnParameter,
     RowParameter,
-    ExpertsParameter
+    ExpertsParameter,
 )
 from mindie_llm.runtime.layers.quantization.ms_model_slim.quant_type import InferenceMode
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info
@@ -51,6 +51,7 @@ class W8A8PerTensorLinearMethod(LinearMethodBase):
     """
     Implements per-tensor weight and activation quantization (W8A8).
     """
+
     def create_weights(
         self,
         layer: torch.nn.Module,
@@ -76,11 +77,13 @@ class W8A8PerTensorLinearMethod(LinearMethodBase):
         weight = ModelWeightParameter(
             data=torch.empty(sum(output_partition_sizes), input_size_per_partition, dtype=torch.int8),
         )
-        weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs,
-        })
+        weight.add_attrs(
+            {
+                self.INPUT_DIM: 1,
+                self.OUTPUT_DIM: 0,
+                **extra_weight_attrs,
+            }
+        )
 
         input_scale = ScalerParameter(data=torch.empty(1, dtype=weight_dtype))
         input_scale.add_attrs(extra_weight_attrs)
@@ -131,33 +134,45 @@ class W8A8PerTensorLinearMethod(LinearMethodBase):
         #   axis=-1: Quantize along the LAST dimension (last axis) of the input tensor
         #   div_mode=False: Use MULTIPLICATION (not division) for scale application in quantization.
         input_tensor_quant = torch_npu.npu_quantize(
-            input=x, scales=layer.input_scale.data,
+            input=x,
+            scales=layer.input_scale.data,
             zero_points=layer.input_offset.data,
-            dtype=torch.qint8, axis=-1, div_mode=False)
+            dtype=torch.qint8,
+            axis=-1,
+            div_mode=False,
+        )
         out = torch_npu.npu_quant_matmul(
-            input_tensor_quant, layer.weight.data, layer.deq_scale.data,
-            bias=layer.quant_bias.data, output_dtype=x.dtype)
+            input_tensor_quant,
+            layer.weight.data,
+            layer.deq_scale.data,
+            bias=layer.quant_bias.data,
+            output_dtype=x.dtype,
+        )
         return out
 
     def process_weights_after_loading(self, layer: nn.Module) -> None:
         expanding_factor = layer.weight.data.shape[1]
-        layer.input_scale.data = \
+        layer.input_scale.data = (
             1 / layer.input_scale.data.repeat(expanding_factor).to(layer.weight_dtype).contiguous().npu()
-        layer.input_offset.data = \
+        )
+        layer.input_offset.data = (
             layer.input_offset.data.repeat(expanding_factor).to(layer.weight_dtype).contiguous().npu()
+        )
         layer.weight.data = layer.weight.data.transpose(0, 1).contiguous()
 
         soc_name = get_npu_node_info().soc_name
-        if soc_name in SUPPORT_NZ_NPU_LIST: 
+        if soc_name in SUPPORT_NZ_NPU_LIST:
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
-            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
-                       torch_npu.get_npu_format(layer.weight.data))
+            logger.debug(
+                "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
+            )
 
 
 class W8A8PerTokenLinearMethod(LinearMethodBase):
     """
     Implements per-token activation quantization with per-tensor weight quantization (W8A8).
     """
+
     def create_weights(
         self,
         layer: torch.nn.Module,
@@ -219,8 +234,13 @@ class W8A8PerTokenLinearMethod(LinearMethodBase):
     ) -> torch.Tensor:
         input_tensor_quant, pertoken_scale = torch_npu.npu_dynamic_quant(x)
         out = torch_npu.npu_quant_matmul(
-            input_tensor_quant, layer.weight.data, layer.weight_scale.data,
-            pertoken_scale=pertoken_scale, bias=None, output_dtype=x.dtype)
+            input_tensor_quant,
+            layer.weight.data,
+            layer.weight_scale.data,
+            pertoken_scale=pertoken_scale,
+            bias=None,
+            output_dtype=x.dtype,
+        )
         if layer.bias is not None:
             out = out + layer.bias.data
         return out
@@ -232,14 +252,16 @@ class W8A8PerTokenLinearMethod(LinearMethodBase):
         soc_name = get_npu_node_info().soc_name
         if soc_name in SUPPORT_NZ_NPU_LIST:
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
-            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
-                       torch_npu.get_npu_format(layer.weight.data))
+            logger.debug(
+                "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
+            )
 
 
 class W8A8MixLinearMethod(LinearMethodBase):
     """
     Implements mixed W8A8 quantization using per-tensor for decode and per-token for prefill.
     """
+
     quant_method = {
         InferenceMode.PREFILL: W8A8PerTokenLinearMethod(),
         InferenceMode.DECODE: W8A8PerTensorLinearMethod(),
@@ -293,24 +315,28 @@ class W8A8MixLinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: nn.Module) -> None:
         expanding_factor = layer.weight.data.shape[1]
-        layer.input_scale.data = \
+        layer.input_scale.data = (
             1 / layer.input_scale.data.repeat(expanding_factor).to(layer.weight_dtype).contiguous().npu()
-        layer.input_offset.data = \
+        )
+        layer.input_offset.data = (
             layer.input_offset.data.repeat(expanding_factor).to(layer.weight_dtype).contiguous().npu()
+        )
         layer.weight.data = layer.weight.data.transpose(0, 1).contiguous()
         layer.weight_scale.data = layer.weight_scale.data.flatten()
 
         soc_name = get_npu_node_info().soc_name
         if soc_name in SUPPORT_NZ_NPU_LIST:
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
-            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
-                       torch_npu.get_npu_format(layer.weight.data))
+            logger.debug(
+                "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
+            )
 
 
 class W8A8MXFP8PerGroupLinearMethod(LinearMethodBase):
     """
     Implements per-token activation quantization with per-group weight quantization (W8A8_MXFP8).
     """
+
     def create_weights(
         self,
         layer: torch.nn.Module,
@@ -336,32 +362,32 @@ class W8A8MXFP8PerGroupLinearMethod(LinearMethodBase):
         weight = ModelWeightParameter(
             data=torch.empty(sum(output_partition_sizes), input_size_per_partition, dtype=torch.float8_e4m3fn),
         )
-        weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs,
-        })
+        weight.add_attrs(
+            {
+                self.INPUT_DIM: 1,
+                self.OUTPUT_DIM: 0,
+                **extra_weight_attrs,
+            }
+        )
 
         weight_scale = ModelWeightParameter(
-            data=torch.empty(sum(output_partition_sizes),
-                             even_divide(input_size_per_partition, MXFP8_GROUP_SIZE),
-                             dtype=torch.uint8),
+            data=torch.empty(
+                sum(output_partition_sizes), even_divide(input_size_per_partition, MXFP8_GROUP_SIZE), dtype=torch.uint8
+            ),
         )
-        weight_scale.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs,
-        })
+        weight_scale.add_attrs(
+            {
+                self.INPUT_DIM: 1,
+                self.OUTPUT_DIM: 0,
+                **extra_weight_attrs,
+            }
+        )
 
         layer.register_parameter("weight", weight)
         layer.register_parameter("weight_scale", weight_scale)
         layer.register_parameter("bias", None)
 
-    def apply(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor
-    ) -> torch.Tensor:
+    def apply(self, layer: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         quantized_x, dynamic_scale = torch_npu.npu_dynamic_mx_quant(x, dst_type=torch.float8_e4m3fn)
         pertoken_scale = dynamic_scale
         output_dtype = x.dtype
@@ -375,7 +401,7 @@ class W8A8MXFP8PerGroupLinearMethod(LinearMethodBase):
             pertoken_scale_dtype=torch_npu.float8_e8m0fnu,
             bias=layer.bias,
             output_dtype=output_dtype,
-            group_sizes=[1, 1, MXFP8_GROUP_SIZE]
+            group_sizes=[1, 1, MXFP8_GROUP_SIZE],
         )
 
         return output
@@ -389,78 +415,69 @@ class W8A8MXFP8PerGroupLinearMethod(LinearMethodBase):
 
 class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
     def create_weights(
-            self,
-            layer: torch.nn.Module,
-            num_experts: int,
-            hidden_size: int,
-            intermediate_size_per_partition: int,
-            weight_dtype: torch.dtype,
-            bias_dtype: torch.dtype,
-            **extra_weight_attrs,
+        self,
+        layer: torch.nn.Module,
+        num_experts: int,
+        hidden_size: int,
+        intermediate_size_per_partition: int,
+        weight_dtype: torch.dtype,
+        bias_dtype: torch.dtype,
+        **extra_weight_attrs,
     ):
         gate_up_weight = ColumnParameter(
-            torch.empty(num_experts,
-                        2 *
-                        intermediate_size_per_partition,
-                        hidden_size,
-                        dtype=torch.int8,
-                        ),
+            torch.empty(
+                num_experts,
+                2 * intermediate_size_per_partition,
+                hidden_size,
+                dtype=torch.int8,
+            ),
         )
-        gate_up_weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        gate_up_weight.add_attrs({self.INPUT_DIM: 1, self.OUTPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("gate_up_weight", gate_up_weight)
 
         down_weight = RowParameter(
-            torch.empty(num_experts,
-                        hidden_size,
-                        intermediate_size_per_partition,
-                        dtype=torch.int8,
-                        ),
+            torch.empty(
+                num_experts,
+                hidden_size,
+                intermediate_size_per_partition,
+                dtype=torch.int8,
+            ),
         )
-        down_weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        down_weight.add_attrs({self.INPUT_DIM: 1, self.OUTPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("down_weight", down_weight)
 
         weight_scale_type = torch.float32 if weight_dtype == torch.float16 else torch.bfloat16
         layer.output_dtype = torch.bfloat16 if weight_scale_type == torch.bfloat16 else torch.float16
         gate_up_weight_scale = ColumnParameter(
-            torch.empty(num_experts,
-                        2 * intermediate_size_per_partition,
-                        1,
-                        dtype=weight_scale_type,
-                        ),
+            torch.empty(
+                num_experts,
+                2 * intermediate_size_per_partition,
+                1,
+                dtype=weight_scale_type,
+            ),
         )
-        gate_up_weight_scale.add_attrs({
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        gate_up_weight_scale.add_attrs({self.OUTPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("gate_up_weight_scale", gate_up_weight_scale)
 
         down_weight_scale = ExpertsParameter(
-            torch.empty(num_experts,
-                        hidden_size,
-                        1,
-                        dtype=weight_scale_type,
-                        ),
+            torch.empty(
+                num_experts,
+                hidden_size,
+                1,
+                dtype=weight_scale_type,
+            ),
         )
-        down_weight_scale.add_attrs({
-            self.INPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        down_weight_scale.add_attrs({self.INPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("down_weight_scale", down_weight_scale)
 
-    def apply(self,
-              layer: torch.nn.Module,
-              x: torch.Tensor,
-              group_list: torch.Tensor,
-              group_list_type: int = 1,
-              dynamic_scale: torch.Tensor = None) -> torch.Tensor:
+    def apply(
+        self,
+        layer: torch.nn.Module,
+        x: torch.Tensor,
+        group_list: torch.Tensor,
+        group_list_type: int = 1,
+        dynamic_scale: torch.Tensor = None,
+    ) -> torch.Tensor:
         if dynamic_scale is None:
             x, pertoken_scale = torch_npu.npu_dynamic_quant(x)
         else:
@@ -469,11 +486,12 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
         hidden_states = torch_npu.npu_grouped_matmul(
             x=[x],
             weight=[layer.gate_up_weight],
-            split_item=2,                     # output a single tensor
+            split_item=2,  # output a single tensor
             group_list_type=group_list_type,
-            group_type=0,                     # the axis to group
+            group_type=0,  # the axis to group
             group_list=group_list,
-            output_dtype=torch.int32)[0]
+            output_dtype=torch.int32,
+        )[0]
 
         hidden_states, swiglu_out_scale = torch_npu.npu_dequant_swiglu_quant(
             x=hidden_states,
@@ -484,7 +502,7 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
             quant_offset=None,
             group_index=group_list,
             activate_left=True,  # whether to left-activate
-            quant_mode=1,        # 0: static quant, 1: dynamic quant
+            quant_mode=1,  # 0: static quant, 1: dynamic quant
         )
 
         hidden_states = torch_npu.npu_grouped_matmul(
@@ -497,7 +515,8 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
             group_list_type=group_list_type,
             group_type=0,
             group_list=group_list,
-            output_dtype=layer.output_dtype)[0]
+            output_dtype=layer.output_dtype,
+        )[0]
 
         return hidden_states
 
@@ -505,32 +524,35 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
         layer.gate_up_weight.data = layer.gate_up_weight.data.transpose(-2, -1).contiguous()
         layer.down_weight.data = layer.down_weight.data.transpose(-2, -1).contiguous()
         layer.gate_up_weight_scale.data = layer.gate_up_weight_scale.data.view(
-            layer.gate_up_weight_scale.data.shape[0], -1).to(torch.float32)
-        layer.down_weight_scale.data = layer.down_weight_scale.data.view(
-            layer.down_weight_scale.data.shape[0], -1)
+            layer.gate_up_weight_scale.data.shape[0], -1
+        ).to(torch.float32)
+        layer.down_weight_scale.data = layer.down_weight_scale.data.view(layer.down_weight_scale.data.shape[0], -1)
         layer.register_parameter(
-            "fused_gate_up_weight_scale", 
-            ScalerParameter(scale_from_float_to_int64(layer.gate_up_weight_scale.data))
+            "fused_gate_up_weight_scale", ScalerParameter(scale_from_float_to_int64(layer.gate_up_weight_scale.data))
         )
         layer.register_parameter(
-            "fused_down_weight_scale", 
-            ScalerParameter(scale_from_float_to_int64(layer.down_weight_scale.data))
+            "fused_down_weight_scale", ScalerParameter(scale_from_float_to_int64(layer.down_weight_scale.data))
         )
 
         soc_name = get_npu_node_info().soc_name
         if soc_name in SUPPORT_NZ_NPU_LIST:
             layer.gate_up_weight.data = torch_npu.npu_format_cast(layer.gate_up_weight.data, 29)
-            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
-                       torch_npu.get_npu_format(layer.gate_up_weight.data))
+            logger.debug(
+                "Convert weight to FRACTAL_NZ done, current format is %s",
+                torch_npu.get_npu_format(layer.gate_up_weight.data),
+            )
             layer.down_weight.data = torch_npu.npu_format_cast(layer.down_weight.data, 29)
-            logger.debug("Convert weight to FRACTAL_NZ done, current format is %s", 
-                       torch_npu.get_npu_format(layer.down_weight.data))
+            logger.debug(
+                "Convert weight to FRACTAL_NZ done, current format is %s",
+                torch_npu.get_npu_format(layer.down_weight.data),
+            )
 
 
 def scale_from_float_to_int64(scale):
     """Converts float32 tensor to int64"""
     import numpy as np
+
     scale = torch.from_numpy(
-        np.frombuffer(scale.cpu().to(torch.float32).numpy().tobytes(),
-                    dtype=np.int32).astype(np.int64)).to(scale.device)
+        np.frombuffer(scale.cpu().to(torch.float32).numpy().tobytes(), dtype=np.int32).astype(np.int64)
+    ).to(scale.device)
     return scale

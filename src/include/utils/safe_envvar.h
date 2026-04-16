@@ -31,26 +31,26 @@ const std::string DEFAULT_MINDIE_LOG_TO_FILE = "1";
 const std::string DEFAULT_MINDIE_LOG_TO_STDOUT = "0";
 const std::string DEFAULT_MINDIE_LOG_PATH = "~/mindie/log/";
 const std::string DEFAULT_MINDIE_LOG_VERBOSE = "1";
-const std::string DEFAULT_MINDIE_LOG_ROTATE = "-fs 20 -r 10";      // Rotating log files, 20 MB each, keep 10 files.
+const std::string DEFAULT_MINDIE_LOG_ROTATE = "-fs 20 -r 10";  // Rotating log files, 20 MB each, keep 10 files.
 const std::string DEFAULT_CHECK_PERM = "";
 
-const std::string& GetDefaultMindIELLMHomePath();
+const std::string &GetDefaultMindIELLMHomePath();
 
 class EnvVar {
-public:
-    static EnvVar& GetInstance();
+   public:
+    static EnvVar &GetInstance();
 
-    Result Set(const char *key, const std::string& value, bool overwrite = true) const;
+    Result Set(const char *key, const std::string &value, bool overwrite = true) const;
 
-    Result Get(const char *key, const std::string& defaultValue, std::string& outValue) const;
+    Result Get(const char *key, const std::string &defaultValue, std::string &outValue) const;
 
-    EnvVar(const EnvVar&) = delete;
-    EnvVar& operator=(const EnvVar&) = delete;
+    EnvVar(const EnvVar &) = delete;
+    EnvVar &operator=(const EnvVar &) = delete;
 
-private:
+   private:
     EnvVar() = default;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

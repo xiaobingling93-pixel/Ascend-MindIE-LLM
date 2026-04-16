@@ -12,14 +12,14 @@
 #include "log.h"
 
 #include <sys/utsname.h>
+
 #include <cstdlib>
 #include <regex>
 #include <stdexcept>
 
-#include "spdlog.h"
-
 #include "common_util.h"
 #include "log_utils.h"
+#include "spdlog.h"
 
 namespace mindie_llm {
 
@@ -32,17 +32,14 @@ const std::unordered_set<std::string> SpecialChar = {"\n",  "\r",  "\u007f", "\b
                                                      "%09", "%0a", "%0b",    "%0c", "%0d", "%7f", "//", "\\",     "&"};
 
 Log::Log(const std::shared_ptr<LogConfig> logConfig)
-    : logConfig_(logConfig ? std::make_shared<LogConfig>(*logConfig) : nullptr)
-{
-}
+    : logConfig_(logConfig ? std::make_shared<LogConfig>(*logConfig) : nullptr) {}
 
-std::shared_ptr<Log> Log::GetInstance(LoggerType loggerType)
-{
+std::shared_ptr<Log> Log::GetInstance(LoggerType loggerType) {
     // ATB日志不能统一创建，需要在第一次调用ATB日志打印时进行创建
     if (loggerType == LoggerType::ATB) {
         std::call_once(atbLogInitFlag, [] {
             CreateInstance(LoggerType::ATB);
-            mindie_llm::LogLevelDynamicHandler::Init(5000); // 每5秒检查动态日志配置
+            mindie_llm::LogLevelDynamicHandler::Init(5000);  // 每5秒检查动态日志配置
         });
     }
     auto logger = loggerMap.find(loggerType);
@@ -52,8 +49,7 @@ std::shared_ptr<Log> Log::GetInstance(LoggerType loggerType)
     return nullptr;
 }
 
-void Log::CreateAllLoggers()
-{
+void Log::CreateAllLoggers() {
     for (int i = 0; i < static_cast<int>(LoggerType::MAX_LOGGER_TYPE); i++) {
         LoggerType loggerType = static_cast<LoggerType>(i);
         if (loggerType == LoggerType::ATB) {
@@ -63,8 +59,7 @@ void Log::CreateAllLoggers()
     }
 }
 
-void Log::CreateInstance(LoggerType loggerType)
-{
+void Log::CreateInstance(LoggerType loggerType) {
     auto logger = loggerMap.find(loggerType);
     if (logger != loggerMap.end()) {
         return;
@@ -89,8 +84,7 @@ void Log::CreateInstance(LoggerType loggerType)
     loggerMap[loggerType] = targetLogger;
 }
 
-const std::shared_ptr<LogConfig> Log::GetLogConfig(LoggerType loggerType)
-{
+const std::shared_ptr<LogConfig> Log::GetLogConfig(LoggerType loggerType) {
     std::shared_ptr<Log> logger = GetInstance(loggerType);
     if (logger != nullptr) {
         return logger->logConfig_;
@@ -98,8 +92,7 @@ const std::shared_ptr<LogConfig> Log::GetLogConfig(LoggerType loggerType)
     throw std::runtime_error(LogUtils::GetLoggerNameStr(loggerType) + " logger is null, failed to get LogConfig.");
 }
 
-void Log::LogMessage(LoggerType loggerType, LogLevel level, const std::string &message)
-{
+void Log::LogMessage(LoggerType loggerType, LogLevel level, const std::string &message) {
     std::shared_ptr<Log> logger = GetInstance(loggerType);
     if (logger == nullptr || logger->innerLogger_ == nullptr) {
         throw std::runtime_error(LogUtils::GetLoggerNameStr(loggerType) + " logger is null.");
@@ -121,8 +114,7 @@ void Log::LogMessage(LoggerType loggerType, LogLevel level, const std::string &m
     }
 }
 
-void Log::SetFileEventHandle(spdlog::file_event_handlers &handlers) const
-{
+void Log::SetFileEventHandle(spdlog::file_event_handlers &handlers) const {
     handlers.after_open = [](spdlog::filename_t filename, const std::FILE *fstream) {
         std::string baseDir = "/";
         std::string errMsg;
@@ -149,8 +141,7 @@ void Log::SetFileEventHandle(spdlog::file_event_handlers &handlers) const
 
 bool Log::ShouldPrintToStdout(LoggerType loggerType) { return loggerType != LoggerType::MINDIE_LLM_TOKEN; }
 
-int Log::Initialize(LoggerType loggerType)
-{
+int Log::Initialize(LoggerType loggerType) {
     std::vector<spdlog::sink_ptr> sinks;
     try {
         if (logConfig_->logToStdOut_ && ShouldPrintToStdout(loggerType)) {
@@ -162,12 +153,8 @@ int Log::Initialize(LoggerType loggerType)
             spdlog::file_event_handlers handlers;
             SetFileEventHandle(handlers);
             auto fileSink = std::make_shared<GenericRotationFileSink>(
-                logConfig_->logFilePath_,
-                logConfig_->logFileSize_,
-                logConfig_->logFileCount_ - 1,
-                handlers,
-                logConfig_->baseDir_
-            );
+                logConfig_->logFilePath_, logConfig_->logFileSize_, logConfig_->logFileCount_ - 1, handlers,
+                logConfig_->baseDir_);
             sinks.push_back(fileSink);
             spdlog::flush_every(std::chrono::seconds(1));
         }
@@ -176,9 +163,9 @@ int Log::Initialize(LoggerType loggerType)
             innerLogger_ =
                 std::make_shared<spdlog::logger>(LogUtils::GetLoggerNameStr(loggerType), sinks.begin(), sinks.end());
         } else {
-            innerLogger_ = std::make_shared<spdlog::async_logger>(LogUtils::GetLoggerNameStr(loggerType),
-                sinks.begin(), sinks.end(), spdlog::thread_pool(),
-                spdlog::async_overflow_policy::block);
+            innerLogger_ = std::make_shared<spdlog::async_logger>(LogUtils::GetLoggerNameStr(loggerType), sinks.begin(),
+                                                                  sinks.end(), spdlog::thread_pool(),
+                                                                  spdlog::async_overflow_policy::block);
         }
         innerLogger_->set_level(static_cast<spdlog::level::level_enum>(logConfig_->logLevel_));
         innerLogger_->set_pattern("%Y-%m-%d %H:%M:%S.%f %t %v");
@@ -193,8 +180,7 @@ int Log::Initialize(LoggerType loggerType)
     return LOG_OK;
 }
 
-std::string Log::GetLogPattern(LoggerType loggerType)
-{
+std::string Log::GetLogPattern(LoggerType loggerType) {
     std::string moduleName = LogUtils::GetModuleName(loggerType);
     std::string pattern = "[%Y-%m-%d %H:%M:%S.%f] %v";
     if (loggerType <= LoggerType::ATB) {
@@ -213,15 +199,14 @@ std::string Log::GetLogPattern(LoggerType loggerType)
     return pattern;
 }
 
-std::string Log::GetLoggerFormat(LoggerType loggerType)
-{
-    return spdlog::fmt_lib::format("LLM log default format: [yyyy-mm-dd hh:mm:ss.uuuuuu][processid] [threadid] [{}] "
-                                   "[loglevel] [file:line] [status code] msg",
-                                   LogUtils::GetModuleName(loggerType));
+std::string Log::GetLoggerFormat(LoggerType loggerType) {
+    return spdlog::fmt_lib::format(
+        "LLM log default format: [yyyy-mm-dd hh:mm:ss.uuuuuu][processid] [threadid] [{}] "
+        "[loglevel] [file:line] [status code] msg",
+        LogUtils::GetModuleName(loggerType));
 }
 
-void Log::Flush()
-{
+void Log::Flush() {
     for (const auto &pair : loggerMap) {
         const auto &logger = pair.second;
         if (logger && logger->innerLogger_) {
@@ -230,9 +215,7 @@ void Log::Flush()
     }
 }
 
-
-void Log::GetErrorCode(std::ostringstream &oss, const std::string &args)
-{
+void Log::GetErrorCode(std::ostringstream &oss, const std::string &args) {
     std::ostringstream errorcode;
     errorcode << args;
     std::string errorcodeStr = errorcode.str();
@@ -246,20 +229,24 @@ void Log::GetErrorCode(std::ostringstream &oss, const std::string &args)
     }
 }
 
-std::string Log::GetLevelStr(const LogLevel level)
-{
+std::string Log::GetLevelStr(const LogLevel level) {
     switch (level) {
-        case LogLevel::critical: return "[CRITICAL] ";
-        case LogLevel::err: return "[ERROR] ";
-        case LogLevel::warn: return "[WARN] ";
-        case LogLevel::info: return "[INFO] ";
-        case LogLevel::debug: return "[DEBUG] ";
-        default: return "[] ";
+        case LogLevel::critical:
+            return "[CRITICAL] ";
+        case LogLevel::err:
+            return "[ERROR] ";
+        case LogLevel::warn:
+            return "[WARN] ";
+        case LogLevel::info:
+            return "[INFO] ";
+        case LogLevel::debug:
+            return "[DEBUG] ";
+        default:
+            return "[] ";
     }
 }
 
-std::string Log::GetUserName()
-{
+std::string Log::GetUserName() {
     struct utsname buf;
     if (uname(&buf) != 0) {
         // utsname.nodename will never be null ptr in design, so we don't need to check it
@@ -268,8 +255,7 @@ std::string Log::GetUserName()
     return buf.nodename;
 }
 
-void Log::SanitizeMessage(std::string &msg)
-{
+void Log::SanitizeMessage(std::string &msg) {
     for (const auto &bad : SpecialChar) {
         size_t pos = 0;
         while ((pos = msg.find(bad, pos)) != std::string::npos) {
@@ -279,16 +265,14 @@ void Log::SanitizeMessage(std::string &msg)
     }
 }
 
-void Log::SetAllLogLevel(LogLevel level)
-{
+void Log::SetAllLogLevel(LogLevel level) {
     for (int i = 0; i < static_cast<int>(LoggerType::MAX_LOGGER_TYPE); i++) {
         LoggerType loggerType = static_cast<LoggerType>(i);
         SetLogLevel(loggerType, level);
     }
 }
 
-void Log::SetLogLevel(LoggerType loggerType, LogLevel level)
-{
+void Log::SetLogLevel(LoggerType loggerType, LogLevel level) {
     auto logger = loggerMap.find(loggerType);
     if (logger == loggerMap.end()) {
         return;
@@ -297,10 +281,10 @@ void Log::SetLogLevel(LoggerType loggerType, LogLevel level)
     std::shared_ptr<spdlog::logger> innerLog = logger->second->innerLogger_;
     if (innerLog) {
         innerLog->set_level(level);
-        for (auto& sink : innerLog->sinks()) {
+        for (auto &sink : innerLog->sinks()) {
             sink->set_level(level);
         }
         innerLog->info("Log level changed to: {}", GetLevelStr(level));
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

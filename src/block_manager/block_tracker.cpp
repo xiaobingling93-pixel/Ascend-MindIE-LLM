@@ -9,22 +9,20 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include "block_tracker.h"
-#include "request_response/request_id.h"
 
+#include "block_tracker.h"
+
+#include "request_response/request_id.h"
 
 namespace mindie_llm {
 constexpr HashValue NONE_HASH = 0;
 
-void BlockComputedAttr::Reset(BlockId blockId)
-{
+void BlockComputedAttr::Reset(BlockId blockId) {
     SetComputed(blockId, false);
     UpdateAccessTime(blockId, DEFAULT_LAST_ACCESSED_TIME);
 }
 
-void BlockComputedAttr::Enable(BlockId blockId)
-{
+void BlockComputedAttr::Enable(BlockId blockId) {
     if (IsActive(blockId)) {
         throw std::runtime_error("activeFlag_ is true, illegal to run Enable function!");
     }
@@ -32,8 +30,7 @@ void BlockComputedAttr::Enable(BlockId blockId)
     Reset(blockId);
 }
 
-void BlockComputedAttr::Disable(BlockId blockId)
-{
+void BlockComputedAttr::Disable(BlockId blockId) {
     if (!IsActive(blockId)) {
         throw std::runtime_error("activeFlag_ is true, illegal to run Enable function!");
     }
@@ -41,47 +38,40 @@ void BlockComputedAttr::Disable(BlockId blockId)
     Reset(blockId);
 }
 
-void BlockComputedAttr::SetActive(BlockId blockId, bool active)
-{
+void BlockComputedAttr::SetActive(BlockId blockId, bool active) {
     if (IsValidBlockId(blockId)) {
         blockInfos_[blockId - beginBlockId_].active = active;
     }
 }
 
-bool BlockComputedAttr::IsActive(BlockId blockId) const
-{
+bool BlockComputedAttr::IsActive(BlockId blockId) const {
     return IsValidBlockId(blockId) && blockInfos_[blockId - beginBlockId_].active;
 }
 
-void BlockComputedAttr::SetComputed(BlockId blockId, bool computed)
-{
+void BlockComputedAttr::SetComputed(BlockId blockId, bool computed) {
     if (IsValidBlockId(blockId)) {
         blockInfos_[blockId - beginBlockId_].computed = computed;
     }
 }
 
-bool BlockComputedAttr::IsComputed(BlockId blockId) const
-{
+bool BlockComputedAttr::IsComputed(BlockId blockId) const {
     return IsValidBlockId(blockId) && blockInfos_[blockId - beginBlockId_].computed;
 }
 
-void BlockComputedAttr::UpdateAccessTime(BlockId blockId, TimeStamp now)
-{
+void BlockComputedAttr::UpdateAccessTime(BlockId blockId, TimeStamp now) {
     if (IsValidBlockId(blockId)) {
         blockInfos_[blockId - beginBlockId_].lastAccessed = now;
     }
 }
 
-TimeStamp BlockComputedAttr::LastAccessed(BlockId blockId) const
-{
+TimeStamp BlockComputedAttr::LastAccessed(BlockId blockId) const {
     if (IsValidBlockId(blockId)) {
         return blockInfos_[blockId - beginBlockId_].lastAccessed;
     }
     return -1;
 }
 
-HashValue ComputeHashValueForSeq(HashValue prevBlockHash, std::vector<TokenId> &tokenIds, HashValue extraHash)
-{
+HashValue ComputeHashValueForSeq(HashValue prevBlockHash, std::vector<TokenId> &tokenIds, HashValue extraHash) {
     HashValue seed = 0;
     if (prevBlockHash != NONE_HASH) {
         HashCombine(seed, prevBlockHash);
@@ -98,9 +88,8 @@ HashValue ComputeHashValueForSeq(HashValue prevBlockHash, std::vector<TokenId> &
 // Most important API of SeqsBlocksComputedTracker, used to get cached and COMPUTED tokens for whole token sequences
 // At first update token sequence's prefix hashes, then use binary search to find the longest cached and COMPUTED prefix
 // blocks.
-size_t SeqsBlocksComputedTracker::GetCachedTokensNum(
-    const SequenceSPtr &seq, size_t rankIdx, std::vector<HashValue> &blockHashes, bool seqPrefillFlag)
-{
+size_t SeqsBlocksComputedTracker::GetCachedTokensNum(const SequenceSPtr &seq, size_t rankIdx,
+                                                     std::vector<HashValue> &blockHashes, bool seqPrefillFlag) {
     if (!enableCaching_) {
         return 0;
     }
@@ -125,8 +114,7 @@ size_t SeqsBlocksComputedTracker::GetCachedTokensNum(
 }
 
 /// Used by scheduler to enforce budget.
-size_t SeqsBlocksComputedTracker::GetCachedTokensNum(const SequenceSPtr &seq)
-{
+size_t SeqsBlocksComputedTracker::GetCachedTokensNum(const SequenceSPtr &seq) {
     const std::vector<TokenId> tokenIds = seq->GetTokenIds();
     HashValue extraHash = seq->GetExtraHash();
     bool seqPrefillFlag = seq->IsPrefill();
@@ -159,7 +147,7 @@ size_t SeqsBlocksComputedTracker::GetCachedTokensNum(const SequenceSPtr &seq)
         HashValue blockHash = ComputeHashValueForSeq(prevBlockHash, blockTokenIds, extraHash);
         blockHashes.push_back(blockHash);
         prevBlockHash = blockHash;
-        
+
         // 2. 查询该block 是否命中
         bool cacheBlockFlag = allocator_->FindCachedBlockPrefix(rankIdx, blockHash);
         if (cacheBlockFlag) {
@@ -173,8 +161,7 @@ size_t SeqsBlocksComputedTracker::GetCachedTokensNum(const SequenceSPtr &seq)
     return cachedTokensNum;
 }
 
-void SeqsBlocksComputedTracker::RemoveSeq(SequenceId seqId)
-{
+void SeqsBlocksComputedTracker::RemoveSeq(SequenceId seqId) {
     // 虚推请求跳过 PrefixCache，没有注册到 seqIdToNumComputedTokens_，直接返回
     if (!enableCaching_ || seqId == SIMULATE_SEQUENCE_ID) {
         return;
@@ -183,15 +170,13 @@ void SeqsBlocksComputedTracker::RemoveSeq(SequenceId seqId)
         if (seqIdToNumComputedTokens_.find({seqId, rankIdx}) == seqIdToNumComputedTokens_.end()) {
             throw std::runtime_error(
                 "seqId is not recorded in the number of computed tokens table, "
-                "cannot remove seqId!"
-            );
+                "cannot remove seqId!");
         }
         seqIdToNumComputedTokens_.erase({seqId, rankIdx});
     }
 }
 
-void SeqsLastAccessBlocksTracker::AddSeq(SequenceId seqId)
-{
+void SeqsLastAccessBlocksTracker::AddSeq(SequenceId seqId) {
     // make sure seqId has not been in the Tracker
     if (seqIdToLastAccessTime_.find(seqId) != seqIdToLastAccessTime_.end()) {
         throw std::runtime_error("seqId is already recorded the last access time table, add seqId fail!");
@@ -199,16 +184,14 @@ void SeqsLastAccessBlocksTracker::AddSeq(SequenceId seqId)
     seqIdToLastAccessTime_[seqId] = -1;
 }
 
-void SeqsLastAccessBlocksTracker::RemoveSeq(SequenceId seqId)
-{
+void SeqsLastAccessBlocksTracker::RemoveSeq(SequenceId seqId) {
     if (seqIdToLastAccessTime_.find(seqId) == seqIdToLastAccessTime_.end()) {
         throw std::runtime_error("seqId is not recorded the last access time table, cannot remove seqId!");
     }
     seqIdToLastAccessTime_.erase(seqId);
 }
 
-void SeqsLastAccessBlocksTracker::UpdateSeqLastAccess(SequenceId seqId, TimeStamp time)
-{
+void SeqsLastAccessBlocksTracker::UpdateSeqLastAccess(SequenceId seqId, TimeStamp time) {
     if (seqIdToLastAccessTime_.find(seqId) == seqIdToLastAccessTime_.end()) {
         throw std::runtime_error(
             "seqId is not recorded the last access time table, cannot update last access time to seqId!");
@@ -216,9 +199,8 @@ void SeqsLastAccessBlocksTracker::UpdateSeqLastAccess(SequenceId seqId, TimeStam
     seqIdToLastAccessTime_[seqId] = time;
 }
 
-void SeqsLastAccessBlocksTracker::UpdateSeqBlocksLastAccess(
-    SequenceId seqId, std::vector<std::vector<BlockId>> &rankedBlockIds)
-{
+void SeqsLastAccessBlocksTracker::UpdateSeqBlocksLastAccess(SequenceId seqId,
+                                                            std::vector<std::vector<BlockId>> &rankedBlockIds) {
     if (seqIdToLastAccessTime_.find(seqId) == seqIdToLastAccessTime_.end()) {
         throw std::runtime_error(
             "seqId is not recorded the last access time table, cannot update last access time to blocks of seqId!");
@@ -229,4 +211,4 @@ void SeqsLastAccessBlocksTracker::UpdateSeqBlocksLastAccess(
     }
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

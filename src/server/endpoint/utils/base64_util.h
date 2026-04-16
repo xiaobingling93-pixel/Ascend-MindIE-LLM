@@ -13,16 +13,18 @@
 #ifndef MIES_BASE64_UTIL_H
 #define MIES_BASE64_UTIL_H
 
-#include <string>
 #include <openssl/bio.h>
+
+#include <string>
 
 namespace mindie_llm {
 class Base64Util {
-public:
+   public:
     static std::string Encode(const std::string &input);
-private:
+
+   private:
     static void CleanBio(BIO *bio);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_BASE64_UTIL_H
+#endif  // MIES_BASE64_UTIL_H

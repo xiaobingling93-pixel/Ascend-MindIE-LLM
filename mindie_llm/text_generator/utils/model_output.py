@@ -49,6 +49,6 @@ class ModelOutputWrapper:
             sampling_metadata=None,
             sampling_output=None,
             trace_ids=None,
-            current_dp_sequence_ids=np.array([])
+            current_dp_sequence_ids=np.array([]),
         )
         return empty_wrapper

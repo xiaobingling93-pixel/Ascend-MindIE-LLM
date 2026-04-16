@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "hashless_block_allocator.h"
 
 using namespace std;
@@ -18,8 +18,7 @@ namespace mindie_llm {
 
 HashLessBlockAllocator::HashLessBlockAllocator(BlockId beginBlockId, size_t numBlocks, size_t blockSize,
                                                BlockObjPoolSPtr blockObjPool)
-    : blockSize_(blockSize), blockObjPool_(blockObjPool)
-{
+    : blockSize_(blockSize), blockObjPool_(blockObjPool) {
     for (size_t blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
         allBlockIndices_.push_back(blockIdx + beginBlockId);
         freeBlockIndices_.push_back(blockIdx + beginBlockId);
@@ -30,8 +29,7 @@ HashLessBlockAllocator::HashLessBlockAllocator(BlockId beginBlockId, size_t numB
     blockObjPool_ = blockObjPool;
 }
 
-BlockId HashLessBlockAllocator::AllocateBlockId()
-{
+BlockId HashLessBlockAllocator::AllocateBlockId() {
     if (freeBlockIndices_.empty()) {
         throw std::runtime_error("BlockAllocator Error: No Free Blocks!");
     }
@@ -44,8 +42,7 @@ BlockId HashLessBlockAllocator::AllocateBlockId()
 // HashValue型入参extraHash只有虚基类BlockAllocator的其他派生类的同名虚函数会用到
 // 在此处参数列表中省略该入参变量名，避免Unused Parameter告警
 BlockObjSPtr HashLessBlockAllocator::AllocateMutableBlock(std::vector<TokenId> &tokenIds, BlockObjSPtr prevBlock,
-                                                          [[maybe_unused]] HashValue extraHash)
-{
+                                                          [[maybe_unused]] HashValue extraHash) {
     BlockId newBlockId = AllocateBlockId();
     BlockObjSPtr mutableHashLessBlockObj = blockObjPool_->AcquireObj();
     BlockAllocatorSPtr blockAllocatorPtr = shared_from_this();
@@ -57,8 +54,7 @@ BlockObjSPtr HashLessBlockAllocator::AllocateMutableBlock(std::vector<TokenId> &
 // HashValue型入参extraHash只有虚基类BlockAllocator的其他派生类的同名虚函数会用到
 // 在此处参数列表中省略该入参变量名，避免Unused Parameter告警
 BlockObjSPtr HashLessBlockAllocator::AllocateImmutableBlock(std::vector<TokenId> &tokenIds, BlockObjSPtr prevBlock,
-                                                            [[maybe_unused]] HashValue extraHash)
-{
+                                                            [[maybe_unused]] HashValue extraHash) {
     std::vector<TokenId> emptyTokenIds = {};
     BlockObjSPtr immutableHashLessBlockObj = AllocateMutableBlock(emptyTokenIds, prevBlock);
     AppendTokenIds(immutableHashLessBlockObj, tokenIds);
@@ -68,8 +64,7 @@ BlockObjSPtr HashLessBlockAllocator::AllocateImmutableBlock(std::vector<TokenId>
 // HashValue型入参extraHash只有虚基类BlockAllocator的其他派生类的同名虚函数会用到
 // 在此处参数列表中省略该入参变量名，避免Unused Parameter告警
 std::vector<BlockObjSPtr> HashLessBlockAllocator::AllocateImmutableBlocks(
-    std::vector<std::vector<TokenId>> &tokenChunks, BlockObjSPtr prevBlock, [[maybe_unused]] HashValue extraHash)
-{
+    std::vector<std::vector<TokenId>> &tokenChunks, BlockObjSPtr prevBlock, [[maybe_unused]] HashValue extraHash) {
     size_t numBlocks = tokenChunks.size();
 
     std::vector<BlockId> allocatedBlockIds = {};
@@ -91,8 +86,7 @@ std::vector<BlockObjSPtr> HashLessBlockAllocator::AllocateImmutableBlocks(
     return immutableHashLessBlockObjs;
 }
 
-void HashLessBlockAllocator::FreeBlockId(BlockObjSPtr &block)
-{
+void HashLessBlockAllocator::FreeBlockId(BlockObjSPtr &block) {
     BlockId blockId = block->GetBlockId();
     RefCount refCount = refCounterSPtr_->Decrease(blockId);
     if (refCount == 0) {
@@ -101,16 +95,14 @@ void HashLessBlockAllocator::FreeBlockId(BlockObjSPtr &block)
     block->ResetBlockId();
 }
 
-void HashLessBlockAllocator::Free(BlockObjSPtr &block, bool keepBlockObj)
-{
+void HashLessBlockAllocator::Free(BlockObjSPtr &block, bool keepBlockObj) {
     FreeBlockId(block);
     if (!keepBlockObj) {
         blockObjPool_->FreeObj(block);
     }
 }
 
-std::vector<BlockObjSPtr> HashLessBlockAllocator::Fork(BlockObjSPtr &lastBlockObj)
-{
+std::vector<BlockObjSPtr> HashLessBlockAllocator::Fork(BlockObjSPtr &lastBlockObj) {
     std::deque<BlockObjSPtr> sourceBlocks = {};
     BlockObjSPtr visitBlockObj = lastBlockObj;
     while (visitBlockObj) {
@@ -144,14 +136,12 @@ size_t HashLessBlockAllocator::GetNumTotalBlocks() const { return allBlockIndice
 
 size_t HashLessBlockAllocator::GetNumFreeBlock() const { return freeBlockIndices_.size(); }
 
-std::vector<std::pair<BlockId, BlockId>> HashLessBlockAllocator::ClearCopyOnWrites()
-{
+std::vector<std::pair<BlockId, BlockId>> HashLessBlockAllocator::ClearCopyOnWrites() {
     std::vector<std::pair<BlockId, BlockId>> ret = cowTracker_.ClearCows();
     return ret;
 }
 
-BlockId HashLessBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block)
-{
+BlockId HashLessBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block) {
     BlockId srcBlockId = block->GetBlockId();
     if (cowTracker_.IsAppendable(srcBlockId)) {
         return srcBlockId;
@@ -165,14 +155,12 @@ BlockId HashLessBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block)
 
 // std::vector<std::vector<BlockId>> &型入参只有虚基类BlockAllocator的其他派生类的同名虚函数会用到
 // 在此处参数列表中省略该入参变量名，避免Unused Parameter告警
-std::vector<BlockId>
-HashLessBlockAllocator::GetCommonComputedBlockIds([[maybe_unused]] const std::vector<std::vector<BlockId>> &id)
-{
+std::vector<BlockId> HashLessBlockAllocator::GetCommonComputedBlockIds(
+    [[maybe_unused]] const std::vector<std::vector<BlockId>> &id) {
     return std::vector<BlockId>();
 }
 
-size_t HashLessBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks)
-{
+size_t HashLessBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks) {
     size_t numFullBlocks = 0;
     for (BlockObjSPtr block : blocks) {
         if (block->IsFull()) {
@@ -182,16 +170,14 @@ size_t HashLessBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockOb
     return numFullBlocks;
 }
 
-void HashLessBlockAllocator::SwapOut(std::vector<BlockObjSPtr> &blocks)
-{
+void HashLessBlockAllocator::SwapOut(std::vector<BlockObjSPtr> &blocks) {
     // 对于换出目标block，释放并重置其blockId，但是保留其原有block对象
     for (BlockObjSPtr block : blocks) {
         FreeBlockId(block);
     }
 }
 
-void HashLessBlockAllocator::SwapIn(std::vector<BlockObjSPtr> &blocks)
-{
+void HashLessBlockAllocator::SwapIn(std::vector<BlockObjSPtr> &blocks) {
     // 分配新的Immutable或Mutable Block对象并取其blockId
     for (BlockObjSPtr block : blocks) {
         if (block == nullptr) {
@@ -217,50 +203,41 @@ float HashLessBlockAllocator::GetPrefixCacheHitRate() const { return -1; }
 
 bool HashLessBlockAllocator::ResetPrefixCache() { return true; }
 
-bool HashLessBlockAllocator::FindCachedBlockPrefix([[maybe_unused]] HashValue blockHash) const
-{
-    return false;
-}
+bool HashLessBlockAllocator::FindCachedBlockPrefix([[maybe_unused]] HashValue blockHash) const { return false; }
 
 // std::vector<HashValue> &型入参只有虚基类BlockAllocator的其他派生类的同名虚函数会用到
 // 在此处参数列表中省略该入参变量名，避免Unused Parameter告警
-std::vector<BlockId>
-HashLessBlockAllocator::FindCachedBlocksPrefix([[maybe_unused]] std::vector<HashValue> &blockHashes) const
-{
+std::vector<BlockId> HashLessBlockAllocator::FindCachedBlocksPrefix(
+    [[maybe_unused]] std::vector<HashValue> &blockHashes) const {
     return std::vector<BlockId>();
 }
 
 // 在hashless block中函数不使用
-BlockId HashLessBlockAllocator::PromoteToImmutableBlock([[maybe_unused]] const BlockObjSPtr &block)
-{
+BlockId HashLessBlockAllocator::PromoteToImmutableBlock([[maybe_unused]] const BlockObjSPtr &block) {
     throw std::runtime_error("There is no promotion for naive blocks");
 }
 
-size_t HashLessBlockAllocator::GetCachedBlockNum([[maybe_unused]] std::vector<HashValue> &hashValues)
-{
+size_t HashLessBlockAllocator::GetCachedBlockNum([[maybe_unused]] std::vector<HashValue> &hashValues) {
     throw std::runtime_error("There is no block cached info for naive blocks");
 }
 
 // 在hashless block中函数不使用
 void HashLessBlockAllocator::MarkBlocksAsAccessed([[maybe_unused]] const std::vector<BlockId> &blockIds,
-                                                  [[maybe_unused]] float now)
-{
+                                                  [[maybe_unused]] float now) {
     return;
 }
 
 // 在hashless block中函数不使用
 void HashLessBlockAllocator::MarkBlocksAsComputed() { return; }
 
-void HashLessBlockAllocator::AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds)
-{
+void HashLessBlockAllocator::AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds) {
     blockObj->AppendTokenIds(tokenIds);
-    BlockId blockId = CowBlockIfNotAppendable(blockObj); // CoW
+    BlockId blockId = CowBlockIfNotAppendable(blockObj);  // CoW
     blockObj->SetBlockId(blockId);
 }
 
-void HashLessBlockAllocator::ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken)
-{
+void HashLessBlockAllocator::ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken) {
     blockObj->ReplaceToken(startIndex, newToken);
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

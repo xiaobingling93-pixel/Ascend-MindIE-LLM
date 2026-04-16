@@ -23,6 +23,7 @@ from mindie_llm.utils.log.logging import logger
 
 class Topo(str, Enum):
     """Enumerates supported inter-device communication topologies on Ascend NPUs."""
+
     pcie = "pcie"
     hccs = "hccs"
     xlink = "xlink"
@@ -30,6 +31,7 @@ class Topo(str, Enum):
 
 class DeviceType(str, Enum):
     """Enumerates supported Ascend NPU device types based on SoC name."""
+
     ASCEND_910B = "ASCEND_910B"
     ASCEND_910_93 = "ASCEND_910_93"
     ASCEND_310P = "ASCEND_310P"
@@ -58,6 +60,7 @@ class _DeviceInfo:
         Parsing occurs in `__post_init__`, and malformed lines may cause exceptions—
         callers should handle this (e.g., via try-except in parsing loops).
     """
+
     _info_line: str = ""
     npu_id: int = 0
     chip_id: int = 0
@@ -100,10 +103,10 @@ class _NPUNodeInfo:
         _pcie_info_cache (dict[int, str]): Cache of logical chip ID → PCIe bus ID (e.g., "0000:1a:00.0").
         _initialized (bool): Flag to prevent re-initialization in __init__.
     """
-    
+
     _instance = None
     _lock = threading.Lock()
-    
+
     def __new__(cls):
         """Implements thread-safe singleton creation using double-checked locking."""
         if cls._instance is None:
@@ -137,7 +140,7 @@ class _NPUNodeInfo:
             "Ascend310P3",
             "Ascend310P4",
             "Ascend310P5",
-            "Ascend310P7"
+            "Ascend310P7",
         }
         if self.soc_name in nz_only_names:
             self.only_supports_nz = True
@@ -159,8 +162,7 @@ class _NPUNodeInfo:
         # Find the position of "Legend" to avoid false positives in device table
         legend_index = npu_smi_info.find("Legend")
         # Check if either HCCS or XLink appears before the Legend section
-        if Topo.hccs in npu_smi_info[:legend_index].lower() or \
-            Topo.xlink in npu_smi_info[:legend_index].lower():
+        if Topo.hccs in npu_smi_info[:legend_index].lower() or Topo.xlink in npu_smi_info[:legend_index].lower():
             return True
         return False
 
@@ -263,13 +265,18 @@ class _NPUNodeInfo:
                 warn_msg = f"Can not get device info for device {device}, skipping PCIe binding for this device."
                 logger.warning(warn_msg)
                 raise RuntimeError(warn_msg)
-            pcie_info = execute_command(["npu-smi", "info", "-t", "board", "-i", f"{device_info.npu_id}",
-                                         "-c", f"{device_info.chip_id}"]).strip().split("\n")
+            pcie_info = (
+                execute_command(
+                    ["npu-smi", "info", "-t", "board", "-i", f"{device_info.npu_id}", "-c", f"{device_info.chip_id}"]
+                )
+                .strip()
+                .split("\n")
+            )
             for _ in pcie_info:
                 # Normalize the output string by removing spaces to handle hardware variations
-                line = ''.join(_.split())
+                line = "".join(_.split())
                 if line.startswith(keyword):
-                    pcie_id = line[len(keyword) + 1:]
+                    pcie_id = line[len(keyword) + 1 :]
                     device_pcie[device] = pcie_id
                     self._pcie_info_cache[device] = pcie_id  # cache for future calls
                     break
@@ -302,7 +309,7 @@ class _NPUNodeInfo:
             "Ascend910_9381",
             "Ascend910_9382",
             "Ascend910_9372",
-            "Ascend910_9362"
+            "Ascend910_9362",
         }:
             return DeviceType.ASCEND_910_93
         elif self.soc_name in {
@@ -311,7 +318,7 @@ class _NPUNodeInfo:
             "Ascend310P3",
             "Ascend310P4",
             "Ascend310P5",
-            "Ascend310P7"
+            "Ascend310P7",
         }:
             return DeviceType.ASCEND_310P
         else:
@@ -351,25 +358,26 @@ class _NPUHbmInfo:
         - Relies on `npu-smi` CLI for low-level hardware queries.
         - Adapts parsing logic based on SoC name (e.g., Ascend310B1) and data layout (`need_nz` flag).
     """
+
     _hbm_capacity: int = None
 
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls) -> '_NPUHbmInfo':
+    def __new__(cls) -> "_NPUHbmInfo":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     @staticmethod
     def get_hbm_capacity_usage() -> tuple[int, float]:
         """
         Retrieve total HBM (or DDR) capacity and current HBM (or DDR) usage ratio for the NPU.
 
         Returns:
-            tuple[int, float]: Total memory capacity in bytes, 
+            tuple[int, float]: Total memory capacity in bytes,
                 Memory usage ratio, e.g., 0.42 for 42% usage (adjusted to (value + 1) / 100).
         """
         free_mem, total_mem, _ = acl.rt.get_mem_info(1)
@@ -391,7 +399,7 @@ class _NPUHbmInfo:
             _capacity = cls.get_hbm_capacity_usage()[0]
             cls._hbm_capacity = _capacity
         return cls._hbm_capacity
-         
+
     @classmethod
     def get_hbm_usage(cls) -> float:
         """

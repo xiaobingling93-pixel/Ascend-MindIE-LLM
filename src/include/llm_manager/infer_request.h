@@ -16,10 +16,11 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "infer_tensor.h"
-#include "infer_request_id.h"
-#include "status.h"
+
 #include "data_type.h"
+#include "infer_request_id.h"
+#include "infer_tensor.h"
+#include "status.h"
 namespace mindie_llm {
 class InferRequestImpl;
 /// The InferRequest class is used to manage the input tensors of the inference process.
@@ -27,7 +28,7 @@ class InferRequestImpl;
 /// The InferRequest class provides methods to add and set input tensors, get request id,
 /// and get the status of the request, and it also provides methods required by the prefill and decode separation.
 class InferRequest {
-public:
+   public:
     explicit InferRequest(InferRequestId requestId);
 
     /// Add a tensor to the inference request.
@@ -36,7 +37,7 @@ public:
     /// \param tensorName The name of the tensor to add.
     /// \param tensor The tensor to add.
     /// \return The status of the operation AddTensor.
-    Status AddTensor(const std::string& tensorName, TensorPtr &tensor);
+    Status AddTensor(const std::string &tensorName, TensorPtr &tensor);
 
     /// Set a tensor to the inference request.
     ///
@@ -44,7 +45,7 @@ public:
     ///
     /// \param tensorName The name of the tensor to be set.
     /// \param tensor The tensor to be set.
-    void SetTensor(const std::string& tensorName, TensorPtr &tensor);
+    void SetTensor(const std::string &tensorName, TensorPtr &tensor);
 
     /// Get a tensor from the inference request with the specified name.
     ///
@@ -54,7 +55,7 @@ public:
     /// \param tensorName The name of the tensor to be acquired.
     /// \param tensor The tensor to be acquired.
     /// \return The status of the operation GetTensorByName.
-    Status GetTensorByName(const std::string& tensorName, TensorPtr &tensor);
+    Status GetTensorByName(const std::string &tensorName, TensorPtr &tensor);
 
     /// Delete a tensor from the inference request with the specified name.
     ///
@@ -118,9 +119,9 @@ public:
 
     ~InferRequest();
 
-private:
+   private:
     std::shared_ptr<InferRequestImpl> impl_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_LLM_INFERENCE_REQUEST_H
+#endif  // MINDIE_LLM_INFERENCE_REQUEST_H

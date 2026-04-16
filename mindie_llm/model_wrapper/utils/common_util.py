@@ -23,15 +23,15 @@ IP_PADDING_VALUE = -1
 
 
 class TaskType(Enum):
-    PREFILL = '1'
-    DECODE = '2'
-    CLEAR = '3'
-    ASSIGN_ROLE = '4'
-    UNLINK_P_NODE = '5'
-    D_NODE_TRANSFER = '10'
-    P_NODE_TRANSFER = '11'
-    MIX_INFER = '12'
-    DELETE_HOST_KEYS = '13'
+    PREFILL = "1"
+    DECODE = "2"
+    CLEAR = "3"
+    ASSIGN_ROLE = "4"
+    UNLINK_P_NODE = "5"
+    D_NODE_TRANSFER = "10"
+    P_NODE_TRANSFER = "11"
+    MIX_INFER = "12"
+    DELETE_HOST_KEYS = "13"
 
 
 class TransferType(Enum):
@@ -59,7 +59,7 @@ def get_ipv4_obj(ip_str, ip_field_name):
         ipv4 = ipaddress.IPv4Address(ip_str)
     except ipaddress.AddressValueError as e:
         raise ValueError(f"{ip_field_name}={ip_str} is invalid IPv4 address.") from e
-    
+
     return ipv4
 
 
@@ -68,7 +68,7 @@ def get_ipv6_obj(ip_str, ip_field_name):
         ipv6 = ipaddress.IPv6Address(ip_str)
     except ipaddress.AddressValueError as e:
         raise ValueError(f"{ip_field_name}={ip_str} is invalid IPv6 address.") from e
-    
+
     return ipv6
 
 
@@ -78,7 +78,7 @@ def get_ip_obj(ip_str, ip_field_name):
         ip_obj = ipaddress.ip_address(ip_str)
     except ValueError as e:
         raise ValueError(f"{ip_field_name}={ip_str} is invalid IP address.") from e
-    
+
     if ip_obj.version == 4:
         return get_ipv4_obj(ip_str, ip_field_name)
     elif ip_obj.version == 6:
@@ -89,7 +89,7 @@ def get_ip_obj(ip_str, ip_field_name):
 
 def ipv4_to_list(ip_str):
     """将 IPv4 字符串转换为前 4 个为真实值，后 4 个为 IP_PADDING_VALUE 的列表"""
-    parts = ip_str.split('.')
+    parts = ip_str.split(".")
     if len(parts) != 4:
         raise ValueError(f"{ip_str} is invalid IPv4 format.")
     ip_list = []
@@ -101,7 +101,7 @@ def ipv4_to_list(ip_str):
             raise ValueError(f"IPv4 segment '{num}' out of range [0, 255].")
         ip_list.append(num)
     ip_list.extend([IP_PADDING_VALUE] * 4)
-    
+
     return ip_list
 
 
@@ -117,7 +117,7 @@ def ipv6_to_list(ip_str):
     for i in range(8):
         value = (ipv6.packed[i * 2] << 8) + ipv6.packed[i * 2 + 1]
         ip_list.append(value)
-    
+
     return ip_list
 
 
@@ -148,8 +148,8 @@ def ip_array_to_ipv4(ip_array):
         if not (0 <= num <= 255):
             raise ValueError(f"IPv4 segment '{num}' is out of range [0, 255].")
         parts.append(str(num))
-    ipv4_str = '.'.join(parts)
-    
+    ipv4_str = ".".join(parts)
+
     return ipv4_str
 
 
@@ -161,9 +161,9 @@ def ip_array_to_ipv6(ip_array):
             raise ValueError(f"IPv6 segment '{hex(num)}' is out of range [0, 0xFFFF].")
         byte_parts.append(num >> 8)
         byte_parts.append(num & 0xFF)
-    ipv6_obj = ipaddress.IPv6Address(bytes(byte_parts)) # 自动压缩输出
+    ipv6_obj = ipaddress.IPv6Address(bytes(byte_parts))  # 自动压缩输出
     ipv6_str = str(ipv6_obj)
-    
+
     return ipv6_str
 
 
@@ -208,7 +208,7 @@ def generate_mem_pool_decisions(requests, transfer_operation):
         return None
     try:
         raw_bytes = bytes(tensor_data)
-        decisions_str = raw_bytes.decode('utf-8').strip()
+        decisions_str = raw_bytes.decode("utf-8").strip()
         decisions = np.array(ast.literal_eval(decisions_str))
         if transfer_operation == TransferType.H2H_PULL:
             decisions = decisions.reshape(-1, BLOCK_OP_SIZE + 1)
@@ -236,6 +236,6 @@ def split_list_equally(lst, n):
         raise ValueError(f"Number of chunks {n} must be greater than 0")
     if len(lst) % n != 0:
         raise ValueError(f"Length {len(lst)} of the list cannot be divided evenly by {n}")
-    
+
     chunk_size = len(lst) // n
-    return [lst[i * chunk_size: (i + 1) * chunk_size] for i in range(n)]
+    return [lst[i * chunk_size : (i + 1) * chunk_size] for i in range(n)]

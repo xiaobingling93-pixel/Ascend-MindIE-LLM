@@ -13,9 +13,9 @@
 #ifndef MATH_UTILS_H
 #define MATH_UTILS_H
 
+#include <cmath>
 #include <functional>
 #include <stdexcept>
-#include <cmath>
 
 #include "basic_types.h"
 
@@ -25,8 +25,7 @@ constexpr int HASH_SHIFT_LEFT = 6;
 constexpr int HASH_SHIFT_RIGHT = 2;
 
 template <class T>
-inline void HashCombine(HashValue &seed, const T &v)
-{
+inline void HashCombine(HashValue &seed, const T &v) {
     std::hash<T> hasher;
     HashValue hv = static_cast<HashValue>(hasher(v));
     constexpr HashValue kMul = 0x9e3779b97f4a7c15ULL;  // 64 位黄金分割常数，比 32 位版本更稳定
@@ -37,8 +36,7 @@ inline void HashCombine(HashValue &seed, const T &v)
 }
 
 template <typename T>
-T CeilDiv(T dividend, T divisor)
-{
+T CeilDiv(T dividend, T divisor) {
     static_assert(std::is_integral<T>::value, "CeilDiv only supports integral types");
     if (divisor == 0) {
         throw std::invalid_argument("Divisor cannot be zero");
@@ -47,8 +45,7 @@ T CeilDiv(T dividend, T divisor)
 }
 
 template <typename T>
-bool IsClose(T a, T b, T relTol = 1e-6f, T absTol = 1e-6f)
-{
+bool IsClose(T a, T b, T relTol = 1e-6f, T absTol = 1e-6f) {
     static_assert(std::is_floating_point_v<T>, "IsClose requires floating-point types");
     if (relTol < T(0) || absTol < T(0)) {
         throw std::invalid_argument("Tolerances must be non-negative");
@@ -56,6 +53,6 @@ bool IsClose(T a, T b, T relTol = 1e-6f, T absTol = 1e-6f)
     return std::fabs(a - b) <= std::max(absTol, relTol * std::max(std::fabs(a), std::fabs(b)));
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MATH_UTILS_H
+#endif  // MATH_UTILS_H

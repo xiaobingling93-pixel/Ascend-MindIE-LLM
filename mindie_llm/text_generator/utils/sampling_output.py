@@ -32,12 +32,12 @@ class SamplingOutput:
 
     def to_deprecated(self):
         return self.token_ids, self.logprobs
-    
+
     def truncate_after_eos(self, eos_token_id: int):
         """
         Truncates the token_ids after the first occurrence of the EOS token in each row,
         and updates num_new_tokens accordingly.
-        
+
         :param eos_token_id: The ID of the EOS (End Of Sequence) token.
         """
         for i in range(self.token_ids.shape[0]):
@@ -46,7 +46,7 @@ class SamplingOutput:
             if eos_index.size > 0:
                 eos_index = eos_index[0]
                 # Truncate the token_ids after the first EOS
-                self.token_ids[i, eos_index + 1:] = 0  # Optionally set to 0 or any padding value
+                self.token_ids[i, eos_index + 1 :] = 0  # Optionally set to 0 or any padding value
                 self.num_new_tokens[i] = eos_index + 1  # Update the num_new_tokens
             else:
                 # If no EOS token is found, num_new_tokens remains unchanged

@@ -21,7 +21,7 @@
 
 namespace mindie_llm {
 class RequestSingleBlockManager : public BlockSpaceManager {
-public:
+   public:
     explicit RequestSingleBlockManager(const BlockManagerConfig &config, size_t localDPRank = 0);
 
     AllocStatus CanAllocate(const SequenceGroupSPtr &seqGroup) const override;
@@ -33,7 +33,7 @@ public:
     bool CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) const override;
     void AppendSlotNew(const SequenceGroupSPtr &seqGroup) override;
 
-    void AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId>& tokens) override;
+    void AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId> &tokens) override;
 
     void Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq) override;
 
@@ -67,10 +67,11 @@ public:
 
     std::vector<BlockId> GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs) override;
     std::vector<size_t> GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) override;
-    std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
-                                                  size_t computedLens, uint32_t tpSize, std::string modelName) override;
-    std::vector<size_t> GetAllRankRemoteComputedBlockIds(
-        const std::vector<SequenceSPtr> &seqs, std::vector<size_t> &computedBlocksNum, std::string modelName) override;
+    std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs, size_t computedLens,
+                                                   uint32_t tpSize, std::string modelName) override;
+    std::vector<size_t> GetAllRankRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+                                                         std::vector<size_t> &computedBlocksNum,
+                                                         std::string modelName) override;
 
     void MarkBlocksAsComputed() override;
     float GetPrefixCacheHitRate() const override;
@@ -86,8 +87,7 @@ public:
 
     void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank) override;
 
-    void LwdGetCloudRankedBlockIds(SequenceId seqId,
-        std::vector<std::vector<BlockId>> &rankedBlockIds) const override;
+    void LwdGetCloudRankedBlockIds(SequenceId seqId, std::vector<std::vector<BlockId>> &rankedBlockIds) const override;
 
     size_t LwdGetCloudLatestAppendedRankId(SequenceId seqId) const override;
 
@@ -95,15 +95,15 @@ public:
 
     std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const override;
 
-private:
+   private:
     struct RequestEntry {
-        BlockObjSPtr block;   // single block object for this request
-        size_t refCount{0};   // number of sequences currently referencing this request entry
+        BlockObjSPtr block;  // single block object for this request
+        size_t refCount{0};  // number of sequences currently referencing this request entry
     };
 
-    const RequestId* GetRequestIdBySeqId_(SequenceId seqId) const;
-    RequestEntry* GetEntryByRequestId_(const RequestId &rid);
-    const RequestEntry* GetEntryByRequestId_(const RequestId &rid) const;
+    const RequestId *GetRequestIdBySeqId_(SequenceId seqId) const;
+    RequestEntry *GetEntryByRequestId_(const RequestId &rid);
+    const RequestEntry *GetEntryByRequestId_(const RequestId &rid) const;
 
     size_t blockSize_{0};
     size_t cpuBlockNum_{0};
@@ -121,4 +121,4 @@ private:
     // requestId -> entry
     std::unordered_map<RequestId, RequestEntry> requestEntries_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

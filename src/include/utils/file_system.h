@@ -9,17 +9,17 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_UTILS_FILESYSTEM_H
 #define MINDIE_LLM_UTILS_FILESYSTEM_H
 #include <string>
 
 namespace mindie_llm {
 class FileSystem {
-public:
+   public:
     static bool Exists(const std::string &path);
     static bool MakeDir(const std::string &dirPath, int mode);
     static bool Makedirs(const std::string &dirPath, const mode_t mode);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

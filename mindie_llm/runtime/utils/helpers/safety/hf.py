@@ -19,23 +19,26 @@ from mindie_llm.runtime.utils.helpers.safety.path import standardize_path
 from mindie_llm.runtime.utils.helpers.safety.url import filter_urls_from_error
 
 
-EXTRA_EXP_INFO = "Please check the input parameters model_path, kwargs and the version of transformers. " \
-                 + "If the input parameters are valid, the required files exist in model_path and " \
-                 + "the version of transformers is correct, make sure the folder's owner has execute permission. " \
-                 + "Otherwise, please check the function stack for detailed exception information " \
-                 + "and the logs of the llmmodels."
+EXTRA_EXP_INFO = (
+    "Please check the input parameters model_path, kwargs and the version of transformers. "
+    + "If the input parameters are valid, the required files exist in model_path and "
+    + "the version of transformers is correct, make sure the folder's owner has execute permission. "
+    + "Otherwise, please check the function stack for detailed exception information "
+    + "and the logs of the llmmodels."
+)
 
 
 def check_file_and_catch_exception_decorator(func):
     """
     Decorator for Huggingface model loading functions to enforce path validation and exception handling.
-    
+
     Args:
         func: Huggingface model loading function to wrap
-    
+
     Returns:
         Wrapped function with path validation and exception handling
     """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         model_path = standardize_path(args[0], check_link=False)
@@ -50,6 +53,7 @@ def check_file_and_catch_exception_decorator(func):
             filtered_error = filter_urls_from_error(error)
             logger.error(filtered_error)
             raise ValueError(f"{func.__name__} failed. " + EXTRA_EXP_INFO) from filtered_error
+
     return wrapper
 
 

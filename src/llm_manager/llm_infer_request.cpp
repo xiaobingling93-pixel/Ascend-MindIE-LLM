@@ -14,125 +14,66 @@
 #include "llm_manager/infer_request_impl.h"
 #include "log.h"
 namespace mindie_llm {
-InferRequest::InferRequest(InferRequestId requestId)
-{
-    impl_ = std::make_shared<InferRequestImpl>(requestId);
-}
+InferRequest::InferRequest(InferRequestId requestId) { impl_ = std::make_shared<InferRequestImpl>(requestId); }
 
-Status InferRequest::AddTensor(const std::string& tensorName, TensorPtr &tensor)
-{
+Status InferRequest::AddTensor(const std::string &tensorName, TensorPtr &tensor) {
     return impl_->AddTensor(tensorName, tensor);
 }
 
-void InferRequest::SetTensor(const std::string& tensorName, TensorPtr &tensor)
-{
-    impl_->SetTensor(tensorName, tensor);
-}
+void InferRequest::SetTensor(const std::string &tensorName, TensorPtr &tensor) { impl_->SetTensor(tensorName, tensor); }
 
-Status InferRequest::GetTensorByName(const std::string& tensorName, TensorPtr &tensor)
-{
+Status InferRequest::GetTensorByName(const std::string &tensorName, TensorPtr &tensor) {
     return impl_->GetTensorByName(tensorName, tensor);
 }
 
-Status InferRequest::DelTensorByName(const std::string &name)
-{
-    return impl_->DelTensorByName(name);
-}
+Status InferRequest::DelTensorByName(const std::string &name) { return impl_->DelTensorByName(name); }
 
-InferRequestId InferRequest::GetRequestId() const
-{
-    return impl_->GetRequestId();
-}
+InferRequestId InferRequest::GetRequestId() const { return impl_->GetRequestId(); }
 
-Status InferRequest::SetMaxOutputLen(uint32_t maxOutputLen)
-{
-    return impl_->SetMaxOutputLen(maxOutputLen);
-}
+Status InferRequest::SetMaxOutputLen(uint32_t maxOutputLen) { return impl_->SetMaxOutputLen(maxOutputLen); }
 
-uint32_t InferRequest::GetMaxOutputLen() const
-{
-    return impl_->GetMaxOutputLen();
-}
+uint32_t InferRequest::GetMaxOutputLen() const { return impl_->GetMaxOutputLen(); }
 
-std::shared_ptr<mindie_llm::InferRequestImpl> InferRequest::GetRequestInner() const
-{
+std::shared_ptr<mindie_llm::InferRequestImpl> InferRequest::GetRequestInner() const {
     if (impl_ == nullptr) {
         MINDIE_LLM_LOG_ERROR("RequestInner in InferRequest is null");
     }
     return impl_;
 }
 
-const TensorMap &InferRequest::ImmutableInputs() const
-{
-    return impl_->ImmutableInputs();
-}
+const TensorMap &InferRequest::ImmutableInputs() const { return impl_->ImmutableInputs(); }
 
-void InferRequest::SetReqType(mindie_llm::InferReqType reqType)
-{
-    impl_->SetReqType(reqType);
-}
+void InferRequest::SetReqType(mindie_llm::InferReqType reqType) { impl_->SetReqType(reqType); }
 
-mindie_llm::InferReqType InferRequest::GetReqType() const
-{
-    return impl_->GetReqType();
-}
+mindie_llm::InferReqType InferRequest::GetReqType() const { return impl_->GetReqType(); }
 
-void InferRequest::SetRecompute(bool isRecompute)
-{
-    impl_->SetRecompute(isRecompute);
-}
+void InferRequest::SetRecompute(bool isRecompute) { impl_->SetRecompute(isRecompute); }
 
-bool InferRequest::IsRecompute() const
-{
-    return impl_->IsRecompute();
-}
+bool InferRequest::IsRecompute() const { return impl_->IsRecompute(); }
 
-bool InferRequest::IsPrefillReq() const
-{
-    return impl_->IsPrefillReq();
-}
+bool InferRequest::IsPrefillReq() const { return impl_->IsPrefillReq(); }
 
-bool InferRequest::IsDecodeReq() const
-{
-    return impl_->IsDecodeReq();
-}
+bool InferRequest::IsDecodeReq() const { return impl_->IsDecodeReq(); }
 
-void InferRequest::SetDTarget(std::string &dTarget)
-{
-    impl_->SetDTarget(dTarget);
-}
+void InferRequest::SetDTarget(std::string &dTarget) { impl_->SetDTarget(dTarget); }
 
-std::string InferRequest::GetDTarget() const
-{
-    return impl_->GetDTarget();
-}
+std::string InferRequest::GetDTarget() const { return impl_->GetDTarget(); }
 
-void InferRequest::SetPrefillAddr(std::string &prefillAddr)
-{
-    impl_->SetPrefillAddr(prefillAddr);
-}
+void InferRequest::SetPrefillAddr(std::string &prefillAddr) { impl_->SetPrefillAddr(prefillAddr); }
 
-std::string InferRequest::GetPrefillAddr() const
-{
-    return impl_->GetPrefillAddr();
-}
+std::string InferRequest::GetPrefillAddr() const { return impl_->GetPrefillAddr(); }
 
-void InferRequest::SetSrcBlockTable(const std::vector<int64_t> &srcBlockTable)
-{
+void InferRequest::SetSrcBlockTable(const std::vector<int64_t> &srcBlockTable) {
     impl_->SetSrcBlockTable(srcBlockTable);
 }
 
-std::vector<int64_t> InferRequest::GetSrcBlockTable() const
-{
-    return impl_->GetSrcBlockTable();
-}
+std::vector<int64_t> InferRequest::GetSrcBlockTable() const { return impl_->GetSrcBlockTable(); }
 
-void InferRequest::SetDpInstanceIds(const std::vector<uint64_t> &dpInstanceIds)
-{
+void InferRequest::SetDpInstanceIds(const std::vector<uint64_t> &dpInstanceIds) {
     impl_->SetDpInstanceIds(dpInstanceIds);
 }
 
 std::vector<uint64_t> InferRequest::GetDpInstanceIds() const { return impl_->GetDpInstanceIds(); }
 
 InferRequest::~InferRequest() = default;
-}
+}  // namespace mindie_llm

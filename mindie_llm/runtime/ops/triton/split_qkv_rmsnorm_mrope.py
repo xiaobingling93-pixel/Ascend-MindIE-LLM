@@ -97,7 +97,7 @@ def split_qkv_rmsnorm_mrope_kernel(
             t_mask = cos_offsets < mrope_section_t
             h_mask = (mrope_section_t - 1 < cos_offsets) & (cos_offsets < mrope_section_t + mrope_section_h)
             w_mask = (mrope_section_t + mrope_section_h - 1 < cos_offsets) & (
-                    cos_offsets < mrope_section_t + mrope_section_h + mrope_section_w
+                cos_offsets < mrope_section_t + mrope_section_h + mrope_section_w
             )
 
         t_cos_offset = cos_sin_ptr + (block_offset + index) * rope_dim
@@ -169,9 +169,7 @@ def split_qkv_rmsnorm_mrope_kernel(
             strides=(1, 1),
         )
         if IS_PARTIAL_ROPE:
-            orig_qk = tl.extract_slice(q_normalized, offsets=(0, 0),
-                                       sizes=(num_q_heads, rope_dim),
-                                       strides=(1, 1))
+            orig_qk = tl.extract_slice(q_normalized, offsets=(0, 0), sizes=(num_q_heads, rope_dim), strides=(1, 1))
         else:
             orig_qk = q_normalized
         roped_q = cat_x * sin_tensor + orig_qk * cos_tensor
@@ -205,18 +203,17 @@ def split_qkv_rmsnorm_mrope_kernel(
             strides=(1, 1),
         )
         if IS_PARTIAL_ROPE:
-            orig_qk = tl.extract_slice(k_normalized, offsets=(0, 0), sizes=(num_kv_heads, rope_dim),
-                                      strides=(1, 1))
+            orig_qk = tl.extract_slice(k_normalized, offsets=(0, 0), sizes=(num_kv_heads, rope_dim), strides=(1, 1))
         else:
             orig_qk = k_normalized
         roped_k = cat_y * sin_tensor + orig_qk * cos_tensor
         if IS_PARTIAL_ROPE:
-            q_normalized = tl.insert_slice(q_normalized, roped_q,
-                                           offsets=(0, 0), sizes=(num_q_heads, rope_dim),
-                                           strides=(1, 1)).to(tl.bfloat16)
-            k_normalized = tl.insert_slice(k_normalized, roped_k,
-                                            offsets=(0, 0), sizes=(num_kv_heads, rope_dim),
-                                            strides=(1, 1)).to(tl.bfloat16)
+            q_normalized = tl.insert_slice(
+                q_normalized, roped_q, offsets=(0, 0), sizes=(num_q_heads, rope_dim), strides=(1, 1)
+            ).to(tl.bfloat16)
+            k_normalized = tl.insert_slice(
+                k_normalized, roped_k, offsets=(0, 0), sizes=(num_kv_heads, rope_dim), strides=(1, 1)
+            ).to(tl.bfloat16)
         else:
             q_normalized = roped_q.to(tl.bfloat16)
             k_normalized = roped_k.to(tl.bfloat16)
@@ -315,7 +312,7 @@ def triton_split_qkv_rmsnorm_mrope(
         is_interleaved,
         rope_dim,
         rope_dim // 2,
-        IS_PARTIAL_ROPE
+        IS_PARTIAL_ROPE,
     )
 
     return q_output, k_output, v_output
@@ -360,4 +357,3 @@ def triton_split_qkv_rmsnorm_mrope_fake(
     )
 
     return q_output, k_output, v_output
-

@@ -13,10 +13,11 @@
 #ifndef MINDIE_LLM_INFER_TENSOR_H
 #define MINDIE_LLM_INFER_TENSOR_H
 
-#include <vector>
-#include <unordered_map>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "data_type.h"
 
 namespace mindie_llm {
@@ -25,7 +26,7 @@ namespace mindie_llm {
 /// This class is designed to create basic data, provides basic functions such as create/delete tensor,
 /// get shape, get size, get date type, truncate,etc
 class InferTensor {
-public:
+   public:
     /// The default constructor of InferTensor. It initializes the tensor with default values.
     InferTensor() = default;
 
@@ -52,7 +53,7 @@ public:
     MemType GetMemType() const;
 
     /// This function is used to get the data of the tensor, return a void pointer.
-    void* GetData() const;
+    void *GetData() const;
 
     /// This function is used to get the name of the tensor.
     const std::string &GetName() const;
@@ -65,7 +66,7 @@ public:
     /// \param truncLen The length to truncate to
     /// \return true if the truncation is successful, false otherwise
     bool Truncate(const size_t truncLen);
- 
+
     /// Allocate memory for the tensor
     ///
     /// This function allocates memory for the tensor, which is necessary before the tensor can be used.
@@ -91,13 +92,13 @@ public:
     void SetRelease(bool releaseFlag);
 
     void Release();
-    
+
     /// This function is used to get the byte size of the dataType of the tensor.
     static size_t GetTypeByteSize(InferDataType inferDataType);
 
     ~InferTensor();
-    
-private:
+
+   private:
     /// The name of the tensor, whose private member variable stores the name of the tensor
     std::string name;
     /// The data type of the tensor, this private member variable stores the data type of the tensor
@@ -115,5 +116,5 @@ private:
 
 using TensorPtr = std::shared_ptr<InferTensor>;
 using TensorMap = std::unordered_map<std::string, std::shared_ptr<InferTensor>>;
-}
-#endif // MINDIE_LLM_INFER_TENSOR_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_INFER_TENSOR_H

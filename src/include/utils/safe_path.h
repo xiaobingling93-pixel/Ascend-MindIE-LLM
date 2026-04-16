@@ -14,9 +14,9 @@
 #define SAFE_PATH_H
 
 #include <experimental/filesystem>
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
 
 #include "safe_result.h"
 
@@ -34,28 +34,18 @@ const char* GetBasename(const char* path);
 Result ChangePermission(const std::string& path, const fs::perms& permission);
 Result MakeDirs(const std::string& pathStr);
 
-enum class PathType {
-    FILE,
-    DIR
-};
+enum class PathType { FILE, DIR };
 
-enum class SoftLinkLevel {
-    IGNORE,
-    STRICT
-};
+enum class SoftLinkLevel { IGNORE, STRICT };
 
 class SafePath {
-public:
-    SafePath(std::string path,
-             PathType pathType,
-             std::string mode,
-             fs::perms maxPermission,
-             uint64_t sizeLimitation = 0,
-             std::string suffix = "");
+   public:
+    SafePath(std::string path, PathType pathType, std::string mode, fs::perms maxPermission,
+             uint64_t sizeLimitation = 0, std::string suffix = "");
 
     Result Check(std::string& checkedPath, bool pathExist = true, SoftLinkLevel softLinkLevel = SoftLinkLevel::STRICT);
 
-private:
+   private:
     std::string path_;
     PathType pathType_;
     std::string mode_;
@@ -85,6 +75,6 @@ private:
     Result CheckDirSize() const;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -13,22 +13,22 @@
 #ifndef SIMULATE_REQUEST_EXECUTOR_H
 #define SIMULATE_REQUEST_EXECUTOR_H
 
-#include <memory>
-#include <queue>
 #include <atomic>
-#include <mutex>
 #include <condition_variable>
-#include "simulate_task_runner.h"
+#include <memory>
+#include <mutex>
+#include <queue>
+
 #include "endpoint_def.h"
 #include "request_response/request.h"
+#include "simulate_task_runner.h"
 
 namespace mindie_llm {
 
 // @brief 虚推请求执行器，实现 ISimulateExecutor 接口
 // @note 必须通过 Create() 工厂方法创建，确保回调生命周期安全
-class SimulateRequestExecutor : public ISimulateExecutor,
-                                public std::enable_shared_from_this<SimulateRequestExecutor> {
-public:
+class SimulateRequestExecutor : public ISimulateExecutor, public std::enable_shared_from_this<SimulateRequestExecutor> {
+   public:
     // @brief 构造标签，限制只能通过 Create() 工厂方法构造
     struct ConstructTag {
         explicit ConstructTag() = default;
@@ -40,8 +40,7 @@ public:
     SimulateRequestExecutor& operator=(const SimulateRequestExecutor&) = delete;
 
     // @brief 创建执行器实例（唯一创建方式）
-    static std::shared_ptr<SimulateRequestExecutor> Create(
-        InferReqType reqType = InferReqType::REQ_STAND_INFER);
+    static std::shared_ptr<SimulateRequestExecutor> Create(InferReqType reqType = InferReqType::REQ_STAND_INFER);
 
     // @brief 供 make_shared 调用的构造函数，外部请勿直接使用
     explicit SimulateRequestExecutor(ConstructTag, InferReqType reqType);
@@ -65,7 +64,6 @@ public:
     std::atomic<bool> isFinish_{false};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // SIMULATE_REQUEST_EXECUTOR_H
-
+#endif  // SIMULATE_REQUEST_EXECUTOR_H

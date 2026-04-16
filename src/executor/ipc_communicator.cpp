@@ -9,11 +9,13 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "ipc_communicator.h"
+
 #include <cerrno>
 #include <experimental/filesystem>
+
 #include "log.h"
 #include "msServiceProfiler/msServiceProfiler.h"
-#include "ipc_communicator.h"
 
 using model_execute_data::ExecuteRequest;
 using model_execute_data::ExecuteResponse;
@@ -23,8 +25,7 @@ using namespace model_execute_data;
 constexpr mode_t FULL_PERMISSION_MASK = 0777;
 constexpr mode_t REQUIRED_PERMISSION = 0600;
 namespace mindie_llm {
-bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf)
-{
+bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf) {
     const size_t msgSize = request.ByteSizeLong();
     try {
         buf.resize(msgSize + sizeof(uint32_t));
@@ -41,8 +42,7 @@ bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf)
 }
 
 IPCCommunicator::IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig, bool receiveAllRank)
-    : receiveAllRank_(receiveAllRank)
-{
+    : receiveAllRank_(receiveAllRank) {
     requestSharedMemory_ =
         IPCSharedMemory(IPCSharedMemoryType::REQUEST, prefixName + "_request", semConfig.requestSemNum);
     responseSharedMemory_ =
@@ -51,9 +51,10 @@ IPCCommunicator::IPCCommunicator(std::string prefixName, const SemaphoreConfig &
 }
 
 IPCSharedMemory::IPCSharedMemory(IPCSharedMemoryType iPCSharedMemoryType, std::string prefix, uint32_t semNum)
-    : sharedMemoryType(iPCSharedMemoryType), sharedMemoryName(prefix), semProduceVec(semNum, nullptr),
-      semConsumeVec(semNum, nullptr)
-{
+    : sharedMemoryType(iPCSharedMemoryType),
+      sharedMemoryName(prefix),
+      semProduceVec(semNum, nullptr),
+      semConsumeVec(semNum, nullptr) {
     for (uint32_t i = 0; i < semNum; ++i) {
         std::string suffix = "_" + std::to_string(i);
         semProduceNameVec.push_back(prefix + "_produce" + suffix);
@@ -61,8 +62,7 @@ IPCSharedMemory::IPCSharedMemory(IPCSharedMemoryType iPCSharedMemoryType, std::s
     }
 }
 
-bool IPCCommunicator::InitSemaphores(IPCSharedMemory &iPCSharedMemory) const
-{
+bool IPCCommunicator::InitSemaphores(IPCSharedMemory &iPCSharedMemory) const {
     for (uint32_t i = 0; i < iPCSharedMemory.semProduceVec.size(); i++) {
         if (sem_init(iPCSharedMemory.semProduceVec.at(i), 1, 1) != 0) {
             MINDIE_LLM_LOG_ERROR("Failed to initialize produce semaphore at index " << i);
@@ -76,8 +76,7 @@ bool IPCCommunicator::InitSemaphores(IPCSharedMemory &iPCSharedMemory) const
     return true;
 }
 
-bool IPCCommunicator::WriteMessage(const char *message, uint32_t length)
-{
+bool IPCCommunicator::WriteMessage(const char *message, uint32_t length) {
     if (!requestSharedMemory_.sharedMemory->Write(0, reinterpret_cast<const char *>(&length), sizeof(uint32_t))) {
         MINDIE_LLM_LOG_ERROR("Failed to write sizeof message: " << message);
         return false;
@@ -89,8 +88,7 @@ bool IPCCommunicator::WriteMessage(const char *message, uint32_t length)
     return true;
 }
 
-bool IPCCommunicator::CreateSharedMemory(IPCSharedMemory &iPCSharedMemory, const size_t sharedMemorySize) const
-{
+bool IPCCommunicator::CreateSharedMemory(IPCSharedMemory &iPCSharedMemory, const size_t sharedMemorySize) const {
     if (sharedMemorySize == 0) {
         return true;
     }
@@ -102,8 +100,7 @@ bool IPCCommunicator::CreateSharedMemory(IPCSharedMemory &iPCSharedMemory, const
     return true;
 }
 
-bool IPCCommunicator::CheckSemaphoreOwnerAndPermission(const std::string &semName) const
-{
+bool IPCCommunicator::CheckSemaphoreOwnerAndPermission(const std::string &semName) const {
     fs::path semPath = fs::path("/dev/shm") / ("sem." + semName.substr(1));
     struct stat sem_stat;
     if (stat(semPath.c_str(), &sem_stat) != 0) {
@@ -113,7 +110,7 @@ bool IPCCommunicator::CheckSemaphoreOwnerAndPermission(const std::string &semNam
     uid_t currentUid = getuid();
     if (sem_stat.st_uid != currentUid) {
         MINDIE_LLM_LOG_ERROR("Semaphore " << semName << " owned by uid " << sem_stat.st_uid << ", but current uid is "
-                                        << currentUid);
+                                          << currentUid);
         return false;
     }
     if ((sem_stat.st_mode & FULL_PERMISSION_MASK) != REQUIRED_PERMISSION) {
@@ -123,12 +120,11 @@ bool IPCCommunicator::CheckSemaphoreOwnerAndPermission(const std::string &semNam
     return true;
 }
 
-void IPCCommunicator::CreateSemaphores(IPCSharedMemory &iPCSharedMemory) const
-{
-    const mode_t kSemPerms = REQUIRED_PERMISSION; // owner can read/write, others have no access
+void IPCCommunicator::CreateSemaphores(IPCSharedMemory &iPCSharedMemory) const {
+    const mode_t kSemPerms = REQUIRED_PERMISSION;  // owner can read/write, others have no access
     for (uint32_t i = 0; i < iPCSharedMemory.semProduceVec.size(); ++i) {
-        const std::string& semProduceName = iPCSharedMemory.semProduceNameVec.at(i);
-        const std::string& semConsumeName = iPCSharedMemory.semConsumeNameVec.at(i);
+        const std::string &semProduceName = iPCSharedMemory.semProduceNameVec.at(i);
+        const std::string &semConsumeName = iPCSharedMemory.semConsumeNameVec.at(i);
 
         sem_t *semProduce = sem_open(semProduceName.c_str(), O_CREAT, kSemPerms, 0);
         if (semProduce == SEM_FAILED || !CheckSemaphoreOwnerAndPermission(semProduceName.c_str())) {
@@ -149,8 +145,7 @@ void IPCCommunicator::CreateSemaphores(IPCSharedMemory &iPCSharedMemory) const
     }
 }
 
-bool IPCCommunicator::SetupChannel(const ShmSizeConfig &shmSizeConfig)
-{
+bool IPCCommunicator::SetupChannel(const ShmSizeConfig &shmSizeConfig) {
     if (!CreateSharedMemory(requestSharedMemory_, shmSizeConfig.requestShmSize) ||
         !CreateSharedMemory(responseSharedMemory_, shmSizeConfig.responseShmSize)) {
         MINDIE_LLM_LOG_ERROR("Failed to create shared memory.");
@@ -168,8 +163,7 @@ bool IPCCommunicator::SetupChannel(const ShmSizeConfig &shmSizeConfig)
     return true;
 }
 
-bool IPCCommunicator::StartHandleResponseThread()
-{
+bool IPCCommunicator::StartHandleResponseThread() {
     if (responseHandler_ == nullptr) {
         MINDIE_LLM_LOG_ERROR("No response handler registered.");
         return false;
@@ -183,8 +177,7 @@ bool IPCCommunicator::StartHandleResponseThread()
     return true;
 }
 
-bool IPCCommunicator::RegisterResponseHandler(ResponseHandler handler)
-{
+bool IPCCommunicator::RegisterResponseHandler(ResponseHandler handler) {
     if (responseHandler_ != nullptr) {
         MINDIE_LLM_LOG_ERROR("A response handler is already registered.");
         return false;
@@ -194,29 +187,26 @@ bool IPCCommunicator::RegisterResponseHandler(ResponseHandler handler)
 }
 
 // Wait (P) on every semaphore in the list, decrementing each by 1
-void IPCCommunicator::WaitOnAllSemaphores(std::vector<sem_t *> &semaphoreList) const
-{
+void IPCCommunicator::WaitOnAllSemaphores(std::vector<sem_t *> &semaphoreList) const {
     for (size_t i = 0; i < semaphoreList.size(); ++i) {
         SemP(*semaphoreList[i], 1);
     }
 }
 
 // Signal (V) every semaphore in the list, incrementing each by 1
-void IPCCommunicator::SignalAllSemaphores(std::vector<sem_t *> &semaphoreList) const
-{
+void IPCCommunicator::SignalAllSemaphores(std::vector<sem_t *> &semaphoreList) const {
     for (size_t i = 0; i < semaphoreList.size(); ++i) {
         SemV(*semaphoreList[i], 1);
     }
 }
 
-bool IPCCommunicator::SendMessageViaSM(ExecuteRequest &request)
-{
+bool IPCCommunicator::SendMessageViaSM(ExecuteRequest &request) {
     std::string buf;
     int profExecType = request.execute_type();
     auto spanSerialize =
         PROF(INFO, Domain("Executor").SpanStart("SerializeRequests").Attr("execute_type", profExecType));
     const size_t msgSize = request.ByteSizeLong();
-    const size_t maxRequestBufSize = requestShmSize_ - sizeof(uint32_t); // 8MB - 4 bytes for size
+    const size_t maxRequestBufSize = requestShmSize_ - sizeof(uint32_t);  // 8MB - 4 bytes for size
     if (msgSize > maxRequestBufSize) {
         MINDIE_LLM_LOG_ERROR("The message size cannot be greater than " << maxRequestBufSize);
         return false;
@@ -244,8 +234,7 @@ bool IPCCommunicator::SendMessageViaSM(ExecuteRequest &request)
     return true;
 }
 
-bool IPCCommunicator::ParseResponse(ExecuteResponse &executeResponse, char *sharedBuf) const
-{
+bool IPCCommunicator::ParseResponse(ExecuteResponse &executeResponse, char *sharedBuf) const {
     uint32_t messageSize = *reinterpret_cast<uint32_t *>(sharedBuf);
     auto spanDeserialize = PROF(INFO, Domain("Executor").SpanStart("deserializeResponses"));
     if (!executeResponse.ParseFromArray(sharedBuf + sizeof(uint32_t), messageSize)) {
@@ -265,8 +254,7 @@ bool IPCCommunicator::ParseResponse(ExecuteResponse &executeResponse, char *shar
     return true;
 }
 
-bool IPCCommunicator::ReceiveInitResponses(std::vector<ExecuteResponse> &responses)
-{
+bool IPCCommunicator::ReceiveInitResponses(std::vector<ExecuteResponse> &responses) {
     // Wait until all consume semaphores reach 1,
     // then decrement each of them to mark the response buffer as being read.
     WaitOnAllSemaphores(responseSharedMemory_.semConsumeVec);
@@ -286,8 +274,7 @@ bool IPCCommunicator::ReceiveInitResponses(std::vector<ExecuteResponse> &respons
     return true;
 }
 
-bool IPCCommunicator::ReceiveAllRankResponses(std::vector<ExecuteResponse> &responses)
-{
+bool IPCCommunicator::ReceiveAllRankResponses(std::vector<ExecuteResponse> &responses) {
     // Wait until all consume semaphores reach 1,
     // then decrement each of them to mark the response buffer as being read.
     WaitOnAllSemaphores(responseSharedMemory_.semConsumeVec);
@@ -306,8 +293,7 @@ bool IPCCommunicator::ReceiveAllRankResponses(std::vector<ExecuteResponse> &resp
     return true;
 }
 
-bool IPCCommunicator::ReceiveResponse(ExecuteResponse &response)
-{
+bool IPCCommunicator::ReceiveResponse(ExecuteResponse &response) {
     // Wait until all consume semaphores reach 1,
     // then decrement each of them to mark the response buffer as being read.
     WaitOnAllSemaphores(responseSharedMemory_.semConsumeVec);
@@ -319,8 +305,7 @@ bool IPCCommunicator::ReceiveResponse(ExecuteResponse &response)
     return parseResponseResult;
 }
 
-bool IPCCommunicator::HandleRcvMsg()
-{
+bool IPCCommunicator::HandleRcvMsg() {
     pthread_setname_np(pthread_self(), "HandleRcvMsg");
     while (recvChannelActive_) {
         ExecuteResponse response;
@@ -344,8 +329,7 @@ bool IPCCommunicator::HandleRcvMsg()
     MINDIE_LLM_LOG_WARN("Terminating HandleRcvMsg");
     return true;
 }
-ExecuteResponse IPCCommunicator::AggregateToOneResponse(const std::vector<ExecuteResponse> &responses)
-{
+ExecuteResponse IPCCommunicator::AggregateToOneResponse(const std::vector<ExecuteResponse> &responses) {
     // In pullkv responses, if one request pulls failed, all resquests are considered as failed.
     // In KV transfer scenario, for the same request, pullkv could succeed on some ranks and fail on others.
     // So if we find one failed response, we return; Otherwise we return the first response (they should be the same if
@@ -365,8 +349,7 @@ ExecuteResponse IPCCommunicator::AggregateToOneResponse(const std::vector<Execut
     return responses[0];
 }
 
-void IPCCommunicator::CleanUp()
-{
+void IPCCommunicator::CleanUp() {
     StopHandleResponseThread();
     CloseSemaphores(requestSharedMemory_);
     CloseSemaphores(responseSharedMemory_);
@@ -374,8 +357,7 @@ void IPCCommunicator::CleanUp()
     UnlinkSemaphores(responseSharedMemory_);
 }
 
-void IPCCommunicator::CloseSemaphores(IPCSharedMemory &iPCSharedMemory) const
-{
+void IPCCommunicator::CloseSemaphores(IPCSharedMemory &iPCSharedMemory) const {
     for (uint32_t i = 0; i < iPCSharedMemory.semProduceVec.size(); i++) {
         if (sem_close(iPCSharedMemory.semProduceVec.at(i)) != 0) {
             MINDIE_LLM_LOG_ERROR("Failed to close produce semaphore at index " << i);
@@ -386,8 +368,7 @@ void IPCCommunicator::CloseSemaphores(IPCSharedMemory &iPCSharedMemory) const
     }
 }
 
-void IPCCommunicator::UnlinkSemaphores(IPCSharedMemory &iPCSharedMemory) const
-{
+void IPCCommunicator::UnlinkSemaphores(IPCSharedMemory &iPCSharedMemory) const {
     for (uint32_t i = 0; i < iPCSharedMemory.semProduceVec.size(); ++i) {
         if (sem_unlink(iPCSharedMemory.semProduceNameVec.at(i).c_str()) != 0) {
             MINDIE_LLM_LOG_ERROR("Failed to unlink produce semaphore " << i);
@@ -398,8 +379,7 @@ void IPCCommunicator::UnlinkSemaphores(IPCSharedMemory &iPCSharedMemory) const
     }
 }
 
-void IPCCommunicator::StopHandleResponseThread()
-{
+void IPCCommunicator::StopHandleResponseThread() {
     recvChannelActive_ = false;
     // Set semaphore to wake up the thread so it can exit.
     SignalAllSemaphores(responseSharedMemory_.semConsumeVec);
@@ -407,4 +387,4 @@ void IPCCommunicator::StopHandleResponseThread()
         handleResponseThread_->join();
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

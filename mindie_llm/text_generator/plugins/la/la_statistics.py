@@ -32,7 +32,7 @@ class RequestStatistic:
         self.preprocess_time = 0
         self.forward_time = 0
         self.postprocess_time = 0
-        
+
         self.prefill_preprocess_time = 0
         self.prefill_forward_time = 0
         self.prefill_postprocess_time = 0
@@ -40,11 +40,11 @@ class RequestStatistic:
     def print_statistics(self):
         total_time = self.preprocess_time + self.forward_time + self.postprocess_time
         if self.total_steps == 0:
-            message = ("Total decoding steps of lookahead is 0, Exception occurred during the inference!")
+            message = "Total decoding steps of lookahead is 0, Exception occurred during the inference!"
             logger.error(message, ErrorCode.TEXT_GENERATOR_ZERO_ITER_ERR)
             raise ZeroDivisionError(message)
         if total_time == 0:
-            message = ("Total running time of lookahead is 0, Exception occurred during the inference!")
+            message = "Total running time of lookahead is 0, Exception occurred during the inference!"
             logger.error(message, ErrorCode.TEXT_GENERATOR_ZERO_TIME_ERR)
             raise ZeroDivisionError(message)
 
@@ -57,42 +57,76 @@ class RequestStatistic:
             accept_per_step = round(self.all_accept_tokens / self.guess_steps, 2)
             if self.guess_size != 0:
                 guess_group_per_step = round(self.all_guess_tokens / self.guess_size / self.guess_steps, 2)
-                acceptance_for_guess_size = (
-                    round((self.all_accept_tokens / (self.guess_size * self.guess_steps)) * 100, 2))
-        
+                acceptance_for_guess_size = round(
+                    (self.all_accept_tokens / (self.guess_size * self.guess_steps)) * 100, 2
+                )
+
         acceptance_for_guess_tokens = 0
         if self.all_guess_tokens != 0:
             acceptance_for_guess_tokens = round((self.all_accept_tokens / self.all_guess_tokens) * 100, 2)
-        
-        print_log(rank, logger.debug, '========================ACCELERATION===SUMMARY'
-                  '=======================================')
-        print_log(rank, logger.debug, f'Statistics of request id {self.req_id} is as below:')
-        print_log(rank, logger.debug, f'Lookahead decoding config, N: {self.level}, W: {self.window}, '
-                  f'G: {self.guess_set_size}, Pool from prompt: {self.pool_from_prompt}')
-        print_log(rank, logger.debug, f'Input tokens: {self.input_len}, Generated tokens: {self.generate_tokens}, '
-                  f'Total steps: {self.total_steps}, Compression ratio: '
-                  f'{round(self.generate_tokens / self.total_steps, 2)}')
-        print_log(rank, logger.debug, f'Guess steps: {self.guess_steps}, Guess tokens: {self.all_guess_tokens}, '
-                  f'Accept_tokens: {self.all_accept_tokens}, Guess_size: {self.guess_size}')
-        print_log(rank, logger.debug, f'Accept per step: {accept_per_step}, Guess group per step: '
-                  f'{guess_group_per_step}')
-        print_log(rank, logger.debug, f'Acceptance for guess size: {acceptance_for_guess_size}%, '
-                  f'Acceptance for guess tokens: {acceptance_for_guess_tokens}%')
-        print_log(rank, logger.debug, f'Total Preprocess time: {round(self.preprocess_time, 2)}ms, Total Forward time: '
-                  f'{round(self.forward_time, 2)}ms, Total Postprocess time: {round(self.postprocess_time, 2)}ms')
-        print_log(rank, logger.debug, f'Total Time spent: {round(total_time, 2)}ms, Average Time per step: '
-                  f'{round((total_time / self.total_steps), 2)}ms, Average token num per sec: '
-                  f'{round((self.generate_tokens * 1000 / total_time), 2)}tokens/s')
-        print_log(rank, logger.debug, f'Prefill Preprocess time: {round(self.prefill_preprocess_time, 2)}ms, '
-                  f'Prefill Forward time: {round(self.prefill_forward_time, 2)}ms, Prefill Postprocess time: '
-                  f'{round(self.prefill_postprocess_time, 2)}ms')
-        print_log(rank, logger.debug, '======================================================================='
-                  '================')
+
+        print_log(
+            rank, logger.debug, "========================ACCELERATION===SUMMARY======================================="
+        )
+        print_log(rank, logger.debug, f"Statistics of request id {self.req_id} is as below:")
+        print_log(
+            rank,
+            logger.debug,
+            f"Lookahead decoding config, N: {self.level}, W: {self.window}, "
+            f"G: {self.guess_set_size}, Pool from prompt: {self.pool_from_prompt}",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Input tokens: {self.input_len}, Generated tokens: {self.generate_tokens}, "
+            f"Total steps: {self.total_steps}, Compression ratio: "
+            f"{round(self.generate_tokens / self.total_steps, 2)}",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Guess steps: {self.guess_steps}, Guess tokens: {self.all_guess_tokens}, "
+            f"Accept_tokens: {self.all_accept_tokens}, Guess_size: {self.guess_size}",
+        )
+        print_log(
+            rank, logger.debug, f"Accept per step: {accept_per_step}, Guess group per step: {guess_group_per_step}"
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Acceptance for guess size: {acceptance_for_guess_size}%, "
+            f"Acceptance for guess tokens: {acceptance_for_guess_tokens}%",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Total Preprocess time: {round(self.preprocess_time, 2)}ms, Total Forward time: "
+            f"{round(self.forward_time, 2)}ms, Total Postprocess time: {round(self.postprocess_time, 2)}ms",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Total Time spent: {round(total_time, 2)}ms, Average Time per step: "
+            f"{round((total_time / self.total_steps), 2)}ms, Average token num per sec: "
+            f"{round((self.generate_tokens * 1000 / total_time), 2)}tokens/s",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            f"Prefill Preprocess time: {round(self.prefill_preprocess_time, 2)}ms, "
+            f"Prefill Forward time: {round(self.prefill_forward_time, 2)}ms, Prefill Postprocess time: "
+            f"{round(self.prefill_postprocess_time, 2)}ms",
+        )
+        print_log(
+            rank,
+            logger.debug,
+            "=======================================================================================",
+        )
 
     def update_statistics(self, accept_tokens, generate_tokens, guess_tokens):
         self.generate_tokens += generate_tokens
         self.total_steps += 1
-        self.guess_steps += (1 if guess_tokens != 0 else 0)
+        self.guess_steps += 1 if guess_tokens != 0 else 0
         self.all_accept_tokens += accept_tokens
         self.all_guess_tokens += guess_tokens
 
@@ -131,7 +165,7 @@ class RequestStatsList:
         map_id = self.requests_idx_mapping[req_id]
         self.requests_statistics[map_id] = req_stats
         return
-    
+
     def del_request_stats(self, req_id):
         if req_id not in self.requests_idx_mapping:
             return
@@ -140,26 +174,26 @@ class RequestStatsList:
         self.requests_statistics[map_id] = None
         del self.requests_idx_mapping[req_id]
         return
-    
+
     def new_request_in(self, input_len, req_id):
         new_stats = RequestStatistic(self.level, self.window, self.guess_set_size, input_len, self.guess_size, req_id)
         self.prepare_statistics(req_id, new_stats)
 
     def update_request_stats(self, accept_tokens, generate_tokens, guess_tokens, req_id):
         if req_id not in self.requests_idx_mapping:
-            message = (f"Request {req_id} has never been executed, so data statistics cannot be recorded")
-            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED) 
+            message = f"Request {req_id} has never been executed, so data statistics cannot be recorded"
+            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED)
             return
         map_id = self.requests_idx_mapping[req_id]
         req_stats = self.requests_statistics[map_id]
         req_stats.update_statistics(accept_tokens, generate_tokens, guess_tokens)
-    
+
     def final_print_req_stats(self, req_id):
         if req_id not in self.requests_idx_mapping:
-            message = (f"Request {req_id} has never been executed, so data statistics cannot be recorded")
-            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED) 
+            message = f"Request {req_id} has never been executed, so data statistics cannot be recorded"
+            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED)
             return
-        
+
         map_id = self.requests_idx_mapping[req_id]
         req_stats = self.requests_statistics[map_id]
         req_stats.print_statistics()
@@ -168,10 +202,10 @@ class RequestStatsList:
 
     def record_req_time(self, req_id, preprocess_time, forward_time, postprocess_time, is_prefill):
         if req_id not in self.requests_idx_mapping:
-            message = (f"Request {req_id} has never been executed, so data statistics cannot be recorded")
-            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED) 
+            message = f"Request {req_id} has never been executed, so data statistics cannot be recorded"
+            logger.error(message, ErrorCode.TEXT_GENERATOR_REQ_ID_UNUSED)
             return
-        
+
         map_id = self.requests_idx_mapping[req_id]
         req_stats = self.requests_statistics[map_id]
         req_stats.record_time(preprocess_time, forward_time, postprocess_time, is_prefill)

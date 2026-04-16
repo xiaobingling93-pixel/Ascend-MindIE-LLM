@@ -14,14 +14,15 @@
 #define ILORA_MANAGER_H
 
 #include <memory>
+
 #include "basic_types.h"
 #include "concurrent_map.h"
-#include "llm_manager_v2/llm_manager_v2.h"
 #include "config/config_info.h"
+#include "llm_manager_v2/llm_manager_v2.h"
 
 namespace mindie_llm {
 class ILoraManager {
-public:
+   public:
     virtual ~ILoraManager() = default;
     // llm_engine使用，可直接下发加载
     virtual Status Load(const LoraParamSPtr loraInfo) = 0;
@@ -47,6 +48,6 @@ public:
     // seqgrp析构使用, 减少lora引用计数
     virtual void DecLoraRef(const std::optional<std::string> &loraId) = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

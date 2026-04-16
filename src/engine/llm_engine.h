@@ -9,32 +9,33 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef LLM_ENGINE_H
 #define LLM_ENGINE_H
 
 #include <atomic>
 #include <cstdint>
 #include <thread>
+
+#include "data_type.h"
+#include "dummy_quota_manager.h"
 #include "engine/illm_engine.h"
-#include "ischeduler.h"
 #include "iload_balancer.h"
+#include "ischeduler.h"
+#include "latency_predictor/latency_predictor.h"
+#include "layerwise_mixin/layerwise_mixin.h"
+#include "lora_manager.h"
 #include "model_exec_output_handler.h"
-#include "transfer_output_handler.h"
-#include "seq_group_builder_from_infer_req.h"
 #include "process_group.h"
 #include "request_response/request.h"
-#include "latency_predictor/latency_predictor.h"
-#include "lora_manager.h"
-#include "dummy_quota_manager.h"
-#include "layerwise_mixin/layerwise_mixin.h"
-#include "data_type.h"
+#include "seq_group_builder_from_infer_req.h"
+#include "transfer_output_handler.h"
 
 namespace mindie_llm {
 // 调度完2轮batch后，让出1ms cpu时间
 constexpr int DEFAULT_SLEEP_TIME_BETWEEN_TWO_ITER = 1;
 constexpr int HEARTBEAT_INTERVAL_SECONDS = 60;
-constexpr int METRICS_UPDATE_INTERVAL = 50; // 50ms
+constexpr int METRICS_UPDATE_INTERVAL = 50;  // 50ms
 /// 仅 P 角色（role_ == Role::P）：当每个调度线程距上次「非空调度结果」均超过此时长时，将 engineReady 置为 false（毫秒）
 constexpr uint64_t ENGINE_ALL_THREADS_EMPTY_SCHEDULE_MS = 5000;
 
@@ -77,7 +78,7 @@ using SchOutDataPair =
 
 // LlmEngine is used by mindie_llm LlmManagerV2
 class LlmEngine final : public ILlmEngine {
-public:
+   public:
     LlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr> executors, ForwardRespToManagerCall cb,
               Role pdRole, std::atomic<bool> *engineReadyFlag = nullptr);
 
@@ -91,7 +92,7 @@ public:
     bool DistDecodeAcquireDummyQuota(bool isDummy, EnginePerDPSPtr enginePerDP) const;
 
     bool AddRequest(RequestSPtr request) override;
-    
+
     void SendAbortResponse(SequenceGroupSPtr seqGroup, size_t localDPRank, InferStatusType flag) const;
 
     void AbortRequests(std::unordered_set<RequestId> &requestIds) override;
@@ -111,8 +112,8 @@ public:
     void ResumeScheduling() override;
 
     void ExecuteRecoverCommand(RecoverCommandInfo &commandInfo) override;
-    
-protected:
+
+   protected:
     void SchedulerThreadEntry(size_t localDPRank);
 
     void ScheduleExecTransfer(std::shared_ptr<EnginePerDP> &engine) const;
@@ -123,8 +124,8 @@ protected:
                                                            std::vector<std::vector<SchedulerOutputs>> &schedulerOutputs,
                                                            bool distributedEnable, int dpRankId);
 
-    static TGCleanupRequestPtr
-    BuildTGCleanupRequest(std::unordered_set<SequenceId> &TGCleanupSeqIds); // TG: TextGenerator
+    static TGCleanupRequestPtr BuildTGCleanupRequest(
+        std::unordered_set<SequenceId> &TGCleanupSeqIds);  // TG: TextGenerator
 
     SequenceId NextSeqId();
 
@@ -132,20 +133,21 @@ protected:
 
     void CalculateThroughput(std::shared_ptr<EnginePerDP> enginePerDP) const;
 
-private:
+   private:
     /// 将第 dpIndex 个 DP 的指标累加到 aggregatedMetric，并打单 DP 日志
     void AccumulateDpMetricInto(size_t dpIndex, EngineMetric &aggregatedMetric);
 
     void AbortParallelSeqGroups(size_t localDPRank) const;
 
     void SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, size_t localDPRank);
-    template <typename T> SequenceGroupSPtr GetSequenceGroupWithoutRank(T id);
+    template <typename T>
+    SequenceGroupSPtr GetSequenceGroupWithoutRank(T id);
 
     SchOutDataPair PostScheduleSyncUp(bool needSync, SequenceGroupMetaDatas &metas, SchedulerOutputs &schOut,
                                       size_t localDPRank);
 
-    std::pair<SequenceGroupMetaDatas, SchedulerOutputs>
-    MakeDummySchedulerOutput(SequenceGroupMetaDatas seqGroupMetadata) const;
+    std::pair<SequenceGroupMetaDatas, SchedulerOutputs> MakeDummySchedulerOutput(
+        SequenceGroupMetaDatas seqGroupMetadata) const;
 
     void ExecuteDummy(EnginePerDPSPtr enginePerDP, SequenceGroupMetaDatas &seqGroupMetadata, size_t localDPRank,
                       std::function<void(ModelBatchResultSPtr)> responseHandler) const;
@@ -156,7 +158,7 @@ private:
 
     std::atomic<bool> stop_ = {false};
 
-    Role role_{Role::PnD}; // 默认角色为PnD
+    Role role_{Role::PnD};  // 默认角色为PnD
 
     LoadBalancerPtr loadBalancer_;
 
@@ -169,14 +171,14 @@ private:
     bool isDistributedPNodeProcessCCReady_{false};
 
     // 设置LatencyPredictor
-    void SetupLatencyPredictor(
-        const std::chrono::high_resolution_clock::time_point& batchExecuteStartTime,
-        int dpRankId);
+    void SetupLatencyPredictor(const std::chrono::high_resolution_clock::time_point &batchExecuteStartTime,
+                               int dpRankId);
 
     // 调度暂停标志位
     std::atomic<bool> isPauseScheduling_{false};
 
-    /// 由 LlmManagerImpl 持有；仅 role_ == Role::P 时根据各线程 Schedule() 空闲情况置 false（不含 ScheduleExecTransfer）
+    /// 由 LlmManagerImpl 持有；仅 role_ == Role::P 时根据各线程 Schedule() 空闲情况置 false（不含
+    /// ScheduleExecTransfer）
     std::atomic<bool> *llmEngineReady_{nullptr};
 
     static uint64_t SteadyClockMsSinceEpoch();
@@ -189,13 +191,14 @@ private:
     void switchRole(size_t localDPRank);
 
     inline void CheckAndPrintHeartbeat(std::chrono::time_point<std::chrono::high_resolution_clock> &heartbeatBegin,
-                                       const EnginePerDPSPtr &enginePerDP) const
-    {
+                                       const EnginePerDPSPtr &enginePerDP) const {
         auto diffTime = std::chrono::high_resolution_clock::now() - heartbeatBegin;
         if (diffTime > std::chrono::seconds(HEARTBEAT_INTERVAL_SECONDS)) {
             heartbeatBegin = std::chrono::high_resolution_clock::now();
             auto passed_seconds = std::chrono::duration_cast<std::chrono::seconds>(diffTime).count();
-            MINDIE_LLM_LOG_INFO_REQUEST("Since last schedule, pass " << passed_seconds
+            MINDIE_LLM_LOG_INFO_REQUEST(
+                "Since last schedule, pass "
+                << passed_seconds
                 << " seconds, AsyncBatchNum=" << enginePerDP->modelExecOutputHandler->GetAsyncBatchNum()
                 << ", freeNpuBlockNum=" << enginePerDP->scheduler->CollectSchedulerMetric().blockInfo.freeNpuBlockNum_
                 << ", freeCpuBlockNum=" << enginePerDP->scheduler->CollectSchedulerMetric().blockInfo.freeCpuBlockNum_);
@@ -207,6 +210,6 @@ private:
     LayerwiseMixin layerwiseMixin_;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -17,8 +17,9 @@ class BlockCopy:
         # The shape of kv_cache here is [num_layer, 2, num_block, block_size, num_head, head_size].
         self.kv_cache = kv_cache
         self.to_tensor = to_tensor
-        if block_copy_type == 'atb':
+        if block_copy_type == "atb":
             import torch_npu
+
             soc_version = torch_npu._C._npu_get_soc_version()
             if soc_version in (100, 101, 102, 103, 104, 200, 201, 202, 203, 204, 205):
                 self.block_copy = self.golden_copy_block
@@ -45,33 +46,28 @@ class BlockCopy:
         import atb_llm.nn as nn
         from atb_llm.nn.network_manager import get_default_net
         from atb_llm.nn.tensor import Tensor
+
         for layer_index in range(num_layers):
-            nn.functional.copy_blocks(Tensor(f"in0_layer_{layer_index}"), 
-                                    Tensor(f"in1_layer_{layer_index}"),
-                                    Tensor("in2"),
-                                    Tensor("in3"),
-                                    Tensor("in4"))
+            nn.functional.copy_blocks(
+                Tensor(f"in0_layer_{layer_index}"),
+                Tensor(f"in1_layer_{layer_index}"),
+                Tensor("in2"),
+                Tensor("in3"),
+                Tensor("in4"),
+            )
         self.block_copy_op = get_default_net().build_engine()
         for layer_index, (key_cache, value_cache) in enumerate(self.kv_cache):
-            self.kv_cache_map[f'in0_layer_{layer_index}'] = key_cache
-            self.kv_cache_map[f'in1_layer_{layer_index}'] = value_cache
+            self.kv_cache_map[f"in0_layer_{layer_index}"] = key_cache
+            self.kv_cache_map[f"in1_layer_{layer_index}"] = value_cache
 
     def atb_copy_block(self, src_indices, dst_indices):
-        device = 'npu'
-        src_block_indices = self.to_tensor(
-            np.array(src_indices, dtype=np.int32)
-            ).to(device=device, non_blocking=False)
-        dst_block_indices = self.to_tensor(
-            np.array(dst_indices, dtype=np.int32)
-            ).to(device=device, non_blocking=False)
-        cum_sum = self.to_tensor(
-            np.arange(1, src_block_indices.size(0) + 1, dtype=np.int32)
-            ).to(device=device, non_blocking=False)
-        inputs = {
-            "in2": src_block_indices,
-            "in3": dst_block_indices,
-            "in4": cum_sum
-        }
+        device = "npu"
+        src_block_indices = self.to_tensor(np.array(src_indices, dtype=np.int32)).to(device=device, non_blocking=False)
+        dst_block_indices = self.to_tensor(np.array(dst_indices, dtype=np.int32)).to(device=device, non_blocking=False)
+        cum_sum = self.to_tensor(np.arange(1, src_block_indices.size(0) + 1, dtype=np.int32)).to(
+            device=device, non_blocking=False
+        )
+        inputs = {"in2": src_block_indices, "in3": dst_block_indices, "in4": cum_sum}
         inputs.update(self.kv_cache_map)
         outputs = {}
         self.block_copy_op.forward(inputs, outputs)

@@ -16,6 +16,7 @@ from mindie_llm.utils.tensor.llm_tensor import LLMBackend
 class TorchBackend(LLMBackend):
     def __init__(self):
         import torch
+
         self._backend = torch
 
     def get_backend(self):
@@ -26,7 +27,8 @@ class TorchBackend(LLMBackend):
 
     def get_npu(self):
         import importlib
-        importlib.import_module('torch_npu')
+
+        importlib.import_module("torch_npu")
         return self._backend.npu
 
     def get_hal(self):

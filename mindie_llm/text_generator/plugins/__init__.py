@@ -12,15 +12,9 @@ from .plugin_manager import PluginManager
 from .plugin_manager_lwd import PluginManagerLwd
 
 
-def get_plugin(
-    plugin_list,
-    plugin_config,
-    plugin_utils,
-    is_mix_model,
-    watcher
-):
+def get_plugin(plugin_list, plugin_config, plugin_utils, is_mix_model, watcher):
     generator_backend, kvcache_settings, infer_context, output_filter, model_role = plugin_utils
-    if 'layerwise_disaggregated' in plugin_config and plugin_config['layerwise_disaggregated']:
+    if "layerwise_disaggregated" in plugin_config and plugin_config["layerwise_disaggregated"]:
         plugin_ins = PluginManagerLwd(
             generator_backend,
             kvcache_settings,
@@ -30,7 +24,7 @@ def get_plugin(
             plugin_list,
             model_role,
             watcher,
-            **plugin_config
+            **plugin_config,
         )
     else:
         plugin_ins = PluginManager(
@@ -42,6 +36,6 @@ def get_plugin(
             plugin_list,
             model_role,
             watcher,
-            **plugin_config
+            **plugin_config,
         )
     return plugin_ins

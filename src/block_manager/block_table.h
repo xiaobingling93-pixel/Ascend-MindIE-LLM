@@ -9,13 +9,13 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
-#include <memory>
-#include <vector>
-#include <queue>
 #include <cstddef>
+#include <memory>
+#include <queue>
+#include <vector>
 
 #include "basic_types.h"
 #include "device_aware_block_allocator.h"
@@ -23,7 +23,7 @@
 namespace mindie_llm {
 
 class BlockTable {
-public:
+   public:
     static std::vector<std::vector<TokenId>> ChunkTokensForAllocate(const std::vector<TokenId> &tokenIds,
                                                                     size_t chunkSize);
     BlockTable() = default;
@@ -50,7 +50,7 @@ public:
 
     void AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashValue extraHash, size_t numLookaheadSlots);
 
-    void AppendToSpRank(size_t spRank, const std::vector<TokenId>& newTokenIds);
+    void AppendToSpRank(size_t spRank, const std::vector<TokenId> &newTokenIds);
 
     // ESTIMATE how many blocks needed (maybe bigger than really needed).
     size_t GetNumRelatedBlocks(size_t tokenIdsSize, size_t numLookaheadSlots = 0) const;
@@ -79,7 +79,7 @@ public:
 
     bool IsAppendBlock() const;
 
-private:
+   private:
     void EnsureEnoughSlots(size_t numRequiredEmptySlots, HashValue extraHash = 0, size_t rankId = 0);
 
     std::vector<BlockObjSPtr> AllocateBlocksForTokenIds(const std::vector<TokenId> &tokenIds, DeviceType device,
@@ -118,4 +118,4 @@ private:
 
     size_t appendBlockRankId_ = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

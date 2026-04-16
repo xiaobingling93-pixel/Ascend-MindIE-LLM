@@ -17,11 +17,11 @@
 #define DCMIDLLEXPORT _declspec(dllexport)
 #endif
 
-#define TOPO_INFO_MAX_LENTH   32 // topo info max length
+#define TOPO_INFO_MAX_LENTH 32  // topo info max length
 
 DCMIDLLEXPORT int dcmi_init(void);
 
-DCMIDLLEXPORT int dcmi_get_device_utilization_rate(
-    int card_id, int device_id, int input_type, unsigned int *utilization_rate);
+DCMIDLLEXPORT int dcmi_get_device_utilization_rate(int card_id, int device_id, int input_type,
+                                                   unsigned int *utilization_rate);
 
-#endif // DCMI_INTERFACE_API_H
+#endif  // DCMI_INTERFACE_API_H

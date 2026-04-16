@@ -11,19 +11,18 @@
  */
 #include "policy_helper.h"
 
+#include <stdexcept>
+
 #include "log.h"
 #include "msServiceProfiler/msServiceProfiler.h"
 
-#include <stdexcept>
-
 namespace mindie_llm {
 PolicyHelper::PolicyHelper(std::shared_ptr<SchedulerConfig> schedulerConfig, BlockSpaceManagerSPtr blockManager)
-    : schedulerConfig_(schedulerConfig), blockManager_(blockManager)
-{
+    : schedulerConfig_(schedulerConfig), blockManager_(blockManager) {
     if (!schedulerConfig_) {
         throw std::invalid_argument("schedulerConfig cannot be null");
     }
-    
+
     if (!blockManager_) {
         throw std::invalid_argument("blockManager cannot be null");
     }
@@ -32,8 +31,7 @@ PolicyHelper::PolicyHelper(std::shared_ptr<SchedulerConfig> schedulerConfig, Blo
 std::pair<size_t, size_t> PolicyHelper::GetNumComputeNewUnCachedAndCachedTokens(const SequenceGroupSPtr seqGroup,
                                                                                 const SequenceStatus status,
                                                                                 bool enableChunking,
-                                                                                SchedulingBudget &budget)
-{
+                                                                                SchedulingBudget &budget) {
     validateSequenceGroup(seqGroup, "GetNumComputeNewUnCachedAndCachedTokens");
 
     size_t numCachedNewTokens = 0;
@@ -99,8 +97,7 @@ std::pair<size_t, size_t> PolicyHelper::GetNumComputeNewUnCachedAndCachedTokens(
     return {numUncachedNewTokens, numCachedNewTokens};
 }
 
-size_t PolicyHelper::GetNumComputeChunkSize(SchedulingBudget &budget, size_t numNewTokens) const
-{
+size_t PolicyHelper::GetNumComputeChunkSize(SchedulingBudget &budget, size_t numNewTokens) const {
     size_t remainingTokenBudget = budget.RemainingTokenBudget();
 
     // Get the number of tokens to allocate to this prefill slot
@@ -109,8 +106,7 @@ size_t PolicyHelper::GetNumComputeChunkSize(SchedulingBudget &budget, size_t num
     return std::min({numNewTokens, remainingTokenBudget, prefillSlotBudget});
 }
 
-size_t PolicyHelper::GetPromptLimit(SequenceGroupSPtr seqGroup, SchedulingBudget &budget) const
-{
+size_t PolicyHelper::GetPromptLimit(SequenceGroupSPtr seqGroup, SchedulingBudget &budget) const {
     validateSequenceGroup(seqGroup, "GetPromptLimit");
     seqGroup = seqGroup;
     if (schedulerConfig_->enableChunkedPrefill) {
@@ -120,15 +116,14 @@ size_t PolicyHelper::GetPromptLimit(SequenceGroupSPtr seqGroup, SchedulingBudget
     }
 }
 
-void PolicyHelper::AllocateAndSetRunning(SequenceGroupSPtr seqGroup) const
-{
+void PolicyHelper::AllocateAndSetRunning(SequenceGroupSPtr seqGroup) const {
     validateSequenceGroup(seqGroup, "AllocateAndSetRunning");
 
     PROF(INFO, Domain("KVCache")
-                    .Resource(seqGroup->requestId)
-                    .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-                    .MetricScope("dp", blockManager_->GetLocalDPRank())
-                    .Event("Allocate"));
+                   .Resource(seqGroup->requestId)
+                   .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                   .MetricScope("dp", blockManager_->GetLocalDPRank())
+                   .Event("Allocate"));
     blockManager_->Allocate(seqGroup);
     auto waitingSeqs = seqGroup->GetFirstSequence(SequenceStatus::WAITING);
     for (const auto &seq : waitingSeqs) {
@@ -136,10 +131,9 @@ void PolicyHelper::AllocateAndSetRunning(SequenceGroupSPtr seqGroup) const
     }
 }
 
-bool PolicyHelper::CanAppendSlots(SequenceGroupSPtr seqGroup) const
-{
+bool PolicyHelper::CanAppendSlots(SequenceGroupSPtr seqGroup) const {
     validateSequenceGroup(seqGroup, "CanAppendSlots");
-    
+
     if (!seqGroup->sampling->enableParallelSampling) {
         return (schedulerConfig_->spSize * schedulerConfig_->cpSize > 1) ? blockManager_->CanAppendSlotNew(seqGroup)
                                                                          : blockManager_->CanAppendSlot(seqGroup);
@@ -149,15 +143,14 @@ bool PolicyHelper::CanAppendSlots(SequenceGroupSPtr seqGroup) const
 }
 
 void PolicyHelper::AppendSlotForSeqs(std::vector<SequenceSPtr> parallelSeqs, RequestId reqId,
-                                     std::vector<std::pair<BlockId, BlockId>> &blockToCopy)
-{
+                                     std::vector<std::pair<BlockId, BlockId>> &blockToCopy) {
     reqId = reqId;
     for (auto seq : parallelSeqs) {
         PROF(INFO, Domain("KVCache")
-                        .Resource(reqId)
-                        .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-                        .MetricScope("dp", blockManager_->GetLocalDPRank())
-                        .Event("AppendSlot"));
+                       .Resource(reqId)
+                       .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                       .MetricScope("dp", blockManager_->GetLocalDPRank())
+                       .Event("AppendSlot"));
         const auto cows = blockManager_->AppendSlot(seq);
         if (!cows.empty()) {
             blockToCopy.insert(blockToCopy.end(), cows.begin(), cows.end());
@@ -165,8 +158,8 @@ void PolicyHelper::AppendSlotForSeqs(std::vector<SequenceSPtr> parallelSeqs, Req
     }
 }
 
-void PolicyHelper::AppendSlots(const SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToCopy)
-{
+void PolicyHelper::AppendSlots(const SequenceGroupSPtr seqGroup,
+                               std::vector<std::pair<BlockId, BlockId>> &blockToCopy) {
     validateSequenceGroup(seqGroup, "AppendSlots");
 
     // beam search 和SP不支持叠加
@@ -178,8 +171,7 @@ void PolicyHelper::AppendSlots(const SequenceGroupSPtr seqGroup, std::vector<std
     }
 }
 
-bool PolicyHelper::CanSwapOut(SequenceGroupSPtr seqGroup)
-{
+bool PolicyHelper::CanSwapOut(SequenceGroupSPtr seqGroup) {
     validateSequenceGroup(seqGroup, "CanSwapOut");
 
     if (!seqGroup->sampling->enableParallelSampling) {
@@ -196,8 +188,7 @@ bool PolicyHelper::CanSwapOut(SequenceGroupSPtr seqGroup)
     return true;
 }
 
-AllocStatus PolicyHelper::CanSwapIn(SequenceGroupSPtr seqGroup)
-{
+AllocStatus PolicyHelper::CanSwapIn(SequenceGroupSPtr seqGroup) {
     validateSequenceGroup(seqGroup, "CanSwapIn");
 
     if (!seqGroup->sampling->enableParallelSampling) {
@@ -217,16 +208,16 @@ AllocStatus PolicyHelper::CanSwapIn(SequenceGroupSPtr seqGroup)
     return AllocStatus::OK;
 }
 
-void PolicyHelper::SeqsSwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapIn) const
-{
+void PolicyHelper::SeqsSwapIn(SequenceGroupSPtr seqGroup,
+                              std::vector<std::pair<BlockId, BlockId>> &blockToSwapIn) const {
     validateSequenceGroup(seqGroup, "SeqsSwapIn");
 
     PROF(INFO, Domain("KVCache")
-           .Resource(seqGroup->requestId)
-           .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-           .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
-           .MetricScope("dp", blockManager_->GetLocalDPRank())
-           .Event("SwapIn"));
+                   .Resource(seqGroup->requestId)
+                   .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                   .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
+                   .MetricScope("dp", blockManager_->GetLocalDPRank())
+                   .Event("SwapIn"));
     std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> mapping = blockManager_->SwapIn(seqGroup);
     blockToSwapIn.insert(blockToSwapIn.end(), mapping.begin(), mapping.end());
     std::vector<SequenceSPtr> swappedSeqs = seqGroup->GetFirstSequence(SequenceStatus::SWAPPED);
@@ -235,8 +226,7 @@ void PolicyHelper::SeqsSwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<
     }
 }
 
-void PolicyHelper::SwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapIn) const
-{
+void PolicyHelper::SwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapIn) const {
     validateSequenceGroup(seqGroup, "SwapIn");
 
     PROF(INFO, Domain("KVCache")
@@ -258,16 +248,15 @@ void PolicyHelper::SwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<Bloc
     }
 }
 
-void PolicyHelper::SeqsSwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut)
-{
+void PolicyHelper::SeqsSwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut) {
     validateSequenceGroup(seqGroup, "SeqsSwapOut");
 
     PROF(INFO, Domain("KVCache")
-               .Resource(seqGroup->requestId)
-               .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-               .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
-               .MetricScope("dp", blockManager_->GetLocalDPRank())
-               .Event("SwapOut"));
+                   .Resource(seqGroup->requestId)
+                   .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                   .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
+                   .MetricScope("dp", blockManager_->GetLocalDPRank())
+                   .Event("SwapOut"));
     std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> mapping = blockManager_->SwapOut(seqGroup);
     blockToSwapOut.insert(blockToSwapOut.end(), mapping.begin(), mapping.end());
 
@@ -277,13 +266,13 @@ void PolicyHelper::SeqsSwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair
     }
 }
 
-void PolicyHelper::SwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut)
-{
+void PolicyHelper::SwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut) {
     validateSequenceGroup(seqGroup, "SwapOut");
 
     if (!CanSwapOut(seqGroup)) {
-        throw std::runtime_error("Aborted due to the lack of CPU swap space. Please increase "
-                                 "the swap space to avoid this error.");
+        throw std::runtime_error(
+            "Aborted due to the lack of CPU swap space. Please increase "
+            "the swap space to avoid this error.");
     }
     PROF(INFO, Domain("KVCache")
                    .Resource(seqGroup->requestId)
@@ -304,41 +293,37 @@ void PolicyHelper::SwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<Blo
     }
 }
 
-void PolicyHelper::ForkSeq(SequenceSPtr parentSeq, SequenceSPtr &childSeq) const
-{
+void PolicyHelper::ForkSeq(SequenceSPtr parentSeq, SequenceSPtr &childSeq) const {
     blockManager_->Fork(parentSeq, childSeq);
 }
 
-void PolicyHelper::FreeSeq(SequenceSPtr seq) const
-{
+void PolicyHelper::FreeSeq(SequenceSPtr seq) const {
     PROF(INFO, Domain("KVCache")
-                    .Resource(std::to_string(seq->seqId_))
-                    .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-                    .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
-                    .MetricScope("dp", blockManager_->GetLocalDPRank())
-                    .Event("Free"));
+                   .Resource(std::to_string(seq->seqId_))
+                   .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                   .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
+                   .MetricScope("dp", blockManager_->GetLocalDPRank())
+                   .Event("Free"));
     blockManager_->Free(seq->seqId_);
 }
 
-void PolicyHelper::FreeSeqGroup(SequenceGroupSPtr seqGroup) const
-{
+void PolicyHelper::FreeSeqGroup(SequenceGroupSPtr seqGroup) const {
     validateSequenceGroup(seqGroup, "FreeSeqGroup");
 
     for (auto seq : seqGroup->seqs_) {
         PROF(INFO, Domain("KVCache")
-                    .Resource(std::to_string(seq->seqId_))
-                    .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-                    .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
-                    .MetricScope("dp", blockManager_->GetLocalDPRank())
-                    .Event("Free"));
+                       .Resource(std::to_string(seq->seqId_))
+                       .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                       .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
+                       .MetricScope("dp", blockManager_->GetLocalDPRank())
+                       .Event("Free"));
         blockManager_->Free(seq->seqId_);
     }
 }
 
-void PolicyHelper::validateSequenceGroup(const SequenceGroupSPtr& seqGroup, const std::string& context) const
-{
+void PolicyHelper::validateSequenceGroup(const SequenceGroupSPtr &seqGroup, const std::string &context) const {
     if (!seqGroup) {
         throw std::invalid_argument("SequenceGroup cannot be null in " + context);
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

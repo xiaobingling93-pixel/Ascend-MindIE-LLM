@@ -10,18 +10,19 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "single_req_tgi_text_infer_interface.h"
-#include <utility>
-#include <sstream>
-#include <regex>
 
-#include "httplib.h"
-#include "endpoint_def.h"
-#include "infer_tokenizer.h"
-#include "parameters_checker.h"
-#include "http_rest_resource.h"
-#include "common_util.h"
+#include <regex>
+#include <sstream>
+#include <utility>
+
 #include "base64_util.h"
+#include "common_util.h"
+#include "endpoint_def.h"
+#include "http_rest_resource.h"
+#include "httplib.h"
+#include "infer_tokenizer.h"
 #include "json_util.h"
+#include "parameters_checker.h"
 
 using OrderedJson = nlohmann::ordered_json;
 
@@ -29,25 +30,21 @@ namespace mindie_llm {
 SingleReqTgiTextInferInterface::SingleReqTgiTextInferInterface(
     const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute, bool stream,
     const std::vector<LoraParamSPtr> loraConfigs) noexcept
-    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs}
-{
+    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs} {
     inputParam->streamMode = stream;
 }
 
-static bool AssignReturnFullText(const OrderedJson &jsonObj, InferParamSPtr param, std::string &error) noexcept
-{
+static bool AssignReturnFullText(const OrderedJson &jsonObj, InferParamSPtr param, std::string &error) noexcept {
     const std::string key = "return_full_text";
     return ParametersChecker::BooleanJsonCheck(jsonObj, key, param->returnFullText, error);
 }
 
-static bool AssignDecoderInputDetail(const OrderedJson &jsonObj, InferParamSPtr param, std::string &error) noexcept
-{
+static bool AssignDecoderInputDetail(const OrderedJson &jsonObj, InferParamSPtr param, std::string &error) noexcept {
     const std::string key = "decoder_input_details";
     return ParametersChecker::BooleanJsonCheck(jsonObj, key, param->decoderInputDetails, error);
 }
 
-static bool AssignTruncate(const OrderedJson &body, InferParamSPtr param, std::string &error) noexcept
-{
+static bool AssignTruncate(const OrderedJson &body, InferParamSPtr param, std::string &error) noexcept {
     const std::string key = "truncate";
     auto res = JsonParse::CheckOptionalItemType(body, key, OrderedJson::value_t::number_integer, error);
     if (!res.isCorrectType) {
@@ -69,8 +66,7 @@ static bool AssignTruncate(const OrderedJson &body, InferParamSPtr param, std::s
 }
 
 bool SingleReqTgiTextInferInterface::AssignAdapterId(const OrderedJson &body, RequestSPtr tmpReq,
-                                                     std::string &error) const
-{
+                                                     std::string &error) const {
     auto res = JsonParse::CheckOptionalItemType(body, "adapter_id", OrderedJson::value_t::string, error);
     if (!res.isCorrectType) {
         return false;
@@ -87,35 +83,32 @@ bool SingleReqTgiTextInferInterface::AssignAdapterId(const OrderedJson &body, Re
     return true;
 }
 
-void SingleReqTgiTextInferInterface::TruncateReqTokens()
-{
+void SingleReqTgiTextInferInterface::TruncateReqTokens() {
     // assign reqToken
     if (inputParam->truncate != 0 && reqTokens_.size() > inputParam->truncate) {
         uint32_t tokenIdx = reqTokens_.size() - inputParam->truncate;
         reqTokens_.erase(reqTokens_.begin(),
-                         reqTokens_.begin() + tokenIdx); // discard head tokens when input is too long
+                         reqTokens_.begin() + tokenIdx);  // discard head tokens when input is too long
     }
 }
 
-bool SingleReqTgiTextInferInterface::ValidTGIParameterSpec(std::string &msg)
-{
+bool SingleReqTgiTextInferInterface::ValidTGIParameterSpec(std::string &msg) {
     if (inputParam->streamMode && inputParam->decoderInputDetails) {
         msg = "The decoder_input_details must not be true when stream is true.";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
         return false;
     }
     return true;
 }
 
 bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &body, std::string &msg,
-                                                                uint64_t &timestamp)
-{
+                                                                uint64_t &timestamp) {
     try {
         if (!body.contains("inputs") || body["inputs"].is_null()) {
             msg = "Request should contain 'inputs' and the type should be string.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         if (body["inputs"].type() == OrderedJson::value_t::string) {
@@ -131,8 +124,8 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
             inputParam->textInput = body["inputs"].dump();
         } else {
             msg = "The type of inputs is abnormal";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         std::string errorMsg = "";
@@ -145,8 +138,8 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
         if (utf16.length() == 0 || utf16.length() > GetMaxInputLen()) {
             msg = "Inputs length must be in (0, " + std::to_string(GetMaxInputLen());
             msg += "], but got " + std::to_string(utf16.length());
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         if (this->isReCompute_) {
@@ -154,14 +147,15 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
             if (!this->GetTokensFromInput(inputParam->textInput, reqTokens_, this->respTokenMap[SPECIAL_SEQ_ID_PRESET],
                                           msg)) {
                 msg = "Failed to get token from input: " + msg;
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                    ABNORMAL_TRANSMISSION_ERROR), msg);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, ABNORMAL_TRANSMISSION_ERROR),
+                           msg);
                 return false;
             }
             if (!body.contains("origin_inputs") || body["origin_inputs"].is_null()) {
                 msg = "Failed to get parameter `origin_inputs` in json body";
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                    CHECK_ERROR), msg);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, CHECK_ERROR), msg);
                 return false;
             }
             inputParam->textInput = body["origin_inputs"];
@@ -171,8 +165,9 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
                 TokenizerProcessPool::GetInstance().Encode(inputParam->textInput, reqTokens_, ENCODE_FLAG, timestamp);
             if (!status.IsOk()) {
                 msg = status.StatusMsg();
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                    LOCAL_INVOKING_ERROR), msg << ". The requestId is " << requestId_);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, LOCAL_INVOKING_ERROR),
+                           msg << ". The requestId is " << requestId_);
                 return false;
             }
             PROF(encodeSpan.Metric("recvTokenSize", reqTokens_.size()));
@@ -181,8 +176,8 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
         if (reqTokens_.size() == 0 || reqTokens_.size() > MAX_TOKENS_NUM) {
             msg = "Inputs token length must be in (0, " + std::to_string(MAX_TOKENS_NUM) + "]";
             msg += ", but got " + std::to_string(reqTokens_.size());
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         return true;
@@ -191,34 +186,27 @@ bool SingleReqTgiTextInferInterface::ValidateAndPrepareReqToken(OrderedJson &bod
         return false;
     }
 }
-bool SingleReqTgiTextInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg)
-{
+bool SingleReqTgiTextInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg) {
     auto paramCheckRet =
         JsonParse::CheckOptionalItemType(reqJsonBody_, "parameters", OrderedJson::value_t::object, msg);
     if (!paramCheckRet.isCorrectType) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Parameters in request param invalid for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Parameters in request param invalid for requestId is " << requestId_);
         return false;
     }
-    const auto& params = reqJsonBody_["parameters"];
+    const auto &params = reqJsonBody_["parameters"];
     if (tmpReq == nullptr) {
         tmpReq = std::make_shared<mindie_llm::Request>();
     }
     if (!(AssignStopStrings(params, tmpReq, msg, true, MAX_STOP_STRING_LEN) &&
-          AssignTemperature(params, tmpReq, msg, false) &&
-          AssignTopK(params, tmpReq, msg) &&
-          AssignTopP(params, tmpReq, msg, false) &&
-          AssignTypicalP(params, tmpReq, msg) &&
-          AssignDoSample(params, tmpReq, msg) &&
-          AssignSeed(params, tmpReq, msg) &&
-          AssignRepetitionPenalty(params, tmpReq, msg) &&
-          AssignWatermark(params, tmpReq, msg) &&
-          AssignAdapterId(params, tmpReq, msg) &&
-          AssignMaxNewTokens(params, inputParam, msg) &&
-          AssignDetails(params, inputParam, msg) &&
-          AssignDecoderInputDetail(params, inputParam, msg) &&
-          AssignReturnFullText(params, inputParam, msg) &&
-          AssignTruncate(params, inputParam, msg) &&
+          AssignTemperature(params, tmpReq, msg, false) && AssignTopK(params, tmpReq, msg) &&
+          AssignTopP(params, tmpReq, msg, false) && AssignTypicalP(params, tmpReq, msg) &&
+          AssignDoSample(params, tmpReq, msg) && AssignSeed(params, tmpReq, msg) &&
+          AssignRepetitionPenalty(params, tmpReq, msg) && AssignWatermark(params, tmpReq, msg) &&
+          AssignAdapterId(params, tmpReq, msg) && AssignMaxNewTokens(params, inputParam, msg) &&
+          AssignDetails(params, inputParam, msg) && AssignDecoderInputDetail(params, inputParam, msg) &&
+          AssignReturnFullText(params, inputParam, msg) && AssignTruncate(params, inputParam, msg) &&
           ValidTGIParameterSpec(msg))) {
         return false;
     }
@@ -232,19 +220,20 @@ bool SingleReqTgiTextInferInterface::SetupInferParams(RequestSPtr tmpReq, std::s
 
 bool SingleReqTgiTextInferInterface::BuildResponseJson(ResponseSPtr response,
                                                        const std::vector<BestNTokens> &tempTokens,
-                                                       RespBodyQueue &jsonObjs, const uint64_t &timestamp)
-{
+                                                       RespBodyQueue &jsonObjs, const uint64_t &timestamp) {
     bool res = true;
     if (inputParam->streamMode) {
         if (!ProcessResponseStream(response, tempTokens, jsonObjs, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process TGI response stream");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process TGI response stream");
             return false;
         }
     } else {
         if (!ProcessResponseSingle(response, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process TGI response single");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process TGI response single");
             return false;
         }
         res = EncodeTGIResponse(jsonObjs);
@@ -252,32 +241,31 @@ bool SingleReqTgiTextInferInterface::BuildResponseJson(ResponseSPtr response,
     return res;
 }
 
-void SingleReqTgiTextInferInterface::SendStreamResponse(RespBodyQueue &jsonStrs)
-{
+void SingleReqTgiTextInferInterface::SendStreamResponse(RespBodyQueue &jsonStrs) {
     auto ret = EncodeTGIStreamResponse(jsonStrs);
     if (ret != 0) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to encode buffer");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to encode buffer");
         return;
     }
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Should not finish, isFinish is " << isEnd);
     return;
 }
 
-std::string SingleReqTgiTextInferInterface::ChangeUtf8Str(std::string &input) const
-{
+std::string SingleReqTgiTextInferInterface::ChangeUtf8Str(std::string &input) const {
     try {
         return CleanStringForJson(input);
     } catch (const std::exception &e) {
         // 处理转换错误
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to change str to utf8. " << e.what());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                   "Failed to change str to utf8. " << e.what());
         return " ";
     }
 }
 
-int32_t SingleReqTgiTextInferInterface::GenerateRspDetailJsonStr(OrderedJson &jsonObj, std::string &jsonStr)
-{
+int32_t SingleReqTgiTextInferInterface::GenerateRspDetailJsonStr(OrderedJson &jsonObj, std::string &jsonStr) {
     uint64_t seqId;
     if (!GetUniqueSequenceId(seqId)) {
         return -1;
@@ -288,8 +276,7 @@ int32_t SingleReqTgiTextInferInterface::GenerateRspDetailJsonStr(OrderedJson &js
         jsonObj["details"]["generated_tokens"] = postTokenIdMap[seqId].size();
         if (inputParam->decoderInputDetails) {
             for (long &i : reqTokens_) {
-                OrderedJson tmp = Json{ { "id", i }, { "logprob", nullptr },
-                    { "special", nullptr }, { "text", nullptr } };
+                OrderedJson tmp = Json{{"id", i}, {"logprob", nullptr}, {"special", nullptr}, {"text", nullptr}};
                 jsonObj["details"]["prefill"].emplace_back(tmp);
             }
         } else {
@@ -301,7 +288,7 @@ int32_t SingleReqTgiTextInferInterface::GenerateRspDetailJsonStr(OrderedJson &js
             jsonObj["details"]["seed"] = nullptr;
         }
         for (long &i : postTokenIdMap[seqId]) {
-            OrderedJson tmp = Json{ { "id", i }, { "logprob", nullptr }, { "special", nullptr }, { "text", nullptr } };
+            OrderedJson tmp = Json{{"id", i}, {"logprob", nullptr}, {"special", nullptr}, {"text", nullptr}};
             jsonObj["details"]["tokens"].emplace_back(tmp);
         }
 
@@ -309,14 +296,14 @@ int32_t SingleReqTgiTextInferInterface::GenerateRspDetailJsonStr(OrderedJson &js
         jsonStr = jsonObj.dump();
         return 0;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to generate response details");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                   "Failed to generate response details");
         return -1;
     }
 }
 
-bool SingleReqTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jsonStrs)
-{
+bool SingleReqTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jsonStrs) {
     uint64_t seqId;
     if (!GetUniqueSequenceId(seqId)) {
         return false;
@@ -329,22 +316,23 @@ bool SingleReqTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jsonStrs)
             jsonStr = tmpJsonObj.dump();
         } else {
             if (GenerateRspDetailJsonStr(tmpJsonObj, jsonStr) != 0) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    JSON_PARSE_ERROR), "Generate tgi response detail json string failed");
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                           "Generate tgi response detail json string failed");
                 return false;
             }
         }
         jsonStrs.push(jsonStr);
         return true;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ENCODE_DECODE_ERROR), "Failed to encode tgi generate response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                   "Failed to encode tgi generate response");
         return false;
     }
 }
 
-int32_t SingleReqTgiTextInferInterface::EncodeTGIStreamResponse(RespBodyQueue &jsonStrs)
-{
+int32_t SingleReqTgiTextInferInterface::EncodeTGIStreamResponse(RespBodyQueue &jsonStrs) {
     uint64_t seqId;
     if (!GetUniqueSequenceId(seqId)) {
         return -1;
@@ -355,7 +343,7 @@ int32_t SingleReqTgiTextInferInterface::EncodeTGIStreamResponse(RespBodyQueue &j
     }
 
     try {
-        for (auto& item: canOutCache) {
+        for (auto &item : canOutCache) {
             OrderedJson output;
             output["token"]["id"] = item.postSingleTokenMap[seqId];
             output["token"]["text"] = item.postSingleText[seqId];
@@ -388,21 +376,19 @@ int32_t SingleReqTgiTextInferInterface::EncodeTGIStreamResponse(RespBodyQueue &j
         }
         return 0;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ENCODE_DECODE_ERROR), "Failed to encode tgi stream response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                   "Failed to encode tgi stream response");
         return -1;
     }
 }
 
-void SingleReqTgiTextInferInterface::SetDMIReComputeBuilder()
-{
+void SingleReqTgiTextInferInterface::SetDMIReComputeBuilder() {
     singleLLMReqHandlerBase_->SetDMIReComputeBuildCallBack(
         std::bind(&SingleReqTgiTextInferInterface::BuildTgiReComputeBody, this, std::placeholders::_1));
 }
 
-std::string SingleReqTgiTextInferInterface::BuildTgiReComputeBody(
-    const std::vector<BestNTokens>& tokens)
-{
+std::string SingleReqTgiTextInferInterface::BuildTgiReComputeBody(const std::vector<BestNTokens> &tokens) {
     OrderedJson newReqJsonObj;
     // Get tokens in non-stream mode
     if (tokens.size() != 0) {
@@ -449,21 +435,20 @@ std::string SingleReqTgiTextInferInterface::BuildTgiReComputeBody(
     return newReqJsonObj.dump();
 }
 
-void SingleReqTgiTextInferInterface::ParseStopString(nlohmann::ordered_json& newReqJsonObj)
-{
+void SingleReqTgiTextInferInterface::ParseStopString(nlohmann::ordered_json &newReqJsonObj) {
     std::string stopStr = request_->stopStrings.has_value() ? request_->stopStrings.value() : "";
     if (stopStr != "") {
         try {
             newReqJsonObj["parameters"]["stop"] = nlohmann::json::parse(stopStr, CheckJsonDepthCallback);
-        } catch(...) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Failed to parse stopStrings");
+        } catch (...) {
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Failed to parse stopStrings");
         }
     }
 }
 
-bool SingleReqGeneralTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jsonStrs)
-{
+bool SingleReqGeneralTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jsonStrs) {
     uint64_t seqId;
     std::string jsonStr;
     if (!GetUniqueSequenceId(seqId)) {
@@ -480,8 +465,9 @@ bool SingleReqGeneralTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jso
             return true;
         }
         if (GenerateRspDetailJsonStr(tmpJsonObj, jsonStr) != 0) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                JSON_PARSE_ERROR), "Generate general tgi response detail json string failed");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                       "Generate general tgi response detail json string failed");
             return false;
         }
         rstJsonObj.emplace_back(tmpJsonObj);
@@ -489,9 +475,10 @@ bool SingleReqGeneralTgiTextInferInterface::EncodeTGIResponse(RespBodyQueue &jso
         jsonStrs.push(jsonStr);
         return true;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            PARAM_PARSE_ERROR), "Failed to encode tgi generate response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, PARAM_PARSE_ERROR),
+                   "Failed to encode tgi generate response");
         return false;
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

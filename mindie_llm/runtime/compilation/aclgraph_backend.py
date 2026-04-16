@@ -21,7 +21,7 @@ _global_graph_memory_pool = None
 
 def get_global_graph_memory_pool() -> Optional[Any]:
     """Get the global graph memory pool.
-    
+
     Returns:
         The global graph memory pool, or None if not set.
     """
@@ -30,7 +30,7 @@ def get_global_graph_memory_pool() -> Optional[Any]:
 
 def set_global_graph_memory_pool(val: Any) -> None:
     """Set the global graph memory pool.
-    
+
     Args:
         val: Memory pool value to set.
     """
@@ -40,21 +40,20 @@ def set_global_graph_memory_pool(val: Any) -> None:
 
 def validate_aclgraph_capturing_enabled() -> None:
     """Validate that ACL graph capturing is enabled.
-    
+
     Raises:
         RuntimeError: If ACL graph capturing is not enabled.
     """
     global aclgraph_capturing_enable
     if not aclgraph_capturing_enable:
         raise RuntimeError(
-            "ACL graph capturing detected at an inappropriate "
-            "time. This operation is currently disabled."
+            "ACL graph capturing detected at an inappropriate time. This operation is currently disabled."
         )
 
 
 def set_aclgraph_capturing_enabled(enabled: bool) -> None:
     """Set the ACL graph capturing enabled status.
-    
+
     Args:
         enabled: Whether to enable ACL graph capturing.
     """
@@ -64,14 +63,14 @@ def set_aclgraph_capturing_enabled(enabled: bool) -> None:
 
 class AclGraphBackend:
     """Backend for ACL graph compilation and execution.
-    
+
     This class wraps a model to enable graph mode execution using ACL graphs.
     It manages graph capture, replay, and handles both eager and graph modes.
     """
-    
+
     def __init__(self, model: Any, max_num_tokens_per_batch: int) -> None:
         """Initialize the ACL graph backend.
-        
+
         Args:
             model: The model to wrap with graph backend.
             max_num_tokens_per_batch: Maximum number of tokens per batch.
@@ -86,14 +85,14 @@ class AclGraphBackend:
 
     def __call__(self, *args: Any, **kwargs: Any) -> torch.Tensor:
         """Execute forward pass using graph mode or eager mode.
-        
+
         In prefill stage or when num tokens is larger than max capture size,
         eager mode will be used. Otherwise, graph mode will be used.
-        
+
         Args:
             *args: Positional arguments for model forward pass.
             **kwargs: Keyword arguments for model forward pass.
-            
+
         Returns:
             Hidden states tensor.
         """
@@ -102,10 +101,12 @@ class AclGraphBackend:
         num_actual_tokens = forward_context.num_actual_tokens
         attn_metadata_dict = forward_context.attn_metadata_dict
 
-        #In prefill stage or num tokens lager than max capture size will use eager mode
-        if self._run_eager_mode_with_padding or forward_context.is_prefill\
-            or num_actual_tokens > self.capture_sizes[-1]:
-
+        # In prefill stage or num tokens lager than max capture size will use eager mode
+        if (
+            self._run_eager_mode_with_padding
+            or forward_context.is_prefill
+            or num_actual_tokens > self.capture_sizes[-1]
+        ):
             hidden_state = self.model(*args, **kwargs)
             return hidden_state
 
@@ -126,7 +127,7 @@ class AclGraphBackend:
                 npu_graph=aclgraph,
                 pool=get_global_graph_memory_pool(),
                 capture_error_mode="thread_local",
-                auto_dispatch_capture=True
+                auto_dispatch_capture=True,
             ):
                 hidden_state = self.model(*args, **kwargs)
 
@@ -149,17 +150,17 @@ class AclGraphBackend:
     @staticmethod
     def _get_capture_sizes(max_num_tokens_per_batch: int, step: int = 8) -> list[int]:
         """Get list of capture sizes for graph compilation.
-        
+
         Generates power-of-2 sizes for small batches, then linear steps for larger batches.
         Always includes max_num_tokens_per_batch to ensure full coverage.
-        
+
         Args:
             max_num_tokens_per_batch: Maximum number of tokens per batch.
             step: Step size for large batches (default 8, aligned to NPU memory).
-            
+
         Returns:
             Sorted list of capture sizes, always ending with max_num_tokens_per_batch.
-            
+
         Example:
             >>> _get_capture_sizes(20)
             [1, 2, 4, 8, 16, 20]
@@ -169,26 +170,24 @@ class AclGraphBackend:
             [1, 2, 4, 5]
         """
         if max_num_tokens_per_batch < 1:
-            raise ValueError(
-                f"max_num_tokens_per_batch must be >= 1, got {max_num_tokens_per_batch}"
-            )
-        
+            raise ValueError(f"max_num_tokens_per_batch must be >= 1, got {max_num_tokens_per_batch}")
+
         # Small sizes: powers of 2
         small_sizes = [1, 2, 4]
-        
+
         # Large sizes: linear steps (excludes max)
         large_sizes = range(step, max_num_tokens_per_batch, step)
-        
+
         # Merge, deduplicate, ensure max included, and sort
         all_sizes = sorted({*small_sizes, *large_sizes, max_num_tokens_per_batch})
         return [s for s in all_sizes if s <= max_num_tokens_per_batch]
 
     def get_padded_graph_size(self, x: int) -> int:
         """Get the padded graph size for a given number of tokens.
-        
+
         Args:
             x: Number of tokens.
-            
+
         Returns:
             The smallest capture size that is >= x, or x if no such size exists.
         """
@@ -196,10 +195,10 @@ class AclGraphBackend:
 
     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Compute logits from hidden states.
-        
+
         Args:
             hidden_states: Hidden states tensor.
-            
+
         Returns:
             Logits tensor.
         """
@@ -207,10 +206,10 @@ class AclGraphBackend:
 
     def maybe_gather_and_unpad_for_flashcomm(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Gather and unpad hidden states for flash communication if enabled.
-        
+
         Args:
             hidden_states: Hidden states tensor.
-            
+
         Returns:
             Processed hidden states tensor.
         """
@@ -218,10 +217,10 @@ class AclGraphBackend:
 
     def maybe_pad_and_gather_cross_dp_and_unpad(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Pad, gather, and unpad hidden states across data parallel groups if enabled.
-        
+
         Args:
             hidden_states: Hidden states tensor.
-            
+
         Returns:
             Processed hidden states tensor.
         """
@@ -229,7 +228,7 @@ class AclGraphBackend:
 
     def set_eager_mode_with_padding(self, is_eager_mode_with_padding: bool):
         """A method to control whether run in eager mode or graph mode
-        
+
         Args:
             is_eager_mode_with_padding: bool, whether to enable eager mode with padding
         """

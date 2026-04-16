@@ -10,6 +10,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "log_utils.h"
+
 #include <cstdio>
 #include <experimental/filesystem>
 #include <fstream>
@@ -17,12 +19,10 @@
 
 #include "file_utils.h"
 #include "log_config.h"
-#include "log_utils.h"
 
 namespace mindie_llm {
 
-void LogUtils::SetMindieLogParamBool(LoggerType loggerType, bool &logParam, const std::string &envVar)
-{
+void LogUtils::SetMindieLogParamBool(LoggerType loggerType, bool &logParam, const std::string &envVar) {
     std::string envParam = LogUtils::GetEnvParam(loggerType, envVar);
     std::transform(envParam.begin(), envParam.end(), envParam.begin(), ::tolower);
 
@@ -39,16 +39,14 @@ void LogUtils::SetMindieLogParamBool(LoggerType loggerType, bool &logParam, cons
     }
 }
 
-void LogUtils::SetMindieLogParamString(LoggerType loggerType, std::string &logParam, const std::string &envVar)
-{
+void LogUtils::SetMindieLogParamString(LoggerType loggerType, std::string &logParam, const std::string &envVar) {
     std::string envParam = LogUtils::GetEnvParam(loggerType, envVar);
     if (!envParam.empty()) {
         logParam = envParam;
     }
 }
 
-void LogUtils::SetMindieLogParamLevel(LoggerType loggerType, LogLevel &logParam, const std::string &envVar)
-{
+void LogUtils::SetMindieLogParamLevel(LoggerType loggerType, LogLevel &logParam, const std::string &envVar) {
     std::string envParam = LogUtils::GetEnvParam(loggerType, envVar);
     std::transform(envParam.begin(), envParam.end(), envParam.begin(), ::tolower);
 
@@ -63,8 +61,7 @@ void LogUtils::SetMindieLogParamLevel(LoggerType loggerType, LogLevel &logParam,
     }
 }
 
-std::string LogUtils::GetEnvParam(LoggerType loggerType, const std::string &mindieEnv)
-{
+std::string LogUtils::GetEnvParam(LoggerType loggerType, const std::string &mindieEnv) {
     std::vector<std::string> modules = LogUtils::Split(mindieEnv, ';');
     std::string flag;
     const std::string &loggerModule = GetModuleName(loggerType);
@@ -85,8 +82,7 @@ std::string LogUtils::GetEnvParam(LoggerType loggerType, const std::string &mind
     return flag;
 }
 
-std::string LogUtils::Trim(std::string str)
-{
+std::string LogUtils::Trim(std::string str) {
     if (str.empty()) {
         std::cout << "str is empty." << std::endl;
         return str;
@@ -97,8 +93,7 @@ std::string LogUtils::Trim(std::string str)
     return str;
 }
 
-std::vector<std::string> LogUtils::Split(const std::string &str, char delim)
-{
+std::vector<std::string> LogUtils::Split(const std::string &str, char delim) {
     std::vector<std::string> tokens;
     // 1. check empty string
     if (str.empty()) {
@@ -125,8 +120,7 @@ std::vector<std::string> LogUtils::Split(const std::string &str, char delim)
     return tokens;
 }
 
-void LogUtils::UpdateLogFileParam(std::string rotateConfig, uint32_t &maxFileSize, uint32_t &maxFiles)
-{
+void LogUtils::UpdateLogFileParam(std::string rotateConfig, uint32_t &maxFileSize, uint32_t &maxFiles) {
     if (rotateConfig.empty()) {
         return;
     }
@@ -145,21 +139,20 @@ void LogUtils::UpdateLogFileParam(std::string rotateConfig, uint32_t &maxFileSiz
         if (option == "-fs" && isNumeric(value)) {
             maxFileSize = static_cast<uint32_t>(std::stoi(value)) * 1024 * 1024;  // 1 MB = 1024 KB = 1024 * 1024 B;
             if (maxFileSize > LOG_FILE_SIZE_LIMIT) {
-                throw std::runtime_error("log file size should not be set bigger than"
-                                        + std::to_string(LOG_FILE_SIZE_LIMIT));
+                throw std::runtime_error("log file size should not be set bigger than" +
+                                         std::to_string(LOG_FILE_SIZE_LIMIT));
             }
         } else if (option == "-r" && isNumeric(value)) {
             maxFiles = static_cast<uint32_t>(std::stoi(value));
             if (maxFiles > LOG_FILE_NUM_LIMIT) {
-                throw std::runtime_error("log file num should not be set bigger than"
-                                        + std::to_string(LOG_FILE_NUM_LIMIT));
+                throw std::runtime_error("log file num should not be set bigger than" +
+                                         std::to_string(LOG_FILE_NUM_LIMIT));
             }
         }
     }
 }
 
-void LogUtils::GetLogFileName(LoggerType loggerType, std::string &filename)
-{
+void LogUtils::GetLogFileName(LoggerType loggerType, std::string &filename) {
     int pid = spdlog::details::os::pid();
     auto now = std::chrono::system_clock::now();
 
@@ -181,8 +174,7 @@ void LogUtils::GetLogFileName(LoggerType loggerType, std::string &filename)
     filename += "/mindie-" + GetLoggerNameStr(loggerType) + "_" + std::to_string(pid) + "_" + timeStr + ".log";
 }
 
-std::string LogUtils::GetModuleName(LoggerType loggerType)
-{
+std::string LogUtils::GetModuleName(LoggerType loggerType) {
     loggerType = (loggerType == LoggerType::MINDIE_LLM_REQUEST || loggerType == LoggerType::MINDIE_LLM_TOKEN)
                      ? LoggerType::MINDIE_LLM
                      : loggerType;
@@ -190,15 +182,12 @@ std::string LogUtils::GetModuleName(LoggerType loggerType)
     return it != MODULE_NAME_MAP.end() ? it->second : throw std::invalid_argument("Invalid LoggerType enum value");
 }
 
-std::string LogUtils::GetLoggerNameStr(LoggerType loggerType)
-{
+std::string LogUtils::GetLoggerNameStr(LoggerType loggerType) {
     auto it = LOGGER_NAME_MAP.find(loggerType);
     return it != LOGGER_NAME_MAP.end() ? it->second : throw std::invalid_argument("Invalid LoggerType enum value");
 }
 
-GenericRotationFileSink::GenericRotationFileSink(const std::string &baseFileName,
-                                                 size_t maxFileSize,
-                                                 size_t maxFileNum,
+GenericRotationFileSink::GenericRotationFileSink(const std::string &baseFileName, size_t maxFileSize, size_t maxFileNum,
                                                  const spdlog::file_event_handlers &eventHandlers,
                                                  const std::string &baseDir)
     : baseFileName_(baseFileName),
@@ -209,14 +198,11 @@ GenericRotationFileSink::GenericRotationFileSink(const std::string &baseFileName
       isFileCreated_(std::experimental::filesystem::exists(baseFileName_)),
       currentSize_(0),
       lastError_(),
-      baseDir_(baseDir)
-{
-}
+      baseDir_(baseDir) {}
 
 GenericRotationFileSink::~GenericRotationFileSink() = default;
 
-bool GenericRotationFileSink::CreateFileIfNeeded()
-{
+bool GenericRotationFileSink::CreateFileIfNeeded() {
     if (!isFileCreated_) {
         std::string errMsg;
         std::string regularPath;
@@ -248,14 +234,9 @@ bool GenericRotationFileSink::CreateFileIfNeeded()
     return true;
 }
 
+const std::string &GenericRotationFileSink::GetLastError() const { return lastError_; }
 
-const std::string &GenericRotationFileSink::GetLastError() const
-{
-    return lastError_;
-}
-
-void GenericRotationFileSink::sink_it_(const spdlog::details::log_msg &msg)
-{
+void GenericRotationFileSink::sink_it_(const spdlog::details::log_msg &msg) {
     if (!CreateFileIfNeeded()) {
         return;
     }
@@ -280,16 +261,14 @@ void GenericRotationFileSink::sink_it_(const spdlog::details::log_msg &msg)
     currentSize_ = curSize;
 }
 
-void GenericRotationFileSink::flush_()
-{
+void GenericRotationFileSink::flush_() {
     std::lock_guard<std::mutex> lock(mtx_);
     if (isFileCreated_) {
         fileHelper_->flush();
     }
 }
 
-std::string GenericRotationFileSink::GenerateFileName(std::string &fileName, size_t index) const
-{
+std::string GenericRotationFileSink::GenerateFileName(std::string &fileName, size_t index) const {
     if (index == 0u) {
         return fileName;
     }
@@ -299,14 +278,12 @@ std::string GenericRotationFileSink::GenerateFileName(std::string &fileName, siz
     return spdlog::fmt_lib::format(SPDLOG_FMT_STRING(SPDLOG_FILENAME_T("{}.{:02}{}")), baseName, index, extName);
 }
 
-bool GenericRotationFileSink::RenameFile(std::string &srcFileName, std::string &targetFileName) const
-{
+bool GenericRotationFileSink::RenameFile(std::string &srcFileName, std::string &targetFileName) const {
     (void)spdlog::details::os::remove(targetFileName);
     return spdlog::details::os::rename(srcFileName, targetFileName) == 0;
 }
 
-void GenericRotationFileSink::Rotate()
-{
+void GenericRotationFileSink::Rotate() {
     using spdlog::details::os::filename_to_str;
     using spdlog::details::os::path_exists;
 

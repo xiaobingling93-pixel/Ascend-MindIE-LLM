@@ -15,7 +15,7 @@ from mindie_llm.utils.tensor import backend, op
 
 backend.Tensor
 
-operations: 
+operations:
     op.ones
     op.full
 
@@ -23,11 +23,11 @@ type:
     backend.int64
     backend.float32
 
-npu/hal 
+npu/hal
     mindspore 中的 torch.npu 等效于 mindspore.hal
     npu.synchronize()
     npu.max_memory_allocated()
-    npu.get_device_properties(self.rank).total_memory 
+    npu.get_device_properties(self.rank).total_memory
 """
 
 from typing import TypeAlias

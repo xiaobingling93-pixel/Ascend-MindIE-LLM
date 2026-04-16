@@ -41,7 +41,7 @@ class LLMConfig:
         """
         sections = {}
         for key, value in vars(self).items():
-            if not key.startswith('_'):
+            if not key.startswith("_"):
                 sections[key] = value
 
         section_reprs = []
@@ -49,11 +49,9 @@ class LLMConfig:
             formatted_value = format_value(value, indent_level=1)
             section_reprs.append(f"\n    {name}={formatted_value}")
 
-        return f"LLMConfig(\n    path={repr(str(self._config_path))}," + \
-            "".join(section_reprs) + \
-            "\n)"
+        return f"LLMConfig(\n    path={repr(str(self._config_path))}," + "".join(section_reprs) + "\n)"
 
-    def update(self, config_dict: Dict[str, Any], allow_new_keys: bool = False, current_path: str = '') -> None:
+    def update(self, config_dict: Dict[str, Any], allow_new_keys: bool = False, current_path: str = "") -> None:
         """
         Update configuration values with provided keyword arguments
         Args:
@@ -67,7 +65,7 @@ class LLMConfig:
 
     def merge_models_config(self, model_name: str) -> None:
         """merge model.model_name config to llm config"""
-        model_key = f'{model_name}'
+        model_key = f"{model_name}"
         model_config = self.get(model_key)
         if model_config is None:
             return
@@ -79,7 +77,7 @@ class LLMConfig:
         sections = {}
 
         for key, value in vars(self).items():
-            if not key.startswith('_'):
+            if not key.startswith("_"):
                 sections[key] = value.to_dict() if isinstance(value, SectionConfig) else value
 
         try:
@@ -98,7 +96,7 @@ class LLMConfig:
             SectionConfig or value
         """
         current = self
-        keys = key.split('.')
+        keys = key.split(".")
 
         for key in keys:
             if not hasattr(current, key):
@@ -112,13 +110,13 @@ class LLMConfig:
         Load and parse json configuration file.
         """
         try:
-            with safe_open(self._config_path, 'r', encoding='utf-8') as f:
+            with safe_open(self._config_path, "r", encoding="utf-8") as f:
                 self._config_dict = json.load(f)
                 self._apply_config(self._config_dict)
         except FileNotFoundError as e:
-            raise FileNotFoundError(f'config file not found: {self._config_path}') from e
+            raise FileNotFoundError(f"config file not found: {self._config_path}") from e
         except json.JSONDecodeError as e:
-            raise ValueError('Invalid json in config file') from e
+            raise ValueError("Invalid json in config file") from e
 
     def _apply_config(self, config_dict: Dict[str, Any]):
         """
@@ -137,9 +135,14 @@ class LLMConfig:
                 if isinstance(value, dict):
                     setattr(self, key, SectionConfig.create(value))
                 elif isinstance(value, list):
-                    setattr(self, key,
-                            [SectionConfig.create(item) if isinstance(item, dict) else self._apply_config(item)
-                            for item in value])
+                    setattr(
+                        self,
+                        key,
+                        [
+                            SectionConfig.create(item) if isinstance(item, dict) else self._apply_config(item)
+                            for item in value
+                        ],
+                    )
                 else:
                     setattr(self, key, convert_type(value))
 
@@ -153,20 +156,12 @@ class LLMConfig:
             if isinstance(value, dict):
                 child = base.get(new_path)
                 if child is not None:
-                    self._recursive_update(
-                        base=child,
-                        update=value,
-                        current_path='',
-                        allow_new_keys=allow_new_keys
-                    )
+                    self._recursive_update(base=child, update=value, current_path="", allow_new_keys=allow_new_keys)
                 else:
                     setattr(base if not current_path else base.get(current_path), key, SectionConfig.create(value))
             elif isinstance(value, list):
                 if hasattr(base, key) or allow_new_keys:
-                    converted = [
-                        SectionConfig.create(item) if isinstance(item, dict) else item
-                        for item in value
-                    ]
+                    converted = [SectionConfig.create(item) if isinstance(item, dict) else item for item in value]
                     setattr(base, key, converted)
                 else:
                     pass
@@ -190,26 +185,24 @@ def convert_type(value: Any) -> Any:
         return value
     if isinstance(value, str):
         value = value.strip()
-        if value.lower() in ('true', 'false', 'yes', 'no', 'on', 'off'):
-            return value.lower() in ('true', 'yes', 'on')
-        if value.lower() in ('none', 'null', ''):
+        if value.lower() in ("true", "false", "yes", "no", "on", "off"):
+            return value.lower() in ("true", "yes", "on")
+        if value.lower() in ("none", "null", ""):
             return None
         if value.isdigit():
             return int(value)
         try:
             return float(value)
         except ValueError:
-            pass # Skip values that can't be converted to float
+            pass  # Skip values that can't be converted to float
     return value
 
 
 def format_value(v, indent_level):
     """Recursively format values with proper indentation"""
-    indent = '    ' * indent_level
+    indent = "    " * indent_level
     if isinstance(v, SectionConfig):
-        return f"\n{indent}SectionConfig(" + \
-            format_dict(v.__dict__, indent_level + 1) + \
-            f"\n{indent})"
+        return f"\n{indent}SectionConfig(" + format_dict(v.__dict__, indent_level + 1) + f"\n{indent})"
     elif isinstance(v, list):
         items = []
         for item in v:
@@ -217,23 +210,19 @@ def format_value(v, indent_level):
                 items.append(format_value(item, indent_level + 1))
             else:
                 items.append(repr(item))
-        return f"[\n{indent}    " + \
-            f",\n{indent}    ".join(items) + \
-            f"\n{indent}]"
+        return f"[\n{indent}    " + f",\n{indent}    ".join(items) + f"\n{indent}]"
     elif isinstance(v, dict):
-        return f"\n{indent}{{" + \
-            format_dict(v, indent_level + 1) + \
-            f"\n{indent}}}"
+        return f"\n{indent}{{" + format_dict(v, indent_level + 1) + f"\n{indent}}}"
     else:
         return repr(v)
 
 
 def format_dict(d, indent_level):
     """Format dictionary-like objects with indentation"""
-    indent = '    ' * indent_level
+    indent = "    " * indent_level
     items = []
     for k, v in d.items():
-        if not k.startswith('_'):
+        if not k.startswith("_"):
             formatted_value = format_value(v, indent_level + 1)
             items.append(f"\n{indent}{k}={formatted_value}")
     return ",".join(items) if items else ""
@@ -243,11 +232,12 @@ class SectionConfig:
     """
     Helper class for representing nested configurations with automatic type detection
     """
+
     def __init__(self):
         pass
 
     def __repr__(self):
-        items = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith('_')]
+        items = [f"{k}={v}" for k, v in self.__dict__.items() if not k.startswith("_")]
         return f"SectionConfig({', '.join(items)})"
 
     @classmethod
@@ -277,16 +267,13 @@ class SectionConfig:
         """
         result = {}
         for key, value in vars(self).items():
-            if key.startswith('_'):
+            if key.startswith("_"):
                 continue
 
             if isinstance(value, SectionConfig):
                 result[key] = value.to_dict()
             elif isinstance(value, list):
-                result[key] = [
-                    item.to_dict() if isinstance(item, SectionConfig) else item
-                    for item in value
-                ]
+                result[key] = [item.to_dict() if isinstance(item, SectionConfig) else item for item in value]
             else:
                 result[key] = value
         return result
@@ -300,7 +287,7 @@ class SectionConfig:
             SectionConfig or value
         """
         current = self
-        keys = key.split('.')
+        keys = key.split(".")
 
         for key in keys:
             if not hasattr(current, key):

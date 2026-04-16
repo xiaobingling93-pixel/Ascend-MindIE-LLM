@@ -18,8 +18,8 @@
 namespace mindie_llm {
 
 using SendResponseCallback4Request = std::function<void(std::shared_ptr<InferResponse> &)>;
-        
+
 using ReleaseCallback = std::function<void(const InferRequestId &)>;
 
-}
+}  // namespace mindie_llm
 #endif

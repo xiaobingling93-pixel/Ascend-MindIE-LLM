@@ -37,6 +37,7 @@ class RMSNorm(CustomLayer):
             uses unquantized method. Defaults to None.
         prefix: Prefix string used to construct the full layer name in the state dictionary. Defaults to "".
     """
+
     def __init__(
         self,
         hidden_size: int,
@@ -121,6 +122,7 @@ class LayerNorm(CustomLayer):
             uses unquantized method. Defaults to None.
         prefix: Prefix string used to construct the full layer name in the state dictionary. Defaults to "".
     """
+
     def __init__(
         self,
         hidden_size: int,
@@ -157,10 +159,7 @@ class LayerNorm(CustomLayer):
         """
         param.load_weight(loaded_weight)
 
-    def forward(
-        self,
-        x: torch.Tensor
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Forward pass of the layer normalization layer.
 
         Args:

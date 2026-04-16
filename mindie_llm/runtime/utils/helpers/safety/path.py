@@ -65,8 +65,7 @@ def check_path_is_link(path: str) -> None:
         ValueError: If path is a symbolic link.
     """
     if os.path.islink(os.path.normpath(path)):
-        raise ValueError("The path should not be a symbolic link file. "
-                         "Please check the input path.")
+        raise ValueError("The path should not be a symbolic link file. Please check the input path.")
 
 
 def check_path_is_str(path: str) -> None:
@@ -80,8 +79,7 @@ def check_path_is_str(path: str) -> None:
         TypeError: If path is not a string.
     """
     if not isinstance(path, str):
-        raise TypeError(f"The file path's type should be str, but get {type(path)}. "
-                         "Please check the input path.")
+        raise TypeError(f"The file path's type should be str, but get {type(path)}. Please check the input path.")
 
 
 def check_path_has_special_characters(path: str) -> None:
@@ -113,5 +111,7 @@ def check_path_length_lt(path: str, max_path_length: int = MAX_PATH_LENGTH) -> N
     """
     path_length = len(path)
     if path_length > max_path_length:
-        raise ValueError(f"The length of path should not be greater than {max_path_length}, but got {path_length}. "
-                         f"Please check the input path within the valid length range.")
+        raise ValueError(
+            f"The length of path should not be greater than {max_path_length}, but got {path_length}. "
+            f"Please check the input path within the valid length range."
+        )

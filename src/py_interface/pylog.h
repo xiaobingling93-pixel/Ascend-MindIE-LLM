@@ -16,7 +16,7 @@
 #include <Python.h>
 
 namespace FOUNDATION {
-    PyObject *GetLogModule();
-} // namespace FOUNDATION
+PyObject *GetLogModule();
+}  // namespace FOUNDATION
 
 #endif

@@ -36,11 +36,9 @@ class SFA(AttentionLayerBase):
         self.cos_sin = None
         update_global_attn_dict(prefix, self)
         self.prefix = prefix
-    
+
         if attn_backend is None:
-            self.attn_backend = get_attn_backend(
-                use_mla=False, use_sfa=True
-            )
+            self.attn_backend = get_attn_backend(use_mla=False, use_sfa=True)
         else:
             self.attn_backend = attn_backend
 
@@ -59,6 +57,4 @@ class SFA(AttentionLayerBase):
 
     def forward(self, hidden_states, cos, sin):
         self_kv_cache = (self.key_cache, self.value_cache, self.index_cache)
-        return self.impl.forward(
-            self, hidden_states, self_kv_cache, cos=cos, sin=sin
-        )
+        return self.impl.forward(self, hidden_states, self_kv_cache, cos=cos, sin=sin)

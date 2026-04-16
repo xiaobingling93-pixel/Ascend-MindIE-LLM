@@ -9,28 +9,24 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "common_util.h"
-#include "log.h"
-#include "config_manager_impl.h"
 #include "http_ssl_secret.h"
+
+#include "common_util.h"
+#include "config_manager_impl.h"
+#include "log.h"
 
 using namespace mindie_llm;
 
 static const int MASTER_KEY_CHECK_AHEAD_TIME = 30;
 static const int MASTER_KEY_CHECK_PERIOD = 7 * 24;
 
-
-void HttpSslSecret::Start()
-{
+void HttpSslSecret::Start() {
     boost::unique_lock<boost::mutex> guard(mMutex);
     mCheckExpiredRunning = true;
-    mCheckExpiredThread = std::thread([this]() {
-        CheckKeyExpiredTask();
-    });
+    mCheckExpiredThread = std::thread([this]() { CheckKeyExpiredTask(); });
 }
 
-void HttpSslSecret::Stop()
-{
+void HttpSslSecret::Stop() {
     {
         boost::unique_lock<boost::mutex> guard(mMutex);
         mCheckExpiredRunning = false;
@@ -41,18 +37,16 @@ void HttpSslSecret::Stop()
     }
 }
 
-
-void HttpSslSecret::CheckKeyExpiredTask()
-{
+void HttpSslSecret::CheckKeyExpiredTask() {
     while (true) {
         {
-            boost::unique_lock<boost::mutex> lockGuard{ mMutex };
+            boost::unique_lock<boost::mutex> lockGuard{mMutex};
             if (!mCheckExpiredRunning) {
                 return;
             }
             // check every week
-            mCond.wait_until(lockGuard, boost::chrono::steady_clock::now() + boost::chrono::hours(
-                MASTER_KEY_CHECK_PERIOD));
+            mCond.wait_until(lockGuard,
+                             boost::chrono::steady_clock::now() + boost::chrono::hours(MASTER_KEY_CHECK_PERIOD));
             if (!mCheckExpiredRunning) {
                 return;
             }

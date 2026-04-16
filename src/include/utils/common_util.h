@@ -13,28 +13,30 @@
 #ifndef MINDIE_LLM_COMMON_UTIL_H
 #define MINDIE_LLM_COMMON_UTIL_H
 
-#include <chrono>
-#include <ctime>
-#include <algorithm>
-#include <cmath>
-#include <fstream>
-#include <climits>
-#include <iostream>
-#include <cstdio>
-#include <string>
-#include <cctype>
-#include <unistd.h>
-#include <vector>
-#include <map>
-#include <sstream>
-#include <set>
-#include <random>
-#include <functional>
-#include <cstdint>
 #include <sys/stat.h>
-#include "nlohmann/json.hpp"
+#include <unistd.h>
+
+#include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <climits>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <ctime>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <random>
+#include <set>
+#include <sstream>
+#include <string>
+#include <vector>
+
 #include "error.h"
 #include "file_utils.h"
+#include "nlohmann/json.hpp"
 
 namespace mindie_llm {
 struct LogRotateParam {
@@ -43,16 +45,16 @@ struct LogRotateParam {
     uint32_t fc{1};
     uint32_t rotate{10};
 };
-constexpr uint32_t MAX_CONFIG_FILE_SIZE_LIMIT = 500 * 1024 * 1024; // 500 MB
+constexpr uint32_t MAX_CONFIG_FILE_SIZE_LIMIT = 500 * 1024 * 1024;  // 500 MB
 
-constexpr int MIN_PRIVATE_KEY_CONTENT_BIT_LEN = 3072; // RSA密钥长度要求大于3072
-constexpr int MAX_PRIVATE_KEY_CONTENT_BIT_LEN = 32768; // huge RSA秘钥位宽为32768
+constexpr int MIN_PRIVATE_KEY_CONTENT_BIT_LEN = 3072;   // RSA密钥长度要求大于3072
+constexpr int MAX_PRIVATE_KEY_CONTENT_BIT_LEN = 32768;  // huge RSA秘钥位宽为32768
 
-constexpr int MIN_PRIVATE_KEY_CONTENT_BYTE_LEN = MIN_PRIVATE_KEY_CONTENT_BIT_LEN / 8; // 1个byte = 8bit
-constexpr int MAX_PRIVATE_KEY_CONTENT_BYTE_LEN = MAX_PRIVATE_KEY_CONTENT_BIT_LEN / 8; // 1个byte = 8bit
+constexpr int MIN_PRIVATE_KEY_CONTENT_BYTE_LEN = MIN_PRIVATE_KEY_CONTENT_BIT_LEN / 8;  // 1个byte = 8bit
+constexpr int MAX_PRIVATE_KEY_CONTENT_BYTE_LEN = MAX_PRIVATE_KEY_CONTENT_BIT_LEN / 8;  // 1个byte = 8bit
 
-const mode_t MAX_CONFIG_PERM = S_IRUSR | S_IWUSR | S_IRGRP;   // 640
-const mode_t MAX_HOME_DIR_PERM = S_IRWXU | S_IRGRP | S_IXGRP; // 750
+const mode_t MAX_CONFIG_PERM = S_IRUSR | S_IWUSR | S_IRGRP;    // 640
+const mode_t MAX_HOME_DIR_PERM = S_IRWXU | S_IRGRP | S_IXGRP;  // 750
 
 std::vector<std::string> GetHostIP(bool skipLoopback = true);
 
@@ -88,13 +90,12 @@ constexpr uint32_t SignalHandlerDefaultTimeout = 5;
 void ExecuteAction(std::function<void()> action, uint32_t timeoutSeconds, std::function<void()> timeoutHandler);
 
 template <typename T>
-std::string SerializeSet(const std::set<T>& inputSet)
-{
+std::string SerializeSet(const std::set<T> &inputSet) {
     std::stringstream ss;
     bool first = true;
     for (T elem : inputSet) {
         if (!first) {
-            ss << ","; // 使用逗号作为分隔符
+            ss << ",";  // 使用逗号作为分隔符
         }
         first = false;
         ss << elem;
@@ -124,8 +125,7 @@ bool IsFloatEquals(float a, float b);
 template <typename T>
 inline void StreamAppend(std::stringstream &stream, typename std::vector<T> source,
                          size_t limit = std::numeric_limits<size_t>::max(), bool delimOnStart = false,
-                         const std::string &delim = ",")
-{
+                         const std::string &delim = ",") {
     limit = std::min(source.size(), limit);
     if (limit == 0) {
         return;
@@ -149,7 +149,7 @@ void GetModelInfo(const std::string &configPath, std::string &modelName, size_t 
 
 Error GetLlmPath(std::string &outHomePath);
 
-bool ParsePortFromIp(const std::string& ipPort, uint32_t& port);
+bool ParsePortFromIp(const std::string &ipPort, uint32_t &port);
 
 std::string JoinStrings(const std::vector<std::string> &stringsVec, const std::string &delimiter);
 
@@ -165,21 +165,15 @@ bool IsIPv4(const std::string &ipAddress);
 
 bool IsIPv6(const std::string &ipAddress);
 
-std::string FormatGrpcAddress(const std::string& ip, const std::string& port);
+std::string FormatGrpcAddress(const std::string &ip, const std::string &port);
 
 // safe get value from map<vector<int64_t>>
-bool SafeGetMapVectorValue(const std::map<uint64_t, std::vector<int64_t>>& map,
-                           uint64_t seqId,
-                           size_t index,
-                           int64_t& outValue,
-                           const std::string& mapName) noexcept;
+bool SafeGetMapVectorValue(const std::map<uint64_t, std::vector<int64_t>> &map, uint64_t seqId, size_t index,
+                           int64_t &outValue, const std::string &mapName) noexcept;
 
 // safe get value from map<vector<float>>
-bool SafeGetMapVectorValue(const std::map<uint64_t, std::vector<float>>& map,
-                           uint64_t seqId,
-                           size_t index,
-                           float& outValue,
-                           const std::string& mapName) noexcept;
+bool SafeGetMapVectorValue(const std::map<uint64_t, std::vector<float>> &map, uint64_t seqId, size_t index,
+                           float &outValue, const std::string &mapName) noexcept;
 
 bool StrToInt64(int64_t &dest, const std::string &str);
 
@@ -188,8 +182,7 @@ bool StrToUint64(uint64_t &dest, const std::string &str);
 bool StrToUint32(uint32_t &dest, const std::string &str);
 
 template <typename T>
-std::string VectorToString(const std::vector<T>& vec)
-{
+std::string VectorToString(const std::vector<T> &vec) {
     std::ostringstream oss;
     oss << "[";
     for (size_t i = 0; i < vec.size(); ++i) {
@@ -204,8 +197,7 @@ std::string VectorToString(const std::vector<T>& vec)
 
 // Helper function to convert a std::map to a string
 template <typename K, typename V>
-std::string MapToString(const std::map<K, V>& map)
-{
+std::string MapToString(const std::map<K, V> &map) {
     std::ostringstream oss;
     oss << "{";
     for (auto it = map.begin(); it != map.end(); ++it) {
@@ -220,8 +212,7 @@ std::string MapToString(const std::map<K, V>& map)
 
 // Specialization for std::map with std::vector as the value type
 template <typename K, typename V>
-std::string MapToString(const std::map<K, std::vector<V>>& map)
-{
+std::string MapToString(const std::map<K, std::vector<V>> &map) {
     std::ostringstream oss;
     oss << "{";
     for (auto it = map.begin(); it != map.end(); ++it) {
@@ -235,24 +226,22 @@ std::string MapToString(const std::map<K, std::vector<V>>& map)
 }
 
 template <typename KeyType, typename ValueType>
-void MergeMaps(std::map<KeyType, ValueType>& totalMap, const std::map<KeyType, ValueType>& subMap)
-{
-    for (const auto& entry : subMap) {
+void MergeMaps(std::map<KeyType, ValueType> &totalMap, const std::map<KeyType, ValueType> &subMap) {
+    for (const auto &entry : subMap) {
         totalMap[entry.first] += entry.second;
     }
 }
 
 template <typename K, typename V>
-std::map<K, V> RemoveMapElements(const std::map<K, V>& inputMap, const std::vector<K>& keysToRemove)
-{
+std::map<K, V> RemoveMapElements(const std::map<K, V> &inputMap, const std::vector<K> &keysToRemove) {
     std::map<K, V> resultMap = inputMap;
 
-    for (const auto& key : keysToRemove) {
+    for (const auto &key : keysToRemove) {
         // 删除整个键值对
         resultMap.erase(key);
     }
     return resultMap;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_LLM_COMMON_UTIL_H
+#endif  // MINDIE_LLM_COMMON_UTIL_H

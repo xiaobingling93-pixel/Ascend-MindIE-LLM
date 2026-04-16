@@ -35,13 +35,14 @@ class LaPlugin(Plugin):
         self.input_metadata = None
 
         block_size = kvcache_settings.block_size
-        self.decoding_policy = DecodingPolicy(kwargs, self.infer_context, self.model_wrapper,
-                                              is_log_enable(), block_size, kwargs.get('eos_token_id'))
+        self.decoding_policy = DecodingPolicy(
+            kwargs, self.infer_context, self.model_wrapper, is_log_enable(), block_size, kwargs.get("eos_token_id")
+        )
         self.rank = generator_backend.rank
-        level = kwargs.get('level', 4)
-        window = kwargs.get('window', 5)
+        level = kwargs.get("level", 4)
+        window = kwargs.get("window", 5)
         guess_set_size = kwargs.get("guess_set_size", 5)
-        print_log(self.rank, logger.debug, f'Lookahead start, NWG={level}/{window}/{guess_set_size}')
+        print_log(self.rank, logger.debug, f"Lookahead start, NWG={level}/{window}/{guess_set_size}")
 
     @staticmethod
     def repeat_sample_param(param_tensor, logits_num_per_batch):
@@ -69,8 +70,9 @@ class LaPlugin(Plugin):
         # decode阶段操作
         ends = self.decoding_policy.cu_seq_len[1:].tolist()
         for batch in range(batch_size):
-            guess_token = self.decoding_policy.store_guess_tokens[
-                batch] if self.decoding_policy.store_guess_tokens else None
+            guess_token = (
+                self.decoding_policy.store_guess_tokens[batch] if self.decoding_policy.store_guess_tokens else None
+            )
             guess_token_num = 0
             if guess_token is not None:
                 guess_token_num = len(guess_token) * len(guess_token[0])
@@ -82,16 +84,18 @@ class LaPlugin(Plugin):
         next_guess_logits = tensor_backend.zeros(
             (total_logits_nums, tensor_backend.shape(logits, -1)),
             dtype=logits.dtype,
-            device=tensor_backend.get_device(logits))
+            device=tensor_backend.get_device(logits),
+        )
 
         logits_index = 0
         for batch in range(batch_size):
             req_id = all_sequence_ids[batch]
             guess_token_num = self.plugin_data_param.q_len[batch] - 1
             past_token_len = self.decoding_policy.la_cache.get_past_tokens_len(req_id)
-            next_guess_logits[logits_index:logits_index + 1 + guess_token_num] = \
-                logits[ends[batch] - past_token_len - guess_token_num - 1:ends[batch] - past_token_len]
-            logits_index += (1 + guess_token_num)
+            next_guess_logits[logits_index : logits_index + 1 + guess_token_num] = logits[
+                ends[batch] - past_token_len - guess_token_num - 1 : ends[batch] - past_token_len
+            ]
+            logits_index += 1 + guess_token_num
 
         input_ids_pad = self.decoding_policy.get_input_ids_pad(batch_size, sampling_metadata)
         sampling_metadata.all_token_ids = input_ids_pad
@@ -135,7 +139,8 @@ class LaPlugin(Plugin):
                 continue
 
             new_results, need_cal_kv = self.decoding_policy.la_verify_greedy_one_batch(
-                verify_guess_tokens, next_guess_by_batch, next_guess_indices)
+                verify_guess_tokens, next_guess_by_batch, next_guess_indices
+            )
             if need_cal_kv:
                 req_id = input_metadata.all_sequence_ids[batch]
                 # la专属
@@ -173,8 +178,9 @@ class LaPlugin(Plugin):
     # 第一个插件类函数：输入构造
     def model_inputs_update(self, model_inputs, input_metadata, sampling_metadata, cache_ids, input_len_mask, **kwargs):
         (q_len, attention_mask) = input_len_mask
-        model_inputs, q_len, attention_mask = (
-            self.decoding_policy.handle_input(model_inputs, input_metadata, attention_mask))
+        model_inputs, q_len, attention_mask = self.decoding_policy.handle_input(
+            model_inputs, input_metadata, attention_mask
+        )
 
         input_len_mask = (q_len, attention_mask)
 
@@ -183,7 +189,8 @@ class LaPlugin(Plugin):
     # 第二个插件类函数：token验证
     def plugin_verify(self, sampling_output, cache_ids, result):
         next_tokens_indices = self.la_token_verify_not_sample(
-            self.input_metadata, self.plugin_data_param.q_len, sampling_output.token_ids)
+            self.input_metadata, self.plugin_data_param.q_len, sampling_output.token_ids
+        )
         sampling_output.repeating_indices = np.arange(len(cache_ids))
         self.decoding_policy.truncate_token_ids(cache_ids, self.input_metadata, sampling_output, next_tokens_indices)
         self.reshape_speculative_outputs(sampling_output, next_tokens_indices)

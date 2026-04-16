@@ -10,21 +10,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "log_config.h"
+
 #include <fcntl.h>
-#include "common_util.h"
+
 #include "check_utils.h"
+#include "common_util.h"
 #include "file_system.h"
 #include "log_utils.h"
-#include "log_config.h"
 
 namespace mindie_llm {
 
-const char*  MODULE_NAME_LLM = "llm";
-const char* MODULE_NAME_ATB = "llmmodels";
-const char* MODULE_NAME_SERVER = "server";
-const char* LOGGER_NAME_LLM_TOKEN = "llm-token";
-const char* LOGGER_NAME_LLM_REQUEST = "llm-request";
-const char* ALL_COMPONENT_NAME = "*";
+const char *MODULE_NAME_LLM = "llm";
+const char *MODULE_NAME_ATB = "llmmodels";
+const char *MODULE_NAME_SERVER = "server";
+const char *LOGGER_NAME_LLM_TOKEN = "llm-token";
+const char *LOGGER_NAME_LLM_REQUEST = "llm-request";
+const char *ALL_COMPONENT_NAME = "*";
 const std::unordered_map<LoggerType, std::string> LOGGER_NAME_MAP{
     {LoggerType::MINDIE_LLM, MODULE_NAME_LLM},
     {LoggerType::MINDIE_LLM_REQUEST, LOGGER_NAME_LLM_REQUEST},
@@ -45,12 +47,9 @@ LogConfig::LogConfig(const LogConfig &config)
       baseDir_(config.baseDir_),
       logFilePath_(config.logFilePath_),
       logFileSize_(config.logFileSize_),
-      logFileCount_(config.logFileCount_)
-{
-}
+      logFileCount_(config.logFileCount_) {}
 
-int LogConfig::Init(LoggerType loggerType)
-{
+int LogConfig::Init(LoggerType loggerType) {
     InitLogToStdoutFlag(loggerType);
     InitLogToFileFlag(loggerType);
     InitLogLevel(loggerType);
@@ -60,8 +59,7 @@ int LogConfig::Init(LoggerType loggerType)
     return LOG_OK;
 }
 
-void LogConfig::InitLogToStdoutFlag(LoggerType loggerType)
-{
+void LogConfig::InitLogToStdoutFlag(LoggerType loggerType) {
     const char *mindieLogToStdout = std::getenv("MINDIE_LOG_TO_STDOUT");
     if (mindieLogToStdout != nullptr) {
         LogUtils::SetMindieLogParamBool(loggerType, logToStdOut_, mindieLogToStdout);
@@ -69,8 +67,7 @@ void LogConfig::InitLogToStdoutFlag(LoggerType loggerType)
     }
 }
 
-void LogConfig::InitLogToFileFlag(LoggerType loggerType)
-{
+void LogConfig::InitLogToFileFlag(LoggerType loggerType) {
     const char *mindieLogToFile = std::getenv("MINDIE_LOG_TO_FILE");
     if (mindieLogToFile != nullptr) {
         LogUtils::SetMindieLogParamBool(loggerType, logToFile_, mindieLogToFile);
@@ -78,8 +75,7 @@ void LogConfig::InitLogToFileFlag(LoggerType loggerType)
     }
 }
 
-void LogConfig::InitLogLevel(LoggerType loggerType)
-{
+void LogConfig::InitLogLevel(LoggerType loggerType) {
     const char *mindieLogLevel = std::getenv("MINDIE_LOG_LEVEL");
     if (mindieLogLevel != nullptr) {
         LogUtils::SetMindieLogParamLevel(loggerType, logLevel_, mindieLogLevel);
@@ -88,8 +84,7 @@ void LogConfig::InitLogLevel(LoggerType loggerType)
     logLevel_ = DEFAULT_LOG_LEVEL;
 }
 
-void LogConfig::InitLogFilePath(LoggerType loggerType)
-{
+void LogConfig::InitLogFilePath(LoggerType loggerType) {
     const char *mindieLogPath = std::getenv("MINDIE_LOG_PATH");
     std::string lastDir = "/debug";
     if (loggerType == LoggerType::SECURITY) {
@@ -108,8 +103,7 @@ void LogConfig::InitLogFilePath(LoggerType loggerType)
     LogUtils::GetLogFileName(loggerType, logFilePath_);
 }
 
-void LogConfig::InitLogVerbose(LoggerType loggerType)
-{
+void LogConfig::InitLogVerbose(LoggerType loggerType) {
     const char *mindieLogVerbose = std::getenv("MINDIE_LOG_VERBOSE");
     if (mindieLogVerbose != nullptr) {
         LogUtils::SetMindieLogParamBool(loggerType, logVerbose_, mindieLogVerbose);
@@ -117,11 +111,10 @@ void LogConfig::InitLogVerbose(LoggerType loggerType)
     }
 }
 
-void LogConfig::InitLogRotationParam(LoggerType loggerType)
-{
+void LogConfig::InitLogRotationParam(LoggerType loggerType) {
     // customize log rotation for token
     if (loggerType == LoggerType::MINDIE_LLM_TOKEN) {
-        logFileSize_ = 1 * 1024 * 1024; // 1 MB = 1024 KB = 1024 * 1024 B
+        logFileSize_ = 1 * 1024 * 1024;  // 1 MB = 1024 KB = 1024 * 1024 B
         logFileCount_ = 2;
         return;
     }
@@ -133,8 +126,7 @@ void LogConfig::InitLogRotationParam(LoggerType loggerType)
     }
 }
 
-int LogConfig::ValidateSettings()
-{
+int LogConfig::ValidateSettings() {
     if (!logToFile_) {
         return LOG_OK;
     }
@@ -155,8 +147,7 @@ int LogConfig::ValidateSettings()
     return LOG_OK;
 }
 
-void LogConfig::MakeDirsWithTimeOut(const std::string &parentPath) const
-{
+void LogConfig::MakeDirsWithTimeOut(const std::string &parentPath) const {
     uint32_t limitTime = 500;
     auto start = std::chrono::steady_clock::now();
     std::chrono::milliseconds timeout(limitTime);
@@ -173,8 +164,7 @@ void LogConfig::MakeDirsWithTimeOut(const std::string &parentPath) const
     }
 }
 
-bool LogConfig::CheckAndGetLogPath(const std::string &configLogPath)
-{
+bool LogConfig::CheckAndGetLogPath(const std::string &configLogPath) {
     if (configLogPath.empty()) {
         std::cout << "The path of log in config is empty." << std::endl;
         return false;
@@ -212,8 +202,8 @@ bool LogConfig::CheckAndGetLogPath(const std::string &configLogPath)
     }
 
     if (filePath.size() > PATH_MAX) {
-        std::cerr << "Error: Allowed maximum path length is " << PATH_MAX
-            << ", but got " << filePath.size() << ". You can reduce log directory length.\n";
+        std::cerr << "Error: Allowed maximum path length is " << PATH_MAX << ", but got " << filePath.size()
+                  << ". You can reduce log directory length.\n";
         throw std::runtime_error(std::string("Log file path length exceeds PATH_MAX."));
     }
     baseDir_ = baseDir;

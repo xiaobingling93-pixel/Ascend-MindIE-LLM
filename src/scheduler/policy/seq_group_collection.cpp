@@ -15,4 +15,4 @@ namespace mindie_llm {
 
 SeqGroupCollection::SeqGroupCollection(PDPriorityType pdPriorityType) : pdPriorityType_(pdPriorityType) {}
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

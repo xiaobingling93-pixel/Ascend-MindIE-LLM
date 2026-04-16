@@ -21,7 +21,6 @@ from ...utils.log.logging import logger
 
 class GeneratorTorchAsync(GeneratorTorch):
     def __init__(self, model_config: Dict[str, Any]) -> None:
-
         self.layerwise_disaggregated = model_config.get("layerwise_disaggregated", False)
         super().__init__(model_config)
         self.new_stream = torch_npu.npu.Stream(self.device)
@@ -48,8 +47,8 @@ class GeneratorTorchAsync(GeneratorTorch):
 
         model_input, kwargs = self.model_wrapper.prepare_model_inputs(model_input, **kwargs)
 
-        kwargs['do_reorder_requests'] = do_reorder_requests
-        kwargs['revert_adapter_idx'] = revert_adapter_idx
+        kwargs["do_reorder_requests"] = do_reorder_requests
+        kwargs["revert_adapter_idx"] = revert_adapter_idx
         return model_input, kwargs
 
     def forward_from_model_inputs(self, model_input: ModelInput, **kwargs):
@@ -67,7 +66,7 @@ class GeneratorTorchAsync(GeneratorTorch):
         model_output.original_result = result
 
         # sort logits back to the original order (related to lm_head_indices)
-        if kwargs.get('do_reorder_requests', False):
-            model_output.logits = reorder_tensor(model_output.logits, kwargs.get('revert_adapter_idx', []))
+        if kwargs.get("do_reorder_requests", False):
+            model_output.logits = reorder_tensor(model_output.logits, kwargs.get("revert_adapter_idx", []))
 
         return model_output

@@ -31,8 +31,10 @@ MAX_KEY_LENGTH = 256
 BASE_ADAPTER_NAME = "base"
 LORA_CONFIG_NAME = "adapter_config.json"
 LORA_SAFETENSOR_NAME = "adapter_model.safetensors"
-INVALID_LORA_ID_ERROR_MSG = f"[INVALID LORA ID], Lora names should be no more than {MAX_KEY_LENGTH} characters long" \
-                        + "and at least one character long."
+INVALID_LORA_ID_ERROR_MSG = (
+    f"[INVALID LORA ID], Lora names should be no more than {MAX_KEY_LENGTH} characters long"
+    + "and at least one character long."
+)
 
 
 @dataclass
@@ -50,6 +52,7 @@ class AdapterIdsType(str, Enum):
     - MIXED: Requests in the batch use multiple different adapter ids, and adapter ids are not sorted.
     - SORTED: Requests in the batch use multiple different adapter ids, and adapter ids have been sorted.
     """
+
     SINGLE = "single"
     MIXED = "mixed"
     SORTED = "sorted"
@@ -86,6 +89,7 @@ class LoraManager(Singleton):
         adapter_info_registry: Registry tracking loaded adapter information.
         lora_slots_occupied: Boolean list tracking occupied LoRA slots.
     """
+
     def __init__(self, model, lora_model_config: LoraModelConfig):
         """Initialize LoRA manager with configuration and operational parameters.
         Args:
@@ -107,8 +111,8 @@ class LoraManager(Singleton):
         self.lm_head_prefix = "lm_head"
         self.lora_modules = dict()
         self.adapter_info_registry = dict()
-        self.lora_slots_occupied = [False for _ in range(self.lora_slots + 1)] # include base
-        self.lora_slots_occupied[-1] = True # index self.lora_slots is preserved for base
+        self.lora_slots_occupied = [False for _ in range(self.lora_slots + 1)]  # include base
+        self.lora_slots_occupied[-1] = True  # index self.lora_slots is preserved for base
 
     @property
     def lora_slots(self) -> int:
@@ -136,9 +140,9 @@ class LoraManager(Singleton):
         Returns:
             Last two components of path joined by dot.
         """
-        match = re.search(r'([^\.]+\.[^\.]+)$', prefix)
+        match = re.search(r"([^\.]+\.[^\.]+)$", prefix)
         if match:
-            return match.group(1) # The first parenthesized subgroup.
+            return match.group(1)  # The first parenthesized subgroup.
         return ""
 
     def preload_adapter(self, lora_adapter: dict):
@@ -181,8 +185,12 @@ class LoraManager(Singleton):
             raise ValueError(f"[DUPLICATED LORA ID], This adapter_id {adapter_id} is already added before.")
         idx = self._find_available_slots()
         self._load_adapter(adapter_id, adapter_path, idx)
-        print_log(self.mapping.rank, logger.info,
-                  f"Success: LoRA adapter '{adapter_id}' added successfully.", need_filter=True)
+        print_log(
+            self.mapping.rank,
+            logger.info,
+            f"Success: LoRA adapter '{adapter_id}' added successfully.",
+            need_filter=True,
+        )
 
     def unload_adapter(self, adapter_id: str):
         """Remove a LoRA adapter from the model.
@@ -200,13 +208,16 @@ class LoraManager(Singleton):
             module.reset_lora(idx)
         del self.adapter_info_registry[adapter_id]
         self.lora_slots_occupied[idx] = False
-        print_log(self.mapping.rank, logger.info,
-                  f"Success: LoRA adapter '{adapter_id}' removed successfully.",
-                  need_filter=True)
+        print_log(
+            self.mapping.rank,
+            logger.info,
+            f"Success: LoRA adapter '{adapter_id}' removed successfully.",
+            need_filter=True,
+        )
 
     def check_adapter_ids_is_sorted(self, adapter_ids: None | List[str | None]) -> bool:
         """Verify if adapter IDs are sorted by their slot indices.
-        Args: 
+        Args:
             adapter_ids: List of adapter IDs to check.
         Returns:
             True if IDs are in sorted slot order, False otherwise.
@@ -216,9 +227,12 @@ class LoraManager(Singleton):
         adapter_idx = -1
         for adapter_id in adapter_ids:
             if adapter_id is None or adapter_id not in self.adapter_info_registry.keys():
-                print_log(self.mapping.rank, logger.warning,
+                print_log(
+                    self.mapping.rank,
+                    logger.warning,
                     f"Adapter {adapter_id} is not found, using base model instead",
-                    need_filter=True)
+                    need_filter=True,
+                )
                 cur_adapter_idx = self.adapter_info_registry.get(BASE_ADAPTER_NAME).idx
             else:
                 cur_adapter_idx = self.adapter_info_registry.get(adapter_id).idx
@@ -236,15 +250,14 @@ class LoraManager(Singleton):
             - sorted_indices: Original indices sorted by slot order.
             - revert_indices: Indices to revert to original order.
         """
-        sorted_adapter_ids_by_idx = sorted(enumerate(adapter_ids),
-            key=lambda idx_adapter_id: self.adapter_info_registry.get(idx_adapter_id[1]).idx)
+        sorted_adapter_ids_by_idx = sorted(
+            enumerate(adapter_ids), key=lambda idx_adapter_id: self.adapter_info_registry.get(idx_adapter_id[1]).idx
+        )
         sorted_adapter_idx = [idx for idx, _ in sorted_adapter_ids_by_idx]
         revert_adapter_idx = [idx for idx, _ in sorted(enumerate(sorted_adapter_idx), key=lambda group: group[1])]
         return sorted_adapter_idx, revert_adapter_idx
 
-    def preprocess_adapter_ids(
-            self, adapter_ids: None | List[str | None],
-            model_name=None, model_id=None) -> List[str]:
+    def preprocess_adapter_ids(self, adapter_ids: None | List[str | None], model_name=None, model_id=None) -> List[str]:
         """Normalize and validate adapter IDs for processing.
         Args:
             adapter_ids: Input list of adapter IDs.
@@ -261,9 +274,12 @@ class LoraManager(Singleton):
             if adapter_id == model_name or adapter_id == model_id:
                 effective_adapter_ids.append(BASE_ADAPTER_NAME)
             elif adapter_id and adapter_id not in self.adapter_info_registry.keys():
-                print_log(self.mapping.rank, logger.warning,
+                print_log(
+                    self.mapping.rank,
+                    logger.warning,
                     f"Adapter `{adapter_id}` is not found, using base model instead",
-                    need_filter=True)
+                    need_filter=True,
+                )
                 effective_adapter_ids.append(BASE_ADAPTER_NAME)
             elif adapter_id is None:
                 effective_adapter_ids.append(BASE_ADAPTER_NAME)
@@ -274,7 +290,7 @@ class LoraManager(Singleton):
         if len(unique_adapter_ids) == 1:
             effective_adapter_ids = list(unique_adapter_ids)
         return effective_adapter_ids
-    
+
     def update_adapter(self, adapter_ids: None | List[str | None]) -> bool:
         """Check whether the adapter weights need to be updated.
         Args:
@@ -310,8 +326,10 @@ class LoraManager(Singleton):
 
     def _find_available_slots(self) -> int:
         if False not in self.lora_slots_occupied:
-            raise RuntimeError("[LORA MEMORY ERROR], No empty LoRA slots. " \
-                               + "Please check the max_loras config or remove unused lora adapters.")
+            raise RuntimeError(
+                "[LORA MEMORY ERROR], No empty LoRA slots. "
+                + "Please check the max_loras config or remove unused lora adapters."
+            )
         index = self.lora_slots_occupied.index(False)
         return index
 
@@ -352,8 +370,8 @@ class LoraManager(Singleton):
     def _create_lora_modules(self):
         for module_name, module in self._find_lora_module():
             new_module = replace_submodule(
-                self.base_model, module_name,
-                from_layer(module, self.lora_model_config, self.lora_dtype, self.device))
+                self.base_model, module_name, from_layer(module, self.lora_model_config, self.lora_dtype, self.device)
+            )
             self.lora_modules[module_name] = new_module
 
     def _validate_adapter_id(self, adapter_id: None | str):
@@ -374,7 +392,7 @@ class LoraManager(Singleton):
         with safetensors.torch.safe_open(adapter_weight_path, framework="pt") as f:
             for module_name in f.keys():
                 lora_tensors[module_name] = f.get_tensor(module_name)
-                
+
         for _, module in self.lora_modules.items():
             linear_layer_prefixes = module.base_layer_prefixes
             lora_a_prefixes = [self.format_lora_a_key(prefix) for prefix in linear_layer_prefixes]
@@ -386,17 +404,19 @@ class LoraManager(Singleton):
                 lora_a = module.slice_lora_a(lora_tensors, lora_a_prefixes)
                 lora_b = module.slice_lora_b(lora_tensors, lora_b_prefixes, scale_list)
             except ValueError as _:
-                print_log(self.mapping.rank, logger.debug,
+                print_log(
+                    self.mapping.rank,
+                    logger.debug,
                     f"Tensor name {','.join(lora_a_prefixes + lora_b_prefixes)} not found, "
                     f"using all zero tensor instead",
-                    need_filter=True)
+                    need_filter=True,
+                )
                 n, k = module.base_weight_shape
                 lora_a = torch.zeros((1, k)).to(self.lora_dtype)
                 lora_b = torch.zeros((1, n)).to(self.lora_dtype)
             module.set_lora(index, lora_a, lora_b)
         # register_adapter
-        self.adapter_info_registry[adapter_id] = AdapterInfo(
-            idx=index, adapter_path=adapter_path, config=lora_config)
+        self.adapter_info_registry[adapter_id] = AdapterInfo(idx=index, adapter_path=adapter_path, config=lora_config)
         self.lora_slots_occupied[index] = True
 
     def _load_dummy_adapter(self):
@@ -408,4 +428,5 @@ class LoraManager(Singleton):
             module.set_lora(self.max_loras, lora_a, lora_b)
         # register_adapter
         self.adapter_info_registry[BASE_ADAPTER_NAME] = AdapterInfo(
-            idx=self.max_loras, adapter_path="", config=LoraConfig(r=1, lora_alpha=1, use_rslora=False))
+            idx=self.max_loras, adapter_path="", config=LoraConfig(r=1, lora_alpha=1, use_rslora=False)
+        )

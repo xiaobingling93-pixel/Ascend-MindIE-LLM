@@ -21,16 +21,17 @@ from mindie_llm.runtime.models.deepseek_v32.input_builder_deepseekv32 import Dee
 class DeepseekV32Router(DeepseekV3Router):
     """
     Router class for DeepSeek V3.2 model configuration and initialization.
-    
+
     This class extends the DeepseekV3Router to handle specific configuration and
     initialization for the DeepSeek V3.2 model variant. It adjusts the model type
     to match the underlying DeepSeek V3 implementation while maintaining
     V3.2-specific functionality.
     """
+
     def _get_input_builder(self):
         """
         Creates and returns the input builder for DeepSeek V3.2 model.
-        
+
         Returns:
             Deepseekv32InputBuilder: Input builder specific to DeepSeek V3.2 model
         """
@@ -52,11 +53,11 @@ class DeepseekV32Router(DeepseekV3Router):
     def _get_config_cls(self):
         """Returns config cls of DeepSeek V3.2, where we reuse DeepSeek V3 config."""
         return DeepseekV3Config
-    
+
     def _get_tool_calls_parser(self):
         """
         Returns the tool call parser identifier for DeepSeek V3.2.
-        
+
         Returns:
             str: Identifier "deepseek_v32" for tool call parsing
         """

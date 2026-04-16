@@ -25,7 +25,7 @@ using SlaveModelInitReqHandler = std::function<bool(std::map<std::string, std::s
 // Communiator has two ipc communicators for intra node commmunication through shared memeory, and a grpc communicator
 // for cross node communication.
 class Communicator {
-public:
+   public:
     Communicator(std::unordered_map<std::string, std::string> &config, bool isMultiNodesInfer, int dpRankIdx,
                  int remoteDPRankIdx, bool intraNodeTP);
 
@@ -58,9 +58,8 @@ public:
 
     void CleanUp();
 
-private:
-    bool LwdGRPCCommunicatorInit(std::unordered_map<std::string, std::string> &config,
-                                uint32_t grpcCommunicatorNum);
+   private:
+    bool LwdGRPCCommunicatorInit(std::unordered_map<std::string, std::string> &config, uint32_t grpcCommunicatorNum);
     std::unique_ptr<IPCCommunicator> InitSingleIPCCommunicator(const std::string &sharedMemName,
                                                                const SemaphoreConfig &semConfig,
                                                                const ShmSizeConfig &shmSizeConfig,
@@ -85,10 +84,10 @@ private:
     bool isLwdMultiNodesInfer_{false};
     MasterSlaveRole msRole_;
     uint32_t numExpectedResponses_{0};
-    int dpRankIdx_;             // The rank index of the current executor in the data parallel group.
-    int remoteDPRankIdx_;       // The rank index of the remote executor in the data parallel group.
-    bool intraNodeTP_;          // Whether the current executor is in intra-node tensor parallel mode.
-    std::string remoteSlaveIP_; // The IP address of the corresponding slave node, only valid for master node.
+    int dpRankIdx_;              // The rank index of the current executor in the data parallel group.
+    int remoteDPRankIdx_;        // The rank index of the remote executor in the data parallel group.
+    bool intraNodeTP_;           // Whether the current executor is in intra-node tensor parallel mode.
+    std::string remoteSlaveIP_;  // The IP address of the corresponding slave node, only valid for master node.
     SlaveModelInitReqHandler slaveModelInitReqHandler_;
 
     std::shared_ptr<GRPCCommunicator> grpcCommunicator_;
@@ -102,5 +101,5 @@ private:
     std::unique_ptr<std::thread> handleExecuteErrorThread_{nullptr};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

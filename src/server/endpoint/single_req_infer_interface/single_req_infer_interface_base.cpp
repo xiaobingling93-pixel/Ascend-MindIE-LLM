@@ -10,22 +10,24 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "single_req_infer_interface_base.h"
+
 #include <atomic>
 #include <chrono>
 #include <codecvt>
 #include <cstdlib>
 #include <thread>
 #include <utility>
+
+#include "config_manager_impl.h"
 #include "endpoint_def.h"
 #include "http_metrics.h"
 #include "http_rest_resource.h"
 #include "infer_tokenizer.h"
+#include "json_util.h"
+#include "parameters_checker.h"
 #include "parse_protocol.h"
 #include "prometheus_metrics.h"
 #include "random_generator.h"
-#include "parameters_checker.h"
-#include "config_manager_impl.h"
-#include "json_util.h"
 #include "safe_path.h"
 
 using OrderedJson = nlohmann::ordered_json;
@@ -41,8 +43,7 @@ std::atomic<size_t> g_numDeleteSingleReqInferInterfaceBase = 0;
 SingleReqInferInterfaceBase::SingleReqInferInterfaceBase(
     const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute,
     const std::vector<LoraParamSPtr> loraConfigs) noexcept
-    : singleLLMReqHandlerBase_{singleLLMReqHandlerBase}, isReCompute_{isReCompute}, loraConfigs_{loraConfigs}
-{
+    : singleLLMReqHandlerBase_{singleLLMReqHandlerBase}, isReCompute_{isReCompute}, loraConfigs_{loraConfigs} {
     if (singleLLMReqHandlerBase == nullptr) {
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, INIT_ERROR),
@@ -54,7 +55,7 @@ SingleReqInferInterfaceBase::SingleReqInferInterfaceBase(
         return;  // 提前返回
     }
     inputParam = std::make_shared<InferParam>();
-    if (singleLLMReqHandlerBase_->GetContextRequestId(requestId_)) { // get request id from header "req-id" field
+    if (singleLLMReqHandlerBase_->GetContextRequestId(requestId_)) {  // get request id from header "req-id" field
         ULOG_DEBUG(
             SUBMODLE_NAME_ENDPOINT,
             "[SingleReqInferInterfaceBase::SingleReqInferInterfaceBase] Set requestId from singleLLMReqHandlerBase "
@@ -73,8 +74,7 @@ SingleReqInferInterfaceBase::SingleReqInferInterfaceBase(
 
 RequestIdNew SingleReqInferInterfaceBase::GetRequestId() { return requestId_; }
 
-SingleReqInferInterfaceBase::~SingleReqInferInterfaceBase()
-{
+SingleReqInferInterfaceBase::~SingleReqInferInterfaceBase() {
     singleLLMReqHandlerBase_ = nullptr;
     try {
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT,
@@ -91,23 +91,24 @@ SingleReqInferInterfaceBase::~SingleReqInferInterfaceBase()
 
 template <typename ValueType>
 void DumpSequenceCache(std::map<uint64_t, ValueType> &map, uint64_t sourceKey, uint64_t targetKey,
-                       std::function<void(const ValueType &source, ValueType &target)> dumpFunc)
-{
+                       std::function<void(const ValueType &source, ValueType &target)> dumpFunc) {
     if (map.count(sourceKey) == 0 || sourceKey == targetKey) {
         return;
     }
     dumpFunc(map[sourceKey], map[targetKey]);
 }
 
-template <typename T> inline void DumpValue(const T &source, T &target) { target = source; }
+template <typename T>
+inline void DumpValue(const T &source, T &target) {
+    target = source;
+}
 
-template <typename T> inline void DumpVector(const std::vector<T> &source, std::vector<T> &target)
-{
+template <typename T>
+inline void DumpVector(const std::vector<T> &source, std::vector<T> &target) {
     target = std::vector<T>(source.begin(), source.end());
 }
 
-void SingleReqInferInterfaceBase::ClearUnusedDecodeCache(const std::set<uint64_t> &usedSeqIds)
-{
+void SingleReqInferInterfaceBase::ClearUnusedDecodeCache(const std::set<uint64_t> &usedSeqIds) {
     std::set<uint64_t> unUsedSeqIds;
     for (const auto &[seqId, _] : respTokenMap) {
         // Beam Search: do not meet eos but be eliminated
@@ -153,8 +154,7 @@ void SingleReqInferInterfaceBase::ClearUnusedDecodeCache(const std::set<uint64_t
 }
 
 // copy historical data of parent seqence to child seqence
-void SingleReqInferInterfaceBase::DumpDecodeCache(const std::map<uint64_t, std::vector<uint64_t>> &currentSeqIds)
-{
+void SingleReqInferInterfaceBase::DumpDecodeCache(const std::map<uint64_t, std::vector<uint64_t>> &currentSeqIds) {
     for (const auto &[parentSeqId, seqIds] : currentSeqIds) {
         for (size_t i = 0; i < seqIds.size(); ++i) {
             uint64_t source = i == 0 ? parentSeqId : seqIds[0];
@@ -197,8 +197,7 @@ void SingleReqInferInterfaceBase::DumpDecodeCache(const std::map<uint64_t, std::
     }
 }
 
-void SingleReqInferInterfaceBase::ConvertTokenToMap(const std::vector<BestNTokens> &decodeResult)
-{
+void SingleReqInferInterfaceBase::ConvertTokenToMap(const std::vector<BestNTokens> &decodeResult) {
     if (std::count_if(decodeResult.begin(), decodeResult.end(),
                       [](auto res) { return res.finishReason == InferStatusType::ILLEGAL_INPUT; }) != 0) {
         // abort all sequence once there is an illegal input.
@@ -265,8 +264,8 @@ void SingleReqInferInterfaceBase::ConvertTokenToMap(const std::vector<BestNToken
     }
 }
 
-void SingleReqInferInterfaceBase::DecodeProcess(prefillAndDecodeCommunication::DecodeRequestResponse &response) noexcept
-{
+void SingleReqInferInterfaceBase::DecodeProcess(
+    prefillAndDecodeCommunication::DecodeRequestResponse &response) noexcept {
     std::string strMsg = "";
     inputParam = std::make_shared<InferParam>();
     request_ = std::make_shared<Request>(RequestIdNew{"0"});
@@ -308,37 +307,36 @@ void SingleReqInferInterfaceBase::DecodeProcess(prefillAndDecodeCommunication::D
 
     // set decode callback
     auto self = shared_from_this();
-    singleLLMReqHandlerBase_->SetConstructOneResponseCallBack([self](const ResponseSPtr &response,
-                                                                     const std::vector<BestNTokens> &tokenIdList,
-                                                                     RespBodyQueue &jsonStrings) {
-        self->ConvertTokenToMap(tokenIdList);
+    singleLLMReqHandlerBase_->SetConstructOneResponseCallBack(
+        [self](const ResponseSPtr &response, const std::vector<BestNTokens> &tokenIdList, RespBodyQueue &jsonStrings) {
+            self->ConvertTokenToMap(tokenIdList);
 
-        if (response->isEos) {
-            size_t tokenNum = std::accumulate(self->respTokenMap.cbegin(), self->respTokenMap.cend(), 0,
-                                              [](size_t sum, const auto &item) { return sum + item.second.size(); });
-            PrometheusMetrics::GetInstance()->ResponseOutputTokenHistogramCollect(tokenNum);
-            PrometheusMetrics::GetInstance()->ResponseOutputTokenCount(tokenNum);
-            PROF(INFO, Domain("Request")
-                           .Resource(self->requestId_.c_str())
-                           .Metric("replyTokenSize", tokenNum)
-                           .Event("httpRes"));
-        }
+            if (response->isEos) {
+                size_t tokenNum =
+                    std::accumulate(self->respTokenMap.cbegin(), self->respTokenMap.cend(), 0,
+                                    [](size_t sum, const auto &item) { return sum + item.second.size(); });
+                PrometheusMetrics::GetInstance()->ResponseOutputTokenHistogramCollect(tokenNum);
+                PrometheusMetrics::GetInstance()->ResponseOutputTokenCount(tokenNum);
+                PROF(INFO, Domain("Request")
+                               .Resource(self->requestId_.c_str())
+                               .Metric("replyTokenSize", tokenNum)
+                               .Event("httpRes"));
+            }
 
-        auto copyResp = response;
-        return self->BuildResponseJson(copyResp, tokenIdList, jsonStrings);
-    });
+            auto copyResp = response;
+            return self->BuildResponseJson(copyResp, tokenIdList, jsonStrings);
+        });
 
     // forward
     singleLLMReqHandlerBase_->ProcessGrpcReq(request_, requestId_, response);
 }
 
-void SingleReqInferInterfaceBase::Process() noexcept
-{
+void SingleReqInferInterfaceBase::Process() noexcept {
     singleLLMReqHandlerBase_->GetMetrics().e2eStartingTime = std::chrono::steady_clock::now();
     auto httpReqSpan = PROF(INFO, Domain("Request").SpanStart("httpReq"));
     PrometheusMetrics::GetInstance()->RequestNumberCount();
     std::string strMsg = "";
-    
+
     // parse request context into JSON: RequestContext => reqJsonBody
     if (!singleLLMReqHandlerBase_->GetContextJsonBody(this->reqJsonBody_)) {
         strMsg = "Failed to parse request context to json";
@@ -347,8 +345,7 @@ void SingleReqInferInterfaceBase::Process() noexcept
                    strMsg << ". The requestId is " << requestId_);
         singleLLMReqHandlerBase_->SendResponseInfo(
             httplib::StatusCode::UnprocessableContent_422,
-            HttpRestResource::WrapperJson(strMsg,
-                g_exceptionInfo.at(httplib::StatusCode::UnprocessableContent_422)));
+            HttpRestResource::WrapperJson(strMsg, g_exceptionInfo.at(httplib::StatusCode::UnprocessableContent_422)));
         return;
     }
 
@@ -359,8 +356,7 @@ void SingleReqInferInterfaceBase::Process() noexcept
                    strMsg << ". The requestId is " << requestId_);
         singleLLMReqHandlerBase_->SendResponseInfo(
             httplib::StatusCode::ServiceUnavailable_503,
-            HttpRestResource::WrapperJson(strMsg,
-                                          g_exceptionInfo.at(httplib::StatusCode::ServiceUnavailable_503)));
+            HttpRestResource::WrapperJson(strMsg, g_exceptionInfo.at(httplib::StatusCode::ServiceUnavailable_503)));
         return;
     }
 
@@ -403,7 +399,8 @@ void SingleReqInferInterfaceBase::Process() noexcept
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, INFERENCE_GENERATE_REQUEST_ERROR),
                    strMsg << ". The requestId is " << requestId_);
-        singleLLMReqHandlerBase_->SendResponseInfo(httplib::StatusCode::FailedDependency_424,
+        singleLLMReqHandlerBase_->SendResponseInfo(
+            httplib::StatusCode::FailedDependency_424,
             HttpRestResource::WrapperJson(strMsg, g_exceptionInfo.at(httplib::StatusCode::FailedDependency_424)));
         return;
     }
@@ -421,24 +418,25 @@ void SingleReqInferInterfaceBase::Process() noexcept
 
     // set decode callback
     auto self = shared_from_this();
-    singleLLMReqHandlerBase_->SetConstructOneResponseCallBack([self, reqType](const ResponseSPtr &response,
-                                                       const std::vector<BestNTokens> &tokenIdList,
-                                                       RespBodyQueue &jsonStrings) {
-        self->ConvertTokenToMap(tokenIdList);
-        if (response->isEos) {
-            size_t tokenNum = std::accumulate(self->respTokenMap.cbegin(), self->respTokenMap.cend(), 0,
-                                              [](size_t sum, const auto &item) { return sum + item.second.size(); });
-            HttpMetrics::GetInstance().CollectStatisticsRequest(self);
+    singleLLMReqHandlerBase_->SetConstructOneResponseCallBack(
+        [self, reqType](const ResponseSPtr &response, const std::vector<BestNTokens> &tokenIdList,
+                        RespBodyQueue &jsonStrings) {
+            self->ConvertTokenToMap(tokenIdList);
+            if (response->isEos) {
+                size_t tokenNum =
+                    std::accumulate(self->respTokenMap.cbegin(), self->respTokenMap.cend(), 0,
+                                    [](size_t sum, const auto &item) { return sum + item.second.size(); });
+                HttpMetrics::GetInstance().CollectStatisticsRequest(self);
 
-            PROF(INFO, Domain("Request")
-                           .Resource(self->requestId_.c_str())
-                           .Metric("replyTokenSize", tokenNum)
-                           .Event("DecodeEnd"));
-        }
+                PROF(INFO, Domain("Request")
+                               .Resource(self->requestId_.c_str())
+                               .Metric("replyTokenSize", tokenNum)
+                               .Event("DecodeEnd"));
+            }
 
-        auto respCopy = response;
-        return self->BuildResponseJson(respCopy, tokenIdList, jsonStrings, self->timestamp_);
-    });
+            auto respCopy = response;
+            return self->BuildResponseJson(respCopy, tokenIdList, jsonStrings, self->timestamp_);
+        });
 
     // forward
     singleLLMReqHandlerBase_->GetMetrics().startingTime = std::chrono::steady_clock::now();
@@ -447,9 +445,8 @@ void SingleReqInferInterfaceBase::Process() noexcept
     PROF(INFO, Domain("Request").Resource(requestId_.c_str()).Event("httpRes"));
 }
 
-bool SingleReqInferInterfaceBase::GenerateInferRequest(std::string &msg) noexcept
-{
-    std::vector<int64_t> inferTokens = reqTokens_; // 在D节点和重计算场景，本次推理的请求id需要加上respTokens
+bool SingleReqInferInterfaceBase::GenerateInferRequest(std::string &msg) noexcept {
+    std::vector<int64_t> inferTokens = reqTokens_;  // 在D节点和重计算场景，本次推理的请求id需要加上respTokens
     if (respTokenMap.size() == 1) {
         inferTokens.insert(inferTokens.end(), respTokenMap.begin()->second.begin(), respTokenMap.begin()->second.end());
     }
@@ -478,8 +475,7 @@ bool SingleReqInferInterfaceBase::GenerateInferRequest(std::string &msg) noexcep
     return true;
 }
 
-void SingleReqInferInterfaceBase::Stop() noexcept
-{
+void SingleReqInferInterfaceBase::Stop() noexcept {
     OrderedJson reqBody;
     std::string errorMessage = "";
     if (!singleLLMReqHandlerBase_->GetContextJsonBody(reqBody)) {
@@ -511,10 +507,13 @@ void SingleReqInferInterfaceBase::Stop() noexcept
     std::regex pattern("^[a-zA-Z0-9_-]{1,256}$");
     if (!std::regex_match(stopReqId, pattern)) {
         errorMessage = std::string("The id can contain only digits, letters, underscores(_), hyphens(-) and ")
-            .append("no more than ").append(std::to_string(MAX_INPUT_ID_LENGTH)).append(" words in length.");
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), errorMessage);
-        singleLLMReqHandlerBase_->SendResponseInfo(httplib::StatusCode::UnprocessableContent_422,
+                           .append("no more than ")
+                           .append(std::to_string(MAX_INPUT_ID_LENGTH))
+                           .append(" words in length.");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), errorMessage);
+        singleLLMReqHandlerBase_->SendResponseInfo(
+            httplib::StatusCode::UnprocessableContent_422,
             HttpRestResource::WrapperJson(errorMessage,
                                           g_exceptionInfo.at(httplib::StatusCode::UnprocessableContent_422)),
             false);
@@ -540,8 +539,7 @@ void SingleReqInferInterfaceBase::Stop() noexcept
                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), errorMessage);
         singleLLMReqHandlerBase_->SendResponseInfo(
             httplib::StatusCode::NotFound_404,
-            HttpRestResource::WrapperJson(errorMessage,
-                g_exceptionInfo.at(httplib::StatusCode::NotFound_404)), false);
+            HttpRestResource::WrapperJson(errorMessage, g_exceptionInfo.at(httplib::StatusCode::NotFound_404)), false);
         return;
     }
 
@@ -567,8 +565,7 @@ void SingleReqInferInterfaceBase::Stop() noexcept
     return;
 }
 
-bool SingleReqInferInterfaceBase::ProcessResponseSingle(ResponseSPtr response, const uint64_t &timestamp) noexcept
-{
+bool SingleReqInferInterfaceBase::ProcessResponseSingle(ResponseSPtr response, const uint64_t &timestamp) noexcept {
     if (!response->isEos) {
         return true;
     }
@@ -617,14 +614,13 @@ bool SingleReqInferInterfaceBase::ProcessResponseSingle(ResponseSPtr response, c
     return true;
 }
 
-bool SingleReqInferInterfaceBase::GetUniqueSequenceId(uint64_t &seqId, bool needLog)
-{
+bool SingleReqInferInterfaceBase::GetUniqueSequenceId(uint64_t &seqId, bool needLog) {
     if (respTokenMap.size() != 1) {
         if (needLog) {
             ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
-                "Failed to get sequence id which must exist and be unique, got count of sequence id " <<
-                respTokenMap.size());
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Failed to get sequence id which must exist and be unique, got count of sequence id "
+                           << respTokenMap.size());
         }
         return false;
     }
@@ -632,8 +628,7 @@ bool SingleReqInferInterfaceBase::GetUniqueSequenceId(uint64_t &seqId, bool need
     return true;
 }
 
-bool SingleReqInferInterfaceBase::PushLatestCache(std::string &errMsg)
-{
+bool SingleReqInferInterfaceBase::PushLatestCache(std::string &errMsg) {
     StreamCache cache;
     cache.probesMap = std::map<uint64_t, double>{probesMap.begin(), probesMap.end()};
     cache.fullTextMap = std::map<uint64_t, std::string>{fullTextMap.begin(), fullTextMap.end()};
@@ -677,8 +672,7 @@ bool SingleReqInferInterfaceBase::PushLatestCache(std::string &errMsg)
     return true;
 }
 
-bool SingleReqInferInterfaceBase::ProcessStreamCacheTruncationId(std::string &errMsg)
-{
+bool SingleReqInferInterfaceBase::ProcessStreamCacheTruncationId(std::string &errMsg) {
     if (streamCache.empty()) {
         return true;
     }
@@ -693,7 +687,7 @@ bool SingleReqInferInterfaceBase::ProcessStreamCacheTruncationId(std::string &er
             std::u16string &u16Text = rit->u16TokenText[seqId];
             if (static_cast<size_t>(std::abs(restTruncation)) > u16Text.length()) {
                 restTruncation = restTruncation + static_cast<int64_t>(u16Text.length());
-                rit->canOutput.erase(seqId); // sequence has ended before
+                rit->canOutput.erase(seqId);  // sequence has ended before
                 continue;
             }
             // text truncation of current sequence will occur in this cache round
@@ -724,7 +718,7 @@ bool SingleReqInferInterfaceBase::ProcessStreamCacheTruncationId(std::string &er
                 subRit->prevDecodeIndex[seqId] = rit->prevDecodeIndex[seqId];
                 subRit->currentDecodeIndex[seqId] = rit->currentDecodeIndex[seqId];
                 subRit->parsingContentFlag[seqId] = rit->parsingContentFlag[seqId];
-                subRit->canOutput.erase(seqId); // sequence has ended before
+                subRit->canOutput.erase(seqId);  // sequence has ended before
             }
             restTruncation = restTruncation + static_cast<int64_t>(u16Text.length());
         }
@@ -732,8 +726,7 @@ bool SingleReqInferInterfaceBase::ProcessStreamCacheTruncationId(std::string &er
     return true;
 }
 
-bool SingleReqInferInterfaceBase::ProcessStreamCacheWindowSize()
-{
+bool SingleReqInferInterfaceBase::ProcessStreamCacheWindowSize() {
     // if sum length of last few text >= window size, mark output flag of sequences before to true
     std::map<uint64_t, int64_t> windowSize{};
     std::map<uint64_t, bool> ignoreAndMarkTrue{};
@@ -766,8 +759,7 @@ bool SingleReqInferInterfaceBase::ProcessStreamCacheWindowSize()
     return true;
 }
 
-bool SingleReqInferInterfaceBase::GetAvailableOutputCache(std::vector<StreamCache> &cacheArr)
-{
+bool SingleReqInferInterfaceBase::GetAvailableOutputCache(std::vector<StreamCache> &cacheArr) {
     // Get cached output
     std::string errMsg = "";
     if (!PushLatestCache(errMsg) || !ProcessStreamCacheTruncationId(errMsg) || !ProcessStreamCacheWindowSize()) {
@@ -777,8 +769,9 @@ bool SingleReqInferInterfaceBase::GetAvailableOutputCache(std::vector<StreamCach
         return false;
     }
     if (streamCache.empty()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            LOCAL_INVOKING_ERROR), "Nothing could be dumped in response for request");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                   "Nothing could be dumped in response for request");
         return false;
     }
     try {
@@ -815,21 +808,24 @@ bool SingleReqInferInterfaceBase::GetAvailableOutputCache(std::vector<StreamCach
             streamCache.erase(streamCache.begin());
         }
     } catch (const std::out_of_range &e) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            LOCAL_INVOKING_ERROR), "Get available output failed for out of range exception: " << e.what());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                   "Get available output failed for out of range exception: " << e.what());
     } catch (const std::exception &e) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            LOCAL_INVOKING_ERROR), "Get available output failed: " << e.what());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                   "Get available output failed: " << e.what());
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            LOCAL_INVOKING_ERROR), "Get available output failed");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                   "Get available output failed");
     }
     return true;
 }
 
 bool SingleReqInferInterfaceBase::ProcessResponseStream(ResponseSPtr response,
-    const std::vector<BestNTokens> &bestNTokens, RespBodyQueue &jsonObjs, const uint64_t &timestamp) noexcept
-{
+                                                        const std::vector<BestNTokens> &bestNTokens,
+                                                        RespBodyQueue &jsonObjs, const uint64_t &timestamp) noexcept {
     for (auto &[_, textStr] : inputParam->postSingleText) {
         static_cast<void>(_);
         textStr.clear();
@@ -850,15 +846,17 @@ bool SingleReqInferInterfaceBase::ProcessResponseStream(ResponseSPtr response,
         if (tempTokens.empty()) {
             continue;
         }
-        std::string curRespTokenText{}; // single token text
+        std::string curRespTokenText{};  // single token text
         postSingleTokenMap[item.seqId] = item.tokens;
         postTokenIdMap[item.seqId].insert(postTokenIdMap[item.seqId].end(), tempTokens.begin(), tempTokens.end());
-        auto ret = PostProcess(postTokenIdMap[item.seqId], curRespTokenText, item.seqId, true, requestEndFlag,
-            inputParam->prevDecodeIndex[item.seqId], inputParam->currentDecodeIndex[item.seqId], timestamp);
+        auto ret =
+            PostProcess(postTokenIdMap[item.seqId], curRespTokenText, item.seqId, true, requestEndFlag,
+                        inputParam->prevDecodeIndex[item.seqId], inputParam->currentDecodeIndex[item.seqId], timestamp);
         inputParam->postSingleText[item.seqId].append(curRespTokenText);
         if (!ret) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                LOCAL_INVOKING_ERROR), "Failed to post process.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                       "Failed to post process.");
             return false;
         }
         // normal content output and reasoning content output is not empty at the same time
@@ -876,44 +874,43 @@ bool SingleReqInferInterfaceBase::ProcessResponseStream(ResponseSPtr response,
 
         if (item.finishReason != InferStatusType::ITERATION_CONTINUE) {
             postTokenIdMap[item.seqId] = std::move(respTokenMap[item.seqId]);
-            ret = PostProcess(postTokenIdMap[item.seqId], fullTextMap[item.seqId], item.seqId, false,
-                requestEndFlag, 0, 0, timestamp);
+            ret = PostProcess(postTokenIdMap[item.seqId], fullTextMap[item.seqId], item.seqId, false, requestEndFlag, 0,
+                              0, timestamp);
             if (!ret) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    LOCAL_INVOKING_ERROR), "Failed to post process.");
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                           "Failed to post process.");
                 return false;
             }
             std::string errorMsg = "";
             std::u16string utf16Full = GetU16Str(fullTextMap[item.seqId], &errorMsg);
             if (truncationIdMap.count(item.seqId) != 0 && truncationIdMap[item.seqId] < 0 &&
                 utf16Full.length() >= static_cast<size_t>(std::abs(truncationIdMap[item.seqId]))) {
-                fullTextMap[item.seqId] = TransformTruncation(utf16Full, 0,
-                    utf16Full.length() + truncationIdMap[item.seqId], &errorMsg);
+                fullTextMap[item.seqId] =
+                    TransformTruncation(utf16Full, 0, utf16Full.length() + truncationIdMap[item.seqId], &errorMsg);
             }
             if (!errorMsg.empty()) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    LOCAL_INVOKING_ERROR), errorMsg);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, LOCAL_INVOKING_ERROR),
+                           errorMsg);
                 return false;
             }
             if (inputParam->returnFullText) {
                 fullTextMap[item.seqId] = inputParam->textInput + " " + fullTextMap[item.seqId];
             }
         }
-        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[commonInfer:ProcessResponseStream] postSingleText is " <<
-        inputParam->postSingleText[item.seqId] << ". tempTokens.size is " << tempTokens.size() << ".");
+        ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[commonInfer:ProcessResponseStream] postSingleText is "
+                                               << inputParam->postSingleText[item.seqId] << ". tempTokens.size is "
+                                               << tempTokens.size() << ".");
     }
     isEnd = response->isEos;
     SendStreamResponse(jsonObjs);
     return true;
 }
 
-Metrics &SingleReqInferInterfaceBase::GetMetrics()
-{
-    return singleLLMReqHandlerBase_->GetMetrics();
-}
+Metrics &SingleReqInferInterfaceBase::GetMetrics() { return singleLLMReqHandlerBase_->GetMetrics(); }
 
-InferParam::ValidationContext SingleReqInferInterfaceBase::BuildValidationContext() const
-{
+InferParam::ValidationContext SingleReqInferInterfaceBase::BuildValidationContext() const {
     InferParam::ValidationContext ctx;
     // 端点能力（虚函数，子类覆写）
     ctx.endpoint = GetFeatureSupport();
@@ -953,34 +950,34 @@ InferParam::ValidationContext SingleReqInferInterfaceBase::BuildValidationContex
 }
 
 bool SingleReqInferInterfaceBase::PostProcess(const std::vector<int64_t> &tokenIds, std::string &inferResult,
-    const uint64_t &seqId, bool decodeOneToken, bool requestEndFlag, uint32_t prevDecodeIndexLocal,
-    uint32_t currentDecodeIndexLocal, const uint64_t &timestamp) noexcept
-{
+                                              const uint64_t &seqId, bool decodeOneToken, bool requestEndFlag,
+                                              uint32_t prevDecodeIndexLocal, uint32_t currentDecodeIndexLocal,
+                                              const uint64_t &timestamp) noexcept {
     TokenizerProcessPool &pool = TokenizerProcessPool::GetInstance();
     auto copyTokens = tokenIds;
     Status status;
     auto decodeSpan = PROF(INFO, Domain("Request").Resource(requestId_.c_str()).SpanStart("decode"));
     if (decodeOneToken) {
         if (detokenizeExtraInfo[seqId].has_value()) {
-            status = pool.DecodeOne(copyTokens, inferResult, prevDecodeIndexLocal, currentDecodeIndexLocal, timestamp,
-                                    inputParam->useToolsCall, request_->skipSpecialTokens.value_or(true),
-                                    requestEndFlag,
-                                    {detokenizeExtraInfo[seqId].value().isCurrentToolNameSent,
-                                     detokenizeExtraInfo[seqId].value().isCurrentArgumentSent,
-                                     detokenizeExtraInfo[seqId].value().currentToolId, inputParam->isChatReq,
-                                     inputParam->enableThinking, inputParam->toolCallsJson});
+            status =
+                pool.DecodeOne(copyTokens, inferResult, prevDecodeIndexLocal, currentDecodeIndexLocal, timestamp,
+                               inputParam->useToolsCall, request_->skipSpecialTokens.value_or(true), requestEndFlag,
+                               {detokenizeExtraInfo[seqId].value().isCurrentToolNameSent,
+                                detokenizeExtraInfo[seqId].value().isCurrentArgumentSent,
+                                detokenizeExtraInfo[seqId].value().currentToolId, inputParam->isChatReq,
+                                inputParam->enableThinking, inputParam->toolCallsJson});
         } else {
-            status = pool.DecodeOne(copyTokens, inferResult, prevDecodeIndexLocal, currentDecodeIndexLocal, timestamp,
-                                    inputParam->useToolsCall, request_->skipSpecialTokens.value_or(true),
-                                    requestEndFlag,
-                                    {std::nullopt, std::nullopt, std::nullopt, inputParam->isChatReq,
-                                    inputParam->enableThinking, inputParam->toolCallsJson});
+            status =
+                pool.DecodeOne(copyTokens, inferResult, prevDecodeIndexLocal, currentDecodeIndexLocal, timestamp,
+                               inputParam->useToolsCall, request_->skipSpecialTokens.value_or(true), requestEndFlag,
+                               {std::nullopt, std::nullopt, std::nullopt, inputParam->isChatReq,
+                                inputParam->enableThinking, inputParam->toolCallsJson});
         }
     } else {
         status = pool.Decode(copyTokens, inferResult, timestamp, inputParam->useToolsCall,
                              request_->skipSpecialTokens.value_or(true),
                              {std::nullopt, std::nullopt, std::nullopt, inputParam->isChatReq,
-                             inputParam->enableThinking, inputParam->toolCallsJson});
+                              inputParam->enableThinking, inputParam->toolCallsJson});
     }
     PROF(decodeSpan.SpanEnd());
     if (!status.IsOk()) {
@@ -993,9 +990,8 @@ bool SingleReqInferInterfaceBase::PostProcess(const std::vector<int64_t> &tokenI
     return true;
 }
 
-void SingleReqInferInterfaceBase::ParseDetokenizedOutput(std::string &inferResult,
-    const uint64_t &seqId, const bool &decodeOneToken)
-{
+void SingleReqInferInterfaceBase::ParseDetokenizedOutput(std::string &inferResult, const uint64_t &seqId,
+                                                         const bool &decodeOneToken) {
     // functioncall in stream mode exists skipping step
     TokenizerContents contents = JsonParse::ParseContentFromJson(inferResult);
     bool noContent =
@@ -1009,8 +1005,7 @@ void SingleReqInferInterfaceBase::ParseDetokenizedOutput(std::string &inferResul
     bool enableReasoningContent = inputParam->enableThinking.value_or(inputParam->isChatReq);
     skipCurrentRoundMap[seqId] = noContent;
     if (decodeOneToken == inputParam->streamMode) {
-        parsingContentFlag[seqId] = std::make_pair(
-            contents.reasoningContent.has_value(), contents.content.has_value());
+        parsingContentFlag[seqId] = std::make_pair(contents.reasoningContent.has_value(), contents.content.has_value());
     }
     inferResult = contents.content.value_or("");
     detokenizeExtraInfo[seqId] = contents.detokenizeStatus;
@@ -1029,13 +1024,12 @@ void SingleReqInferInterfaceBase::ParseDetokenizedOutput(std::string &inferResul
         }
         updateIndexMap[seqId] = contents.needUpdateIndex.value_or(true);
     }
-    reasoningTokens[seqId] = contents.detokenizeStatus.has_value() ?
-        contents.detokenizeStatus.value().reasoningTokens.value_or(-1) : -1;
+    reasoningTokens[seqId] =
+        contents.detokenizeStatus.has_value() ? contents.detokenizeStatus.value().reasoningTokens.value_or(-1) : -1;
 }
 
-bool SingleReqInferInterfaceBase::GetTokensFromInput(const std::string &input,
-    std::vector<std::int64_t> &requestTokens, std::vector<std::int64_t> &responseTokens, std::string &errorMsg)
-{
+bool SingleReqInferInterfaceBase::GetTokensFromInput(const std::string &input, std::vector<std::int64_t> &requestTokens,
+                                                     std::vector<std::int64_t> &responseTokens, std::string &errorMsg) {
     std::istringstream iss(input);
     std::string token = "";
     uint64_t idx = 0;
@@ -1062,7 +1056,7 @@ bool SingleReqInferInterfaceBase::GetTokensFromInput(const std::string &input,
     }
     // 重计算场景
     inputParam->preOutputTokenNum = responseTokens.size();
-    inputParam->outputLenOffset = inputParam->preOutputTokenNum; // maxNewTokens需要减去已输出的token数
+    inputParam->outputLenOffset = inputParam->preOutputTokenNum;  // maxNewTokens需要减去已输出的token数
     // tokenizer的Index需要同步更新
     inputParam->prevDecodeIndex[SPECIAL_SEQ_ID_PRESET] = inputParam->preOutputTokenNum;
     inputParam->currentDecodeIndex[SPECIAL_SEQ_ID_PRESET] = inputParam->preOutputTokenNum;
@@ -1071,9 +1065,8 @@ bool SingleReqInferInterfaceBase::GetTokensFromInput(const std::string &input,
 
 // decode one token corresponding to a specific logprob
 bool SingleReqInferInterfaceBase::DecodeSingleToken(std::vector<int64_t> &tokenIds, std::string &output,
-    const uint32_t &prevDecodeIndex, const uint32_t &currentDecodeIndex,
-    const bool &skipSpecialTokens)
-{
+                                                    const uint32_t &prevDecodeIndex, const uint32_t &currentDecodeIndex,
+                                                    const bool &skipSpecialTokens) {
     std::string inferResult;
     std::string err;
     auto status =
@@ -1107,9 +1100,8 @@ bool SingleReqInferInterfaceBase::DecodeSingleToken(std::vector<int64_t> &tokenI
 }
 
 Status SingleReqInferInterfaceBase::InsertPerfInfoIntoJson(nlohmann::ordered_json &body,
-    const std::vector<int32_t> perfInfoTypeList,
-    const std::vector<std::string> keyList)
-{
+                                                           const std::vector<int32_t> perfInfoTypeList,
+                                                           const std::vector<std::string> keyList) {
     std::string error;
     auto &metrics = singleLLMReqHandlerBase_->GetMetrics();
     if (perfInfoTypeList.size() != keyList.size()) {
@@ -1119,9 +1111,15 @@ Status SingleReqInferInterfaceBase::InsertPerfInfoIntoJson(nlohmann::ordered_jso
     for (size_t i = 0; i < keyList.size(); ++i) {
         const std::vector<int64_t> *perfInfo = nullptr;
         switch (perfInfoTypeList[i]) {
-            case PerfInfoType::PERF_BATCH_SZIE: perfInfo = &metrics.batchSize; break;
-            case PerfInfoType::PERF_QUEUE_WAIT_TIME: perfInfo = &metrics.queueWaitTime; break;
-            default: error = "Perfermance information type is not supported"; return Status(Error::Code::ERROR, error);
+            case PerfInfoType::PERF_BATCH_SZIE:
+                perfInfo = &metrics.batchSize;
+                break;
+            case PerfInfoType::PERF_QUEUE_WAIT_TIME:
+                perfInfo = &metrics.queueWaitTime;
+                break;
+            default:
+                error = "Perfermance information type is not supported";
+                return Status(Error::Code::ERROR, error);
         }
         // Maybe json type is object or array
         if (body.is_object()) {
@@ -1138,9 +1136,7 @@ Status SingleReqInferInterfaceBase::InsertPerfInfoIntoJson(nlohmann::ordered_jso
     return Status(Error::Code::OK, "Success");
 }
 
-bool SingleReqInferInterfaceBase::ParseChatTemplate(const nlohmann::ordered_json &jsonObj,
-    std::string &error) const
-{
+bool SingleReqInferInterfaceBase::ParseChatTemplate(const nlohmann::ordered_json &jsonObj, std::string &error) const {
     if (!jsonObj.contains("chat_template_kwargs")) {
         return true;
     }
@@ -1164,8 +1160,7 @@ bool SingleReqInferInterfaceBase::ParseChatTemplate(const nlohmann::ordered_json
 }
 
 bool SingleReqInferInterfaceBase::ParseChatTemplateRequest(const nlohmann::ordered_json &jsonObj,
-    std::string &error) const
-{
+                                                           std::string &error) const {
     const std::string key = "chat_template";
     std::string chat_template = "";
     if (!jsonObj.contains(key) || jsonObj[key].is_null()) {
@@ -1175,7 +1170,7 @@ bool SingleReqInferInterfaceBase::ParseChatTemplateRequest(const nlohmann::order
             error = "Parameter chat_template not string";
             return false;
         }
-        if (jsonObj[key]=="") {
+        if (jsonObj[key] == "") {
             error = "Parameter chat_template is not valid";
             return false;
         }
@@ -1183,8 +1178,8 @@ bool SingleReqInferInterfaceBase::ParseChatTemplateRequest(const nlohmann::order
     }
     std::regex pathPattern(R"(^(\/(?:[\w\-\.]+\/)*[\w\-\.]*\/?)?$|^(?:[\w\-\.]+\/)*[\w\-\.]*\/?$)");
     if (std::regex_match(chat_template, pathPattern) && chat_template.find("..") == std::string::npos) {
-        mindie_llm::SafePath check_chat_template(chat_template, mindie_llm::PathType::FILE, "r", PERM_640,
-        1024 * 1024, ".jinja"); // 1024*1024 is maximum size of a file.
+        mindie_llm::SafePath check_chat_template(chat_template, mindie_llm::PathType::FILE, "r", PERM_640, 1024 * 1024,
+                                                 ".jinja");  // 1024*1024 is maximum size of a file.
         mindie_llm::Result is_chat_template = check_chat_template.Check(chat_template, true);
         if (!is_chat_template.IsOk()) {
             error = is_chat_template.message();
@@ -1195,8 +1190,7 @@ bool SingleReqInferInterfaceBase::ParseChatTemplateRequest(const nlohmann::order
     return true;
 }
 
-std::string SingleReqInferInterfaceBase::BuildReComputeInput()
-{
+std::string SingleReqInferInterfaceBase::BuildReComputeInput() {
     std::stringstream ssInputs;
     ssInputs << oriReqTokenLen_ << ",";
     StreamAppend(ssInputs, reqTokens_, oriReqTokenLen_);
@@ -1210,4 +1204,4 @@ std::string SingleReqInferInterfaceBase::BuildReComputeInput()
     }
     return ssInputs.str();
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

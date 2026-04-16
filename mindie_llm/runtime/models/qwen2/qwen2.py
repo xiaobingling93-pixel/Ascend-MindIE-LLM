@@ -8,7 +8,6 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-from typing import Any
 
 import torch
 import torch_npu
@@ -59,15 +58,15 @@ class Qwen2Attention(nn.Module):
         qkv_proj: Parallel linear layer for QKV projection
         o_proj: Parallel linear layer for output projection
         q_norm: RMS normalization for queries
-        k_norm: RMS normalization for keys 
+        k_norm: RMS normalization for keys
         attn: Attention computation module
     """
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        quant_config: QuantizationConfigBase = None,
     ):
         """
         Initialize the Qwen2 attention module.
@@ -84,7 +83,7 @@ class Qwen2Attention(nn.Module):
         self.head_dim = config.head_dim
         self.num_heads_per_rank = config.get_num_attention_heads_per_rank()
         self.num_key_value_heads_per_rank = config.get_num_kv_heads_per_rank()
-        
+
         self.q_size = self.num_heads_per_rank * self.head_dim
         self.kv_size = self.num_key_value_heads_per_rank * self.head_dim
         self.scale = self.head_dim**-0.5
@@ -97,7 +96,7 @@ class Qwen2Attention(nn.Module):
             bias=config.attention_bias,
             quant_config=quant_config,
             prefix=[f"{prefix}.q_proj", f"{prefix}.k_proj", f"{prefix}.v_proj"],
-            parallel_info=attn_tp
+            parallel_info=attn_tp,
         )
 
         self.o_proj = RowParallelLinear(
@@ -176,10 +175,10 @@ class Qwen2Mlp(nn.Module):
     """
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        quant_config: QuantizationConfigBase = None,
     ):
         """
         Initialize the Qwen2 MLP module.
@@ -200,7 +199,7 @@ class Qwen2Mlp(nn.Module):
             bias=False,
             quant_config=quant_config,
             prefix=[f"{prefix}.gate_proj", f"{prefix}.up_proj"],
-            parallel_info=mlp_tp
+            parallel_info=mlp_tp,
         )
 
         self.down_proj = RowParallelLinear(
@@ -209,7 +208,7 @@ class Qwen2Mlp(nn.Module):
             bias=False,
             quant_config=quant_config,
             prefix=f"{prefix}.down_proj",
-            parallel_info=mlp_tp
+            parallel_info=mlp_tp,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -261,11 +260,11 @@ class Qwen2Layer(nn.Module):
     mlp_cls = Qwen2Mlp
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            layer_idx: int,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        layer_idx: int,
+        quant_config: QuantizationConfigBase = None,
     ) -> None:
         """
         Initialize the Qwen2 transformer layer.
@@ -277,7 +276,7 @@ class Qwen2Layer(nn.Module):
             quant_config: Quantization configuration (optional)
         """
         super().__init__()
-        
+
         self.config = config
         self.prefix = f"{prefix}.layers.{layer_idx}"
         self.layer_idx = layer_idx
@@ -288,11 +287,14 @@ class Qwen2Layer(nn.Module):
         self.mlp = self.mlp_cls(config, f"{self.prefix}.mlp", quant_config=quant_config)
 
         self.input_layernorm = RMSNorm(
-            config.hidden_size, config.rms_norm_eps,
-            quant_config=quant_config, prefix=f"{self.prefix}.input_layernorm")
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.prefix}.input_layernorm"
+        )
         self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, config.rms_norm_eps,
-            quant_config=quant_config, prefix=f"{self.prefix}.post_attention_layernorm")
+            config.hidden_size,
+            config.rms_norm_eps,
+            quant_config=quant_config,
+            prefix=f"{self.prefix}.post_attention_layernorm",
+        )
 
     def forward(
         self,
@@ -309,7 +311,7 @@ class Qwen2Layer(nn.Module):
             residual: Residual connection from previous layer
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: 
+            tuple[torch.Tensor, torch.Tensor]:
                 - Output hidden states
                 - Updated residual for next layer
         """
@@ -356,10 +358,7 @@ class Qwen2Model(nn.Module):
     layer_cls = Qwen2Layer
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str = "model",
-            quant_config: QuantizationConfigBase = None
+        self, config: HuggingFaceConfig, prefix: str = "model", quant_config: QuantizationConfigBase = None
     ) -> None:
         """
         Initialize the Qwen2 base model.
@@ -370,7 +369,7 @@ class Qwen2Model(nn.Module):
             quant_config: Quantization configuration (optional)
         """
         super().__init__()
-        
+
         self.config = config
         self.prefix = prefix
         self.quant_config = quant_config
@@ -389,15 +388,14 @@ class Qwen2Model(nn.Module):
                 for layer_idx in range(config.num_hidden_layers)
             ]
         )
-        self.norm = RMSNorm(
-            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.norm")
+        self.norm = RMSNorm(config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.norm")
 
     def forward(
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         intermediate_tensors: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the base model.
@@ -416,7 +414,7 @@ class Qwen2Model(nn.Module):
         self.layers[0].self_attn.rope_emb.set_cos_sin_indexed_cache(positions)
         for layer in self.layers:
             hidden_states, residual = layer(positions, hidden_states, residual)
-        
+
         hidden_states, _ = self.norm(hidden_states, residual)
 
         return hidden_states
@@ -444,6 +442,7 @@ class Qwen2ForCausalLM(BaseModelForCausalLM):
         model: Base Qwen2 model
         lm_head: Language modeling head
     """
+
     model_cls = Qwen2Model
 
     def __init__(self, mindie_llm_config: MindIELLMConfig):
@@ -460,18 +459,14 @@ class Qwen2ForCausalLM(BaseModelForCausalLM):
         self.hf_config = mindie_llm_config.hf_config
         self.quant_config = mindie_llm_config.quant_config
         self.parallel_info_manager = get_parallel_info_manager()
-        self.model = self.model_cls(
-            config=mindie_llm_config.hf_config,
-            prefix="model",
-            quant_config=self.quant_config
-        )
+        self.model = self.model_cls(config=mindie_llm_config.hf_config, prefix="model", quant_config=self.quant_config)
 
         self.lm_head = ParallelLMHead(
             self.hf_config.vocab_size,
             self.hf_config.hidden_size,
             bias=False,
             quant_config=None,
-            prefix=f"lm_head",
+            prefix="lm_head",
         )
 
         if self.hf_config.tie_word_embeddings:
@@ -482,7 +477,7 @@ class Qwen2ForCausalLM(BaseModelForCausalLM):
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         intermediate_tensors: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None
+        inputs_embeds: torch.Tensor | None = None,
     ):
         """
         Forward pass of the model (without LM head).

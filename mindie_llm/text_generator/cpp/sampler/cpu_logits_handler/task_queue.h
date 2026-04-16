@@ -9,12 +9,13 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_TASK_QUEUE_H
 #define MINDIE_LLM_TASK_QUEUE_H
 
-#include <queue>
 #include <pthread.h>
+
+#include <queue>
 
 using Callback = void (*)(void *);
 
@@ -28,7 +29,7 @@ struct Task {
 };
 
 class TaskQueue {
-public:
+   public:
     TaskQueue() = default;
     void Init();
     ~TaskQueue();
@@ -38,16 +39,13 @@ public:
 
     Task TakeTask();
 
-    inline size_t TaskNumber()
-    {
-        return m_queue.size();
-    }
+    inline size_t TaskNumber() { return m_queue.size(); }
 
-private:
+   private:
     pthread_mutex_t m_mutex;
     std::queue<Task> m_queue;
 };
-}
-}
+}  // namespace cpu_logits_handler
+}  // namespace mindie_llm
 
 #endif  // TASK_QUEUE_H

@@ -10,25 +10,25 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "infer_instances.h"
+
 #include <iostream>
 #include <sstream>
-#include "config_manager.h"
-#include "common_util.h"
+
 #include "check_utils.h"
-#include "data_type.h"
+#include "common_util.h"
+#include "config_manager.h"
 #include "config_manager_impl.h"
-#include "infer_instances.h"
+#include "data_type.h"
 
 namespace mindie_llm {
 const std::string DEFAULT_HOST_IP = "127.0.0.1";
-std::shared_ptr<InferInstance> InferInstance::GetInstance()
-{
+std::shared_ptr<InferInstance> InferInstance::GetInstance() {
     static std::shared_ptr<InferInstance> instance = std::make_shared<InferInstance>();
     return instance;
 }
 
-Status InferInstance::InitFromEndpointCall(const std::string &configPath)
-{
+Status InferInstance::InitFromEndpointCall(const std::string &configPath) {
     if (!ConfigManager::CreateInstance(configPath)) {
         return Status(Error::Code::ERROR, "Failed to create config manager");
     }
@@ -37,9 +37,8 @@ Status InferInstance::InitFromEndpointCall(const std::string &configPath)
     auto &serverConfig = GetServerConfig();
 
     if (modelParams.empty()) {
-        ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE,
-            GenerateInferInstanceErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-            "Failed to init InferInstance. The count of modelDeploy is 0.");
+        ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, GenerateInferInstanceErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                   "Failed to init InferInstance. The count of modelDeploy is 0.");
         return Status(Error::Code::ERROR, "The count of modelDeploy is 0.");
     }
 
@@ -48,8 +47,8 @@ Status InferInstance::InitFromEndpointCall(const std::string &configPath)
         std::stringstream err;
         err << "Invalid modelInstanceNumber: " << backendConfig.modelInstanceNumber
             << " or modelInstanceNumber not equal to npuDeviceIds size: " << backendConfig.npuDeviceIds.size();
-        ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE,
-            GenerateInferInstanceErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR), err.str());
+        ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, GenerateInferInstanceErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                   err.str());
         return Status(Error::Code::ERROR, err.str());
     }
 
@@ -83,14 +82,14 @@ Status InferInstance::InitFromEndpointCall(const std::string &configPath)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::InitSingleInferInstance(std::map<std::string, std::string> modelConfig, uint32_t modelInstanceId)
-{
+Status InferInstance::InitSingleInferInstance(std::map<std::string, std::string> modelConfig,
+                                              uint32_t modelInstanceId) {
     configPath_ = modelConfig["configPath"];
     // for dmi mode and singleNode infer, model instance will be init later by initPD
     if (modelConfig["inferMode"] == "dmi" && !GetBackendConfig().multiNodesInferEnabled) {
         ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE,
                   "In DMI & single machine infer scene, return directly after launching main process;"
-                  << "And will wait to initialize model while assigning pd role");
+                      << "And will wait to initialize model while assigning pd role");
         return Status(Error::Code::OK, "Success");
     }
 
@@ -112,8 +111,7 @@ Status InferInstance::InitSingleInferInstance(std::map<std::string, std::string>
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::Finalize()
-{
+Status InferInstance::Finalize() {
     if (!started_.load()) {
         return Status(Error::Code::OK, "Success");
     }
@@ -132,8 +130,7 @@ Status InferInstance::Finalize()
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::Process(RequestSPtr request)
-{
+Status InferInstance::Process(RequestSPtr request) {
     CHECK_INITIALIZATION();
     if (callbackMap.Count(request->requestId) != 0) {
         ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, "[MIE05E040001]",
@@ -169,8 +166,7 @@ Status InferInstance::Process(RequestSPtr request)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::ControlRequest(const RequestIdNew &requestId, OperationV2 operation)
-{
+Status InferInstance::ControlRequest(const RequestIdNew &requestId, OperationV2 operation) {
     ULOG_DEBUG(SUBMODLE_NAME_INFERINSTANCE, requestId + " Operation " + std::to_string(static_cast<int>(operation)));
     CHECK_INITIALIZATION();
     Status status(Error::Code::ERROR, "ControlRequest not handled by any manager");
@@ -191,8 +187,7 @@ Status InferInstance::ControlRequest(const RequestIdNew &requestId, OperationV2 
     return status;
 }
 
-Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info)
-{
+Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info) {
     ULOG_DEBUG(SUBMODLE_NAME_INFERINSTANCE, "Operation" + info.command);
     if (!started_.load()) {
         return Status(Error::Code::ERROR, "Infer instance has been finalized or not initialized.");
@@ -210,24 +205,23 @@ Status InferInstance::ControlInferInstance(mindie_llm::RecoverCommandInfo &info)
         isPaused_.store(false);
     }
     bool allSuccess = true;
-    info.results.ForEach([&allSuccess](const mindie_llm::NPUExecutionResult &res) {
-        if (res.commandResult != 0) {
-            allSuccess = false;
-        }
+    info.results.ForEach(
+        [&allSuccess](const mindie_llm::NPUExecutionResult &res) {
+            if (res.commandResult != 0) {
+                allSuccess = false;
+            }
         },
         info.results.Size());
-    return allSuccess ? Status(Error::Code::OK, "Success") :
-        Status(Error::Code::ERROR, "Some NPU execute command failed");
+    return allSuccess ? Status(Error::Code::OK, "Success")
+                      : Status(Error::Code::ERROR, "Some NPU execute command failed");
 }
 
-Status InferInstance::CheckInferInstanceStarted(bool &isStarted)
-{
+Status InferInstance::CheckInferInstanceStarted(bool &isStarted) {
     isStarted = started_.load();
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetProcessingRequest(uint64_t &num)
-{
+Status InferInstance::GetProcessingRequest(uint64_t &num) {
     CHECK_INITIALIZATION();
     uint64_t total = 0;
     for (auto &llmManager : llmManagers_) {
@@ -240,8 +234,7 @@ Status InferInstance::GetProcessingRequest(uint64_t &num)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetWaitingRequest(uint64_t &num)
-{
+Status InferInstance::GetWaitingRequest(uint64_t &num) {
     CHECK_INITIALIZATION();
     uint64_t total = 0;
     for (auto &llmManager : llmManagers_) {
@@ -252,8 +245,7 @@ Status InferInstance::GetWaitingRequest(uint64_t &num)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetRunningRequest(uint64_t &num)
-{
+Status InferInstance::GetRunningRequest(uint64_t &num) {
     CHECK_INITIALIZATION();
     uint64_t total = 0;
     for (auto &llmManager : llmManagers_) {
@@ -264,8 +256,7 @@ Status InferInstance::GetRunningRequest(uint64_t &num)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetSwappedRequest(uint64_t &num)
-{
+Status InferInstance::GetSwappedRequest(uint64_t &num) {
     CHECK_INITIALIZATION();
     uint64_t total = 0;
     for (auto &llmManager : llmManagers_) {
@@ -277,8 +268,7 @@ Status InferInstance::GetSwappedRequest(uint64_t &num)
 }
 
 Status InferInstance::GetCacheBlockNums(uint64_t &freeNpuBlockNums, uint64_t &freeCpuBlockNums,
-    uint64_t &totalNpuBlockNums, uint64_t &totalCpuBlockNums)
-{
+                                        uint64_t &totalNpuBlockNums, uint64_t &totalCpuBlockNums) {
     CHECK_INITIALIZATION();
     uint64_t accumulatedFreeNpuBlocks = 0;
     uint64_t accumulatedFreeCpuBlocks = 0;
@@ -298,8 +288,7 @@ Status InferInstance::GetCacheBlockNums(uint64_t &freeNpuBlockNums, uint64_t &fr
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetRadixMatchNums(uint64_t &allRadixMatchNum, uint64_t &npuRadixMatchHitNum)
-{
+Status InferInstance::GetRadixMatchNums(uint64_t &allRadixMatchNum, uint64_t &npuRadixMatchHitNum) {
     CHECK_INITIALIZATION();
     uint64_t totalRadixMatchCount = 0;
     uint64_t npuRadixMatchHitCount = 0;
@@ -313,8 +302,7 @@ Status InferInstance::GetRadixMatchNums(uint64_t &allRadixMatchNum, uint64_t &np
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetCumulativePreemptCount(uint64_t &cumulativePreemptCount)
-{
+Status InferInstance::GetCumulativePreemptCount(uint64_t &cumulativePreemptCount) {
     CHECK_INITIALIZATION();
     uint64_t total = 0;
     for (auto &llmManager : llmManagers_) {
@@ -325,8 +313,7 @@ Status InferInstance::GetCumulativePreemptCount(uint64_t &cumulativePreemptCount
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetThroughput(float &prefillThroughput, float &decodeThroughput)
-{
+Status InferInstance::GetThroughput(float &prefillThroughput, float &decodeThroughput) {
     CHECK_INITIALIZATION();
     float totalPrefillThroughput = 0.0f;
     float totalDecodeThroughput = 0.0f;
@@ -341,9 +328,8 @@ Status InferInstance::GetThroughput(float &prefillThroughput, float &decodeThrou
 }
 
 Status InferInstance::GetRequestBlockQuotas(uint64_t &remainBlocks, uint64_t &remainPrefillSlots,
-    uint64_t &remainPrefillTokens,
-    std::map<uint32_t, uint64_t> &dpRemainBlocks)
-{
+                                            uint64_t &remainPrefillTokens,
+                                            std::map<uint32_t, uint64_t> &dpRemainBlocks) {
     CHECK_INITIALIZATION();
     uint64_t totalRemainBlocks = 0;
     uint64_t totalRemainPrefillSlots = 0;
@@ -360,20 +346,19 @@ Status InferInstance::GetRequestBlockQuotas(uint64_t &remainBlocks, uint64_t &re
     dpRemainBlocks = dpRemainBlocks_;
 
     ULOG_DEBUG(SUBMODLE_NAME_INFERINSTANCE, "Backend manager get processing request. total remain blocks: "
-            << remainBlocks << ", total remain prefill tokens: "
-            << remainPrefillSlots << " , total Remain prefill slots: " << remainPrefillTokens);
+                                                << remainBlocks
+                                                << ", total remain prefill tokens: " << remainPrefillSlots
+                                                << " , total Remain prefill slots: " << remainPrefillTokens);
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetNodeStatus(std::map<std::string, NodeHealthStatus> &slaveStatus)
-{
+Status InferInstance::GetNodeStatus(std::map<std::string, NodeHealthStatus> &slaveStatus) {
     CHECK_INITIALIZATION();
     slaveStatus = slavesStatus_;
     return Status(Error::Code::OK, "get node status success");
 }
 
-static bool ProcessFailLinkIp(RequestSPtr request, GlobalIpInfo &globalIpInfo)
-{
+static bool ProcessFailLinkIp(RequestSPtr request, GlobalIpInfo &globalIpInfo) {
     globalIpInfo.failLinkInstanceIDAndReason.clear();
 
     if (request->failedLinkInfos.size() == 0) {
@@ -381,7 +366,7 @@ static bool ProcessFailLinkIp(RequestSPtr request, GlobalIpInfo &globalIpInfo)
         return true;
     }
 
-    std::vector<uint64_t> failInstanceIdVec; // <failInstanceId1, failInstanceId2, ...>
+    std::vector<uint64_t> failInstanceIdVec;  // <failInstanceId1, failInstanceId2, ...>
     for (auto &failedLinkInfo : request->failedLinkInfos) {
         failInstanceIdVec.emplace_back(failedLinkInfo.cluster_id);
         globalIpInfo.failLinkInstanceIDAndReason[failedLinkInfo.cluster_id] = failedLinkInfo.failReason;
@@ -394,8 +379,7 @@ static bool ProcessFailLinkIp(RequestSPtr request, GlobalIpInfo &globalIpInfo)
     return true;
 }
 
-static void AddAttributeToRequest(const GlobalIpInfo &globalIpInfo, RequestSPtr request)
-{
+static void AddAttributeToRequest(const GlobalIpInfo &globalIpInfo, RequestSPtr request) {
     std::string role = globalIpInfo.role;
     PDRole roleInt = PDRole::UNKNOWN;
     if (role == "prefill") {
@@ -410,7 +394,7 @@ static void AddAttributeToRequest(const GlobalIpInfo &globalIpInfo, RequestSPtr 
 
     // 修改 hostIpNum 计算逻辑：统计所有 DP 实例中 host IP 的总数量
     int64_t hostIpNum = 0;
-    for (const auto& pair : globalIpInfo.hostIpInfo) {
+    for (const auto &pair : globalIpInfo.hostIpInfo) {
         int64_t currentHostIpCount = static_cast<int64_t>(pair.second.size());
         hostIpNum += currentHostIpCount;
     }
@@ -423,12 +407,11 @@ static void AddAttributeToRequest(const GlobalIpInfo &globalIpInfo, RequestSPtr 
     request->containsDpInstanceIds = globalIpInfo.localDpInstanceIds.empty() ? 0 : 1;
 }
 
-static bool ProcessDevice(const std::pair<uint64_t, std::vector<DeviceInfo>> &pair, RequestSPtr request,
+static bool ProcessDevice(
+    const std::pair<uint64_t, std::vector<DeviceInfo>> &pair, RequestSPtr request,
     std::unordered_map<InstanceId, std::vector<std::pair<std::string, int64_t>>> &dpInstance2Devices,
     std::unordered_map<InstanceId, std::vector<int64_t>> &dpInstance2SuperDeviceIds,
-    const std::map<uint64_t, std::vector<std::string>> &hostIpInfo,
-    std::map<uint64_t, std::string> &superPodIdInfo)
-{
+    const std::map<uint64_t, std::vector<std::string>> &hostIpInfo, std::map<uint64_t, std::string> &superPodIdInfo) {
     try {
         const uint64_t &instanceId = pair.first;
         const std::vector<DeviceInfo> &devicesIP = pair.second;
@@ -467,8 +450,7 @@ static bool ProcessDevice(const std::pair<uint64_t, std::vector<DeviceInfo>> &pa
     return true;
 }
 
-static bool AddDevicesToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request)
-{
+static bool AddDevicesToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request) {
     ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "AddDevicesToRequest" << "GlobalIpInfo" << globalIpInfo.ToString());
     for (auto &pair : std::as_const(globalIpInfo.linkIpInfo)) {
         ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "hostIpInfo dpInstanceId is " << pair.first);
@@ -480,7 +462,7 @@ static bool AddDevicesToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request)
         }
     }
     // build unlinkDevices IP
-    for (auto& pair : std::as_const(globalIpInfo.unlinkIpInfo)) {
+    for (auto &pair : std::as_const(globalIpInfo.unlinkIpInfo)) {
         if (!ProcessDevice(pair, request, request->dpInstance2UnlinkDevices, request->dpInstance2UnLinkSuperDeviceIds,
                            globalIpInfo.hostIpInfo, globalIpInfo.superPodIdInfo)) {
             ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, "[MIE05E040001]",
@@ -491,8 +473,7 @@ static bool AddDevicesToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request)
     return true;
 }
 
-static void AddPolicyToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request)
-{
+static void AddPolicyToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request) {
     request->spInfo = globalIpInfo.spInfo;
     request->cpInfo = globalIpInfo.cpInfo;
 
@@ -505,8 +486,7 @@ static void AddPolicyToRequest(GlobalIpInfo &globalIpInfo, RequestSPtr request)
     }
 }
 
-static void CreateIpInfo(const GlobalIpInfo &globalIpInfo, std::map<std::string, std::string> &ipInfo)
-{
+static void CreateIpInfo(const GlobalIpInfo &globalIpInfo, std::map<std::string, std::string> &ipInfo) {
     // Since there is no config manager, it is hardcoded for now. Only `dmi` will enter this function.
     ipInfo["infer_mode"] = "dmi";
     if (globalIpInfo.role == "decode") {
@@ -517,7 +497,7 @@ static void CreateIpInfo(const GlobalIpInfo &globalIpInfo, std::map<std::string,
     ipInfo["needSwitch"] = (globalIpInfo.needSwitch ? "true" : "false");
     ipInfo["local_instance_id"] = std::to_string(globalIpInfo.localInstanceId);
 
-    ipInfo["local_host_ip"] = JoinStrings(globalIpInfo.localHostIpList, ","); // ip1, ip2, ip3
+    ipInfo["local_host_ip"] = JoinStrings(globalIpInfo.localHostIpList, ",");  // ip1, ip2, ip3
     if (!globalIpInfo.localSuperPodId.empty()) {
         ipInfo["local_super_pod_id"] = globalIpInfo.localSuperPodId;
     }
@@ -544,8 +524,7 @@ static void CreateIpInfo(const GlobalIpInfo &globalIpInfo, std::map<std::string,
 }
 
 // Pass IpInfo, including local ip infos and whethe to link or unlink remote
-Status InferInstance::AssignDmiRole(GlobalIpInfo &globalIpInfo)
-{
+Status InferInstance::AssignDmiRole(GlobalIpInfo &globalIpInfo) {
     // Init P/D node
     if (globalIpInfo.needInit) {
         auto res = InitPDNode(globalIpInfo);
@@ -590,13 +569,12 @@ Status InferInstance::AssignDmiRole(GlobalIpInfo &globalIpInfo)
         return Status(Error::Code::ERROR, "Fail to delete fail ip add from globalIpInfo.");
     }
     ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "[InferInstance::AssignDmiRole] Success.");
-    ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "system update pd role to " + globalIpInfo.role +"success");
+    ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "system update pd role to " + globalIpInfo.role + "success");
     ConfigManager::GetInstance().SetMaxPositionEmbeddings(llmManagers_.at(0)->GetMaxPositionEmbeddings());
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::QueryPDLinkStatus(model_execute_data::PDLinkStatusResponse &response)
-{
+Status InferInstance::QueryPDLinkStatus(model_execute_data::PDLinkStatusResponse &response) {
     for (auto &llmManager : llmManagers_) {
         if (!llmManager->QueryPDLinkStatus(response)) {
             ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, "[MIE05E040001]",
@@ -607,9 +585,7 @@ Status InferInstance::QueryPDLinkStatus(model_execute_data::PDLinkStatusResponse
     return Status(Error::Code::OK, "Success");
 }
 
-
-Status InferInstance::InitPDNode(GlobalIpInfo &globalIpInfo)
-{
+Status InferInstance::InitPDNode(GlobalIpInfo &globalIpInfo) {
     std::map<std::string, std::string> ipInfo;
     CreateIpInfo(globalIpInfo, ipInfo);
 
@@ -660,11 +636,7 @@ Status InferInstance::InitPDNode(GlobalIpInfo &globalIpInfo)
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::HandleLora(
-    const LoraOperation& loraOperation,
-    std::vector<LoraParamSPtr>& loraInfo
-)
-{
+Status InferInstance::HandleLora(const LoraOperation &loraOperation, std::vector<LoraParamSPtr> &loraInfo) {
     ULOG_INFO(SUBMODLE_NAME_INFERINSTANCE, "Start HandleLora");
     if (llmManagers_[0] == nullptr) {
         ULOG_ERROR(SUBMODLE_NAME_INFERINSTANCE, "[MIE05E040001]", "llmManager is nullptr");
@@ -675,8 +647,7 @@ Status InferInstance::HandleLora(
     return stats;
 }
 
-Status InferInstance::ForcePRelease()
-{
+Status InferInstance::ForcePRelease() {
     RequestSPtr llmInferRequest = std::make_shared<Request>(RequestIdNew{"0"});
     for (auto &llmManager : llmManagers_) {
         if (!llmManager->UpdateEngineInfo(llmInferRequest, true)) {
@@ -689,8 +660,7 @@ Status InferInstance::ForcePRelease()
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferInstance::GetBatchSchedulerMetrics(std::map<std::string, uint64_t> &batchSchedulerMetrics)
-{
+Status InferInstance::GetBatchSchedulerMetrics(std::map<std::string, uint64_t> &batchSchedulerMetrics) {
     CHECK_INITIALIZATION();
     uint64_t processingRequestNum = 0;
     uint64_t waitingRequestNum = 0;
@@ -716,8 +686,7 @@ Status InferInstance::GetBatchSchedulerMetrics(std::map<std::string, uint64_t> &
     return Status(Error::Code::OK, "Success");
 }
 
-std::string InferInstance::GetPDRole() const
-{
+std::string InferInstance::GetPDRole() const {
     if (pdRole_ == PDRole::PREFILL) {
         return "prefill";
     } else if (pdRole_ == PDRole::DECODE) {
@@ -731,8 +700,7 @@ PDRoleStatus InferInstance::GetPDRoleStatus() const { return pdRoleStatus_; }
 
 void InferInstance::SetPDRoleStatus(PDRoleStatus status) { pdRoleStatus_ = status; }
 
-void InferInstance::UpdatePDRole(const std::string &role)
-{
+void InferInstance::UpdatePDRole(const std::string &role) {
     // 当前角色是从环境变量里读取的，只要是P或D则认为status是ready
     // 目标态是动态指定，待进化到目标态后，这里的状态不能写死
     if (role == "decode") {
@@ -744,8 +712,7 @@ void InferInstance::UpdatePDRole(const std::string &role)
     }
 }
 
-bool InferInstance::IsLlmEngineReady() const
-{
+bool InferInstance::IsLlmEngineReady() const {
     if (llmManagers_.empty()) {
         return false;
     }
@@ -759,4 +726,4 @@ bool InferInstance::IsLlmEngineReady() const
 }
 
 std::shared_ptr<InferInstance> GetInferInstance() { return InferInstance::GetInstance(); }
-} // namespace mindie_llm
+}  // namespace mindie_llm

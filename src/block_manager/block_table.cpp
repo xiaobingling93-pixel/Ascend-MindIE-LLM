@@ -9,19 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "block_table.h"
+
 #include <algorithm>
 #include <stdexcept>
+
 #include "log.h"
 #include "math_utils.h"
-
 
 namespace mindie_llm {
 // Split the token ids into block-sized chunks so they can be easily allocated.
 std::vector<std::vector<TokenId>> BlockTable::ChunkTokensForAllocate(const std::vector<TokenId> &tokenIds,
-                                                                     size_t chunkSize)
-{
+                                                                     size_t chunkSize) {
     if (chunkSize == 0) {
         throw std::runtime_error("Chunk size cannot be zero.");
     }
@@ -34,8 +34,7 @@ std::vector<std::vector<TokenId>> BlockTable::ChunkTokensForAllocate(const std::
 }
 
 BlockTable::BlockTable(size_t blockSize, DeviceAwareBlockAllocatorSPtr &blockAllocator, size_t rankSize)
-    : blockObjs_(rankSize), blockSize_(blockSize), blockAllocator_(blockAllocator), rankSize_(rankSize)
-{
+    : blockObjs_(rankSize), blockSize_(blockSize), blockAllocator_(blockAllocator), rankSize_(rankSize) {
     if (blockSize_ == 0) {
         throw std::runtime_error("blockSize can't be zero.");
     }
@@ -48,8 +47,7 @@ BlockTable::BlockTable(size_t blockSize, DeviceAwareBlockAllocatorSPtr &blockAll
 
 BlockTable::BlockTable(size_t blockSize, DeviceAwareBlockAllocatorSPtr &blockAllocator,
                        std::vector<std::vector<BlockObjSPtr>> &blockObjs, size_t rankSize)
-    : blockObjs_(blockObjs), blockSize_(blockSize), blockAllocator_(blockAllocator), rankSize_(rankSize)
-{
+    : blockObjs_(blockObjs), blockSize_(blockSize), blockAllocator_(blockAllocator), rankSize_(rankSize) {
     if (blockSize_ == 0) {
         throw std::runtime_error("blockSize can't be zero.");
     }
@@ -69,27 +67,25 @@ BlockTable::BlockTable(size_t blockSize, DeviceAwareBlockAllocatorSPtr &blockAll
     }
 }
 
-void BlockTable::Allocate(const std::vector<TokenId> &tokenIds, DeviceType device, HashValue extraHash)
-{
+void BlockTable::Allocate(const std::vector<TokenId> &tokenIds, DeviceType device, HashValue extraHash) {
     if (IsAllocated()) {
         throw std::runtime_error("Blocks of this block table are already allocated.");
     }
     std::vector<BlockObjSPtr> newBlockObjs;
 
     newBlockObjs = AllocateBlocksForTokenIds(tokenIds, device, extraHash);
-    Update(newBlockObjs); // owned block objs and block ids are invalid, so safe to update directly.
+    Update(newBlockObjs);  // owned block objs and block ids are invalid, so safe to update directly.
     numFullSlotsPerRank_[0] = tokenIds.size();
 }
 
-void BlockTable::AllocateSmallRankFirst(const std::vector<TokenId> &tokenIds, DeviceType device, HashValue extraHash)
-{
+void BlockTable::AllocateSmallRankFirst(const std::vector<TokenId> &tokenIds, DeviceType device, HashValue extraHash) {
     if (IsAllocated()) {
         throw std::runtime_error("Blocks of this block table are already allocated.");
     }
     std::vector<BlockObjSPtr> newBlockObjs;
 
     newBlockObjs = AllocateBlocksForTokenIdsSmallRankFirst(tokenIds, device, extraHash);
-    Update(newBlockObjs); // owned block objs and block ids are invalid, so safe to update directly.
+    Update(newBlockObjs);  // owned block objs and block ids are invalid, so safe to update directly.
     // 更新每个rank的填充slot数
     for (BlockObjSPtr blockObj : newBlockObjs) {
         numFullSlotsPerRank_[blockObj->GetRankIdx()] += blockObj->GetTokenIds().size();
@@ -97,8 +93,7 @@ void BlockTable::AllocateSmallRankFirst(const std::vector<TokenId> &tokenIds, De
 }
 
 // rebuild block id list using allocated block objects.
-void BlockTable::Update(const std::vector<BlockObjSPtr> &blockObjs)
-{
+void BlockTable::Update(const std::vector<BlockObjSPtr> &blockObjs) {
     for (std::vector<BlockObjSPtr> &rankBlocks : blockObjs_) {
         rankBlocks.clear();
     }
@@ -109,13 +104,13 @@ void BlockTable::Update(const std::vector<BlockObjSPtr> &blockObjs)
     }
 }
 
-bool BlockTable::CanAppendNewTokens(const std::vector<TokenId> &tokenIds, size_t numLookaheadSlots) const
-{
+bool BlockTable::CanAppendNewTokens(const std::vector<TokenId> &tokenIds, size_t numLookaheadSlots) const {
     if (rankSize_ > 1) {
         size_t numTokenIds = tokenIds.size() + numLookaheadSlots;
         size_t numEmptySlots = GetNumEmptySlots(currentSpRank_);
         size_t nextSpRank = currentSpRank_;
-        if ((numEmptySlots == 0 && numLookaheadSlots == 0) || (numLookaheadSlots != 0 && tokenIds.size() > numEmptySlots)) {
+        if ((numEmptySlots == 0 && numLookaheadSlots == 0) ||
+            (numLookaheadSlots != 0 && tokenIds.size() > numEmptySlots)) {
             nextSpRank = (nextSpRank + 1) % rankSize_;
             numEmptySlots = GetNumEmptySlots(nextSpRank);
         }
@@ -129,8 +124,8 @@ bool BlockTable::CanAppendNewTokens(const std::vector<TokenId> &tokenIds, size_t
     }
 }
 
-void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashValue extraHash, size_t numLookaheadSlots)
-{
+void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashValue extraHash,
+                                 size_t numLookaheadSlots) {
     if (!IsAllocated()) {
         throw std::runtime_error("No blocks have been allocated.");
     }
@@ -177,8 +172,8 @@ void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashVa
                 for (size_t i = 0; i < numBlocksToAllocate; ++i) {
                     std::vector<TokenId> emptyTokenIds;
                     BlockObjSPtr newBlockObj = blockAllocator_->AllocateMutableBlock(
-                        DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(), extraHash,
-                        nextSpRank);
+                        DeviceType::NPU, emptyTokenIds, rankBlockObjs.empty() ? nullptr : rankBlockObjs.back(),
+                        extraHash, nextSpRank);
                     rankBlockObjs.push_back(newBlockObj);
                     blockIds_.push_back(newBlockObj->GetBlockId());
                 }
@@ -199,8 +194,7 @@ void BlockTable::AppendNewTokens(const std::vector<TokenId> &newTokenIds, HashVa
     }
 }
 
-void BlockTable::AppendToSpRank(size_t spRank, const std::vector<TokenId>& newTokenIds)
-{
+void BlockTable::AppendToSpRank(size_t spRank, const std::vector<TokenId> &newTokenIds) {
     size_t spTokenNum = numFullSlotsPerRank_[spRank];
     auto &rankBlockObjs = blockObjs_[spRank];
     size_t firstBlockIdx = spTokenNum / blockSize_;
@@ -225,15 +219,14 @@ void BlockTable::AppendToSpRank(size_t spRank, const std::vector<TokenId>& newTo
 }
 
 // append tokens ids right after filled slots. If not enough empty slots, allocate new blocks.
-void BlockTable::AppendTokenIds(const std::vector<TokenId> &tokenIds, HashValue extraHash, size_t numLookaheadSlots)
-{
+void BlockTable::AppendTokenIds(const std::vector<TokenId> &tokenIds, HashValue extraHash, size_t numLookaheadSlots) {
     if (!IsAllocated()) {
         throw std::runtime_error("No blocks have been allocated.");
     }
 
     // 固定使用rank 0来保持向后兼容
     const size_t firstRank = 0;
-    std::vector<BlockObjSPtr> &firstRankBlockObjs = blockObjs_[firstRank]; // 先获取rank 0的blockObjs
+    std::vector<BlockObjSPtr> &firstRankBlockObjs = blockObjs_[firstRank];  // 先获取rank 0的blockObjs
 
     EnsureEnoughSlots(tokenIds.size() + numLookaheadSlots, extraHash);
 
@@ -257,21 +250,19 @@ void BlockTable::AppendTokenIds(const std::vector<TokenId> &tokenIds, HashValue 
 // Determine how many blocks are related given new tokenids with length of tokenIdsSize + numLookaheadSlots,
 // including this blocktable's last block if it is not full. This is used for the scheduler to determine whether a
 // sequence can continue generation, or it must be preempted.
-size_t BlockTable::GetNumRelatedBlocks(size_t tokenIdsSize, size_t numLookaheadSlots) const
-{
+size_t BlockTable::GetNumRelatedBlocks(size_t tokenIdsSize, size_t numLookaheadSlots) const {
     size_t numTokenIds = tokenIdsSize + numLookaheadSlots;
     size_t numLastBlockEmptySlots = blockSize_ - (numFullSlotsPerRank_[0] % blockSize_);
-    if (numLastBlockEmptySlots == blockSize_) { // the last block is full.
+    if (numLastBlockEmptySlots == blockSize_) {  // the last block is full.
         return CeilDiv(numTokenIds, blockSize_);
     }
-    if (numLastBlockEmptySlots >= numTokenIds) { // the last block has enough empty slots.
+    if (numLastBlockEmptySlots >= numTokenIds) {  // the last block has enough empty slots.
         return 0;
     }
     return CeilDiv(numTokenIds - numLastBlockEmptySlots, blockSize_);
 }
 
-BlockTable BlockTable::Fork()
-{
+BlockTable BlockTable::Fork() {
     if (!IsAllocated()) {
         throw std::runtime_error("Empty blocks can't be forked.");
     }
@@ -292,11 +283,10 @@ BlockTable BlockTable::Fork()
     return BlockTable(blockSize_, blockAllocator_, newBlockObjs, rankSize_);
 }
 
-void BlockTable::Free()
-{
+void BlockTable::Free() {
     for (std::vector<BlockObjSPtr> &rankBlocks : blockObjs_) {
         for (BlockObjSPtr &blockObj : rankBlocks) {
-            blockAllocator_->Free(blockObj); // free both block id and block obj
+            blockAllocator_->Free(blockObj);  // free both block id and block obj
         }
     }
     blockObjs_.clear();
@@ -308,8 +298,7 @@ void BlockTable::Free()
 
 const std::vector<BlockId> &BlockTable::GetBlockIds() const { return blockIds_; }
 
-std::vector<BlockId> BlockTable::GetRankedBlockIds(size_t rankIdx) const
-{
+std::vector<BlockId> BlockTable::GetRankedBlockIds(size_t rankIdx) const {
     std::vector<BlockId> rankedBlockIds;
     for (auto &blockObj : blockObjs_[rankIdx]) {
         rankedBlockIds.push_back(blockObj->GetBlockId());
@@ -318,8 +307,7 @@ std::vector<BlockId> BlockTable::GetRankedBlockIds(size_t rankIdx) const
 }
 
 // 合并所有rank的blockObjs并返回
-std::vector<BlockObjSPtr> BlockTable::GetBlockObjs() const
-{
+std::vector<BlockObjSPtr> BlockTable::GetBlockObjs() const {
     std::vector<BlockObjSPtr> mergedBlocks;
     for (const std::vector<BlockObjSPtr> &rankBlocks : blockObjs_) {
         mergedBlocks.insert(mergedBlocks.end(), rankBlocks.begin(), rankBlocks.end());
@@ -329,8 +317,7 @@ std::vector<BlockObjSPtr> BlockTable::GetBlockObjs() const
 size_t BlockTable::GetNumFullSlots() const { return numFullSlotsPerRank_[0]; }
 
 // allocate new blocks to ensure there is enough empty slots
-void BlockTable::EnsureEnoughSlots(size_t numRequiredEmptySlots, HashValue extraHash, size_t rankId)
-{
+void BlockTable::EnsureEnoughSlots(size_t numRequiredEmptySlots, HashValue extraHash, size_t rankId) {
     if (!IsAllocated()) {
         throw std::runtime_error("No blocks have been allocated, init blockTable before using it");
     }
@@ -338,10 +325,10 @@ void BlockTable::EnsureEnoughSlots(size_t numRequiredEmptySlots, HashValue extra
         throw std::runtime_error("Invalid rank id");
     }
 
-    DeviceType device = DeviceType::NPU; // Currently only supports appending tokens to NPU blocks.
+    DeviceType device = DeviceType::NPU;  // Currently only supports appending tokens to NPU blocks.
 
     size_t numEmptySlots = GetNumEmptySlots(rankId);
-    if (numRequiredEmptySlots <= numEmptySlots) { // Current empty slots are enough.
+    if (numRequiredEmptySlots <= numEmptySlots) {  // Current empty slots are enough.
         return;
     }
     size_t numBlocksToAllocate = CeilDiv(numRequiredEmptySlots - numEmptySlots, blockSize_);
@@ -358,8 +345,7 @@ void BlockTable::EnsureEnoughSlots(size_t numRequiredEmptySlots, HashValue extra
 
 // Get the number of tokens in the sequence that are corresponding to this block table, but not yet appended to this
 // block table. input tokenIds include prompts and previous generations.
-std::vector<TokenId> BlockTable::GetNewGenTokenIds(const std::vector<TokenId> &tokenIds) const
-{
+std::vector<TokenId> BlockTable::GetNewGenTokenIds(const std::vector<TokenId> &tokenIds) const {
     if (rankSize_ > 1) {
         throw std::runtime_error("GetNewGenTokenIds only supports single rank");
     }
@@ -368,8 +354,7 @@ std::vector<TokenId> BlockTable::GetNewGenTokenIds(const std::vector<TokenId> &t
 
 // given tokens, allocate new block objs with block ids, which will be used to initialize block table
 std::vector<BlockObjSPtr> BlockTable::AllocateBlocksForTokenIds(const std::vector<TokenId> &tokenIds, DeviceType device,
-                                                                HashValue extraHash)
-{
+                                                                HashValue extraHash) {
     std::vector<BlockObjSPtr> newBlockObjs;
     std::vector<std::vector<TokenId>> fullTokenBlocks;
     std::vector<TokenId> nonFullTokenBlock;
@@ -401,13 +386,12 @@ std::vector<BlockObjSPtr> BlockTable::AllocateBlocksForTokenIds(const std::vecto
 }
 
 std::vector<BlockObjSPtr> BlockTable::AllocateBlocksForTokenIdsSmallRankFirst(const std::vector<TokenId> &tokenIds,
-                                                                              DeviceType device, HashValue extraHash)
-{
+                                                                              DeviceType device, HashValue extraHash) {
     std::vector<BlockObjSPtr> newBlockObjs;
     BlockObjSPtr prevBlock = nullptr;
     size_t remainingTokens = tokenIds.size();
     size_t currentPos = 0;
-    size_t rankIdx = 0; // 当前分配的rank索引
+    size_t rankIdx = 0;  // 当前分配的rank索引
 
     while (remainingTokens > 0) {
         // 计算当前rank能分配的token数量
@@ -446,8 +430,7 @@ std::vector<BlockObjSPtr> BlockTable::AllocateBlocksForTokenIdsSmallRankFirst(co
     return newBlockObjs;
 }
 
-size_t BlockTable::GetNumTokenIds() const
-{
+size_t BlockTable::GetNumTokenIds() const {
     size_t res = 0;
     for (const std::vector<BlockObjSPtr> &rankBlocks : blockObjs_) {
         for (const BlockObjSPtr &blockObj : rankBlocks) {
@@ -457,8 +440,7 @@ size_t BlockTable::GetNumTokenIds() const
     return res;
 }
 
-bool BlockTable::IsAllocated() const
-{
+bool BlockTable::IsAllocated() const {
     // 检查每个rank的blockObjs是否至少有一个block
     for (const std::vector<BlockObjSPtr> &rankBlocks : blockObjs_) {
         if (!rankBlocks.empty()) {
@@ -468,8 +450,7 @@ bool BlockTable::IsAllocated() const
     return false;
 }
 
-size_t BlockTable::GetNumEmptySlots(size_t rankId) const
-{
+size_t BlockTable::GetNumEmptySlots(size_t rankId) const {
     if (!IsAllocated()) {
         throw std::runtime_error("No blocks have been allocated.");
     }
@@ -483,8 +464,7 @@ size_t BlockTable::GetNumEmptySlots(size_t rankId) const
 
 // Split the token ids into block-sized chunks so they can be easily appended to blocks. The first "token block"
 // may have less token ids than the block size, since the last allocated block may be partially full.
-std::vector<std::vector<TokenId>> BlockTable::ChunkTokensForAppend(const std::vector<TokenId> &tokenIds) const
-{
+std::vector<std::vector<TokenId>> BlockTable::ChunkTokensForAppend(const std::vector<TokenId> &tokenIds) const {
     std::vector<std::vector<TokenId>> tokenBlocks{};
     if (tokenIds.empty()) {
         return tokenBlocks;
@@ -506,8 +486,7 @@ std::vector<std::vector<TokenId>> BlockTable::ChunkTokensForAppend(const std::ve
  替换后：[x x x x  r] [ r -1]
 */
 void BlockTable::ReplaceTrailingPlaceHolder(const std::vector<TokenId> &tokenIds, size_t trailingPlaceHolderNum,
-                                            size_t replacedPlaceHolderNum, size_t rankId)
-{
+                                            size_t replacedPlaceHolderNum, size_t rankId) {
     size_t totalTokens = GetNumTokenIds();
     if (trailingPlaceHolderNum >= totalTokens) {
         throw std::runtime_error("replace start index cannot be greater than the total number of tokens.");
@@ -529,7 +508,7 @@ void BlockTable::ReplaceTrailingPlaceHolder(const std::vector<TokenId> &tokenIds
     size_t prevTokenOffset = startLocalIndex == 0 ? blockSize_ - 1 : startLocalIndex - 1;
     size_t prevBlockOffset = startLocalIndex == 0 ? startBlockIndex - 1 : startBlockIndex;
 
-    std::vector<BlockObjSPtr> &rankBlocks = blockObjs_[rankId]; // 使用指定rank的blocks
+    std::vector<BlockObjSPtr> &rankBlocks = blockObjs_[rankId];  // 使用指定rank的blocks
 
     for (size_t i = 0; i < replacedPlaceHolderNum; ++i) {
         size_t blockOffset = startBlockIndex + (startLocalIndex + i) / blockSize_;
@@ -555,18 +534,9 @@ void BlockTable::ReplaceTrailingPlaceHolder(const std::vector<TokenId> &tokenIds
         prevTokenOffset = tokenOffset;
     }
 }
-size_t BlockTable::GetLatestAppendedRankId() const
-{
-    return currentSpRank_;
-}
+size_t BlockTable::GetLatestAppendedRankId() const { return currentSpRank_; }
 
-size_t BlockTable::GetAppendedBlockRankId() const
-{
-    return appendBlockRankId_;
-}
+size_t BlockTable::GetAppendedBlockRankId() const { return appendBlockRankId_; }
 
-bool BlockTable::IsAppendBlock() const
-{
-    return isAppendBlock_;
-}
-} // namespace mindie_llm
+bool BlockTable::IsAppendBlock() const { return isAppendBlock_; }
+}  // namespace mindie_llm

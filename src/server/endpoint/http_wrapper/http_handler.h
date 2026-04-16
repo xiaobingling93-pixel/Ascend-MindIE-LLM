@@ -15,34 +15,35 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 
 #include <sys/wait.h>
-#include <thread>
-#include <mutex>
-#include <memory>
+
 #include <atomic>
 #include <boost/asio.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/bind/bind.hpp>
+#include <memory>
+#include <mutex>
+#include <thread>
 
-#include "httplib.h"
 #include "config_manager.h"
-#include "http_rest_resource.h"
-#include "single_llm_pnd_req_handler.h"
-#include "https_server_helper.h"
-#include "single_req_infer_interface_base.h"
-#include "request_response/response.h"
 #include "health_checker.h"
+#include "http_rest_resource.h"
+#include "httplib.h"
+#include "https_server_helper.h"
+#include "request_response/response.h"
+#include "single_llm_pnd_req_handler.h"
+#include "single_req_infer_interface_base.h"
 
 using ordered_json = nlohmann::ordered_json;
 
 namespace mindie_llm {
 class HttpHandler {
-public:
+   public:
     static int BusinessInitialize(HttpsServerHelper &server);
     static int ManagementInitialize(HttpsServerHelper &server);
     static void InitializeMetricsResource(HttpsServerHelper &server);
     static bool JudgeRestProcess();
 
-private:
+   private:
     static void InitializeServiceStatusResource(HttpsServerHelper &server);
     static void RegisterHealthCheckerHttpHandler(HttpsServerHelper &server);
     static void InitializeServiceMgmtV1(HttpsServerHelper &server);
@@ -74,7 +75,7 @@ private:
     static void StopService(const ReqCtxPtr &requestContext);
     static void HandleHttpMetrics(const ReqCtxPtr &requestContext);
     static void HandleHealthResponse(const ReqCtxPtr &ctx, mindie_llm::ServiceStatus status, bool isLiveness);
-    static void RespondUnhealthy(const ReqCtxPtr &ctx, const std::string& message);
+    static void RespondUnhealthy(const ReqCtxPtr &ctx, const std::string &message);
     static bool IsDMI();
     static bool IsPrefillRole(std::string &reqError);
     static bool IsAllDMIHeadersExist(const httplib::Request &request, std::string &reqError);
@@ -86,12 +87,12 @@ private:
     static bool CheckDresultReqValid(const ReqCtxPtr &requestContext);
     static void GetPrometheusMetrics(const ReqCtxPtr &requestContext);
 
-private:
+   private:
     static void SetJsonObj(ordered_json &jsonObj);
 
     static int64_t startTime;
     static std::mutex dmiRoleMutex_;  // already update
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // OCK_ENDPOINT_HTTP_HANDLER_H
+#endif  // OCK_ENDPOINT_HTTP_HANDLER_H

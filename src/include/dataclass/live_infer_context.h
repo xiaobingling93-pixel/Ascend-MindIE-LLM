@@ -13,12 +13,13 @@
 #ifndef SEQUENCE_GROUP_MAPPER_H
 #define SEQUENCE_GROUP_MAPPER_H
 
-#include <mutex>
-#include <unordered_map>
 #include <pthread.h>
 
-#include "sequence_group.h"
+#include <mutex>
+#include <unordered_map>
+
 #include "concurrent_map.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 constexpr size_t MAX_DP_COUNT = 32;
@@ -29,18 +30,18 @@ constexpr size_t MAX_DP_COUNT = 32;
 // 增加了seqId到RootSeqGroup的映射关系，用于并行采样
 // 增加了reqId到SeqGroup的映射关系，用于配比微调特性中，保存请求使用的实例角色，在处理响应时使用
 class LiveInferContext {
-public:
+   public:
     static std::shared_ptr<LiveInferContext> GetInstance(size_t localDPRank);
 
     LiveInferContext();
     ~LiveInferContext();
 
     void Add(SequenceGroupSPtr &seqGroup);
-    void AddIntoSeqRootMap(SequenceId seqId, SequenceGroupSPtr &rootSeqGroup); // used by parallel sampling
+    void AddIntoSeqRootMap(SequenceId seqId, SequenceGroupSPtr &rootSeqGroup);  // used by parallel sampling
 
     void Remove(RequestId reqId);
     void Remove(SequenceId seqId);
-    void RemoveFromSeqRootMap(SequenceId seqId); // used by parallel sampling
+    void RemoveFromSeqRootMap(SequenceId seqId);  // used by parallel sampling
     void RemoveAll();
 
     SequenceSPtr GetSeq(SequenceId seqId);
@@ -55,9 +56,10 @@ public:
     /**
      * 根据id从本机的所有的dp rank中查询seqgrp；只有主节点有可能有多个rank
      */
-    template <typename T> static std::pair<size_t, SequenceGroupSPtr> FindSeqGroupInAllRank(T id);
+    template <typename T>
+    static std::pair<size_t, SequenceGroupSPtr> FindSeqGroupInAllRank(T id);
 
-private:
+   private:
     std::unordered_map<RequestId, SequenceGroupSPtr> reqId2SeqGroupMap_;
 
     std::unordered_map<SequenceId, SequenceGroupSPtr> seqId2SeqGroupMap_;
@@ -71,8 +73,8 @@ private:
 
 using LiveInferContextSPtr = std::shared_ptr<LiveInferContext>;
 
-template <typename T> std::pair<size_t, SequenceGroupSPtr> LiveInferContext::FindSeqGroupInAllRank(T id)
-{
+template <typename T>
+std::pair<size_t, SequenceGroupSPtr> LiveInferContext::FindSeqGroupInAllRank(T id) {
     for (size_t i = 0; i < MAX_DP_COUNT; i++) {
         LiveInferContextSPtr lifeContext = GetInstance(i);
         if (lifeContext == nullptr || lifeContext->GetSeqGroup(id) == nullptr) {
@@ -83,5 +85,5 @@ template <typename T> std::pair<size_t, SequenceGroupSPtr> LiveInferContext::Fin
     return {0, nullptr};
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

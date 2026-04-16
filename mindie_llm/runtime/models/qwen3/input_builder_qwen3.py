@@ -30,11 +30,8 @@ class Qwen3InputBuilder(InputBuilder):
         self.config_enable_thinking = tokenizer.init_kwargs.get("enable_thinking", True)
 
     def _apply_chat_template(
-            self, 
-            conversation: List[Dict[str, str]],
-            tools_msg: Optional[Dict[str, Any]] = None,
-            **kwargs
-        ) -> List[int]:
+        self, conversation: List[Dict[str, str]], tools_msg: Optional[Dict[str, Any]] = None, **kwargs
+    ) -> List[int]:
         """Applies the chat template with support for reasoning toggle and tool calls.
 
         This method extends the base implementation by:
@@ -54,13 +51,16 @@ class Qwen3InputBuilder(InputBuilder):
             RuntimeError: If the tokenizer lacks `apply_chat_template` or `chat_template`.
         """
         if not hasattr(self.tokenizer, "apply_chat_template"):
-            raise RuntimeError("Your transformers version is detected to be <4.34. This message indicates that this "
-                               "model is not supported to run on transformers <4.34. You can upgrade transformers to "
-                               "4.34 or above, or rewrite the InputBuilder provided with this model and load it in the "
-                               "router.")
+            raise RuntimeError(
+                "Your transformers version is detected to be <4.34. This message indicates that this "
+                "model is not supported to run on transformers <4.34. You can upgrade transformers to "
+                "4.34 or above, or rewrite the InputBuilder provided with this model and load it in the "
+                "router."
+            )
         if not self.tokenizer.chat_template:
-            raise RuntimeError("The model does not appear to be a chat model because it is not configured with a "
-                               "`chat_template`.")
+            raise RuntimeError(
+                "The model does not appear to be a chat model because it is not configured with a `chat_template`."
+            )
         # Request-level switch > Weight tokenizer_config
         request_enable_thinking = kwargs.get("chat_template_kwargs", {}).get("enable_thinking", None)
         if request_enable_thinking is not None:

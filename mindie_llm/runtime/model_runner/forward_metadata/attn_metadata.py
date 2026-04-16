@@ -20,7 +20,7 @@ from mindie_llm.runtime.layers.attention import get_global_attn_dict
 @dataclass
 class AttentionMetadata(ModuleMetadata):
     """Metadata for attention operations.
-    
+
     Attributes:
         slot_mapping: Slot mapping tensor for KV cache.
         seq_lens: Sequence lengths tensor.
@@ -31,6 +31,7 @@ class AttentionMetadata(ModuleMetadata):
         seq_lens_list: List of sequence lengths (optional).
         max_seq_len: Maximum sequence length.
     """
+
     slot_mapping: torch.Tensor
     seq_lens: torch.Tensor
     block_tables: torch.Tensor
@@ -40,16 +41,14 @@ class AttentionMetadata(ModuleMetadata):
     num_tokens: int = 0
 
 
-def build_layerwise_attn_metadata(
-    attn_metadata: AttentionMetadata
-) -> dict[str, AttentionMetadata]:
+def build_layerwise_attn_metadata(attn_metadata: AttentionMetadata) -> dict[str, AttentionMetadata]:
     """Build layerwise attention metadata dictionary.
-    
+
     NOTE: extra_metadata is to input new attribute.
-    
+
     Args:
         attn_metadata: Attention metadata.
-        
+
     Returns:
         Dictionary mapping layer prefixes to attention metadata.
     """

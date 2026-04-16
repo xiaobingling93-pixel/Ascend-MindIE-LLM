@@ -9,20 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <iostream>
+
 #include "latency_predictor/queue_counter.h"
+
+#include <iostream>
 
 namespace mindie_llm {
 QueueCounter::QueueCounter(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                            const std::shared_ptr<BlockSpaceManager> &blockManager)
-    : schedulerConfig_(schedulerConfig), blockManager_(blockManager)
-{
-}
+    : schedulerConfig_(schedulerConfig), blockManager_(blockManager) {}
 
 std::pair<size_t, size_t> QueueCounter::GetNumComputeNewUnCachedAndCachedTokens(const SequenceGroupSPtr seqGroup,
-                                                                                const SequenceStatus status) const
-{
+                                                                                const SequenceStatus status) const {
     size_t numCachedNewTokens = 0;
     size_t numUncachedNewTokens = 0;
 
@@ -57,17 +55,15 @@ std::pair<size_t, size_t> QueueCounter::GetNumComputeNewUnCachedAndCachedTokens(
     return {numUncachedNewTokens, numCachedNewTokens};
 }
 
-size_t QueueCounter::CountSequenceGroupSize(SequenceGroupSPtr &seqgrp) const
-{
-    size_t count = 1; // 包含root序列组
+size_t QueueCounter::CountSequenceGroupSize(SequenceGroupSPtr &seqgrp) const {
+    size_t count = 1;  // 包含root序列组
     if (seqgrp->sampling && seqgrp->sampling->enableParallelSampling) {
         count += seqgrp->seqId2ParallelSeqGroup_.Size();
     }
     return count;
 }
 
-size_t QueueCounter::CountTokens(SequenceGroupSPtr &seqgrp, SequenceStatus status) const
-{
+size_t QueueCounter::CountTokens(SequenceGroupSPtr &seqgrp, SequenceStatus status) const {
     if (status == SequenceStatus::RUNNING) {
         return CountRunningTokens(seqgrp);
     }
@@ -76,8 +72,7 @@ size_t QueueCounter::CountTokens(SequenceGroupSPtr &seqgrp, SequenceStatus statu
     return numNewTokensUncached;
 }
 
-size_t QueueCounter::CountRunningTokens(SequenceGroupSPtr &seqgrp) const
-{
+size_t QueueCounter::CountRunningTokens(SequenceGroupSPtr &seqgrp) const {
     if (seqgrp->seqs_.empty()) {
         return 0;
     }
@@ -95,8 +90,7 @@ size_t QueueCounter::CountRunningTokens(SequenceGroupSPtr &seqgrp) const
     return count;
 }
 
-size_t QueueCounter::GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const
-{
+size_t QueueCounter::GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const {
     if (blockSize == 0) {
         throw std::runtime_error("the blockSize should not be zero");
     }
@@ -105,8 +99,7 @@ size_t QueueCounter::GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const
 }
 
 // 统计给定序列组所需的块（block）数量，根据序列状态采用不同的计算方式。
-size_t QueueCounter::CountBlocks(SequenceGroupSPtr &seqgrp, SequenceStatus status) const
-{
+size_t QueueCounter::CountBlocks(SequenceGroupSPtr &seqgrp, SequenceStatus status) const {
     // 情况1：如果是RUNNING状态且序列组非空
     if (status == SequenceStatus::RUNNING && !seqgrp->seqs_.empty()) {
         // 获取第一个序列的ID
@@ -125,4 +118,4 @@ size_t QueueCounter::CountBlocks(SequenceGroupSPtr &seqgrp, SequenceStatus statu
     }
     return GetNumRequiredBlocks(seqgrp->seqs_[0]->GetTokenIds().size(), schedulerConfig_->cacheBlockSize);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

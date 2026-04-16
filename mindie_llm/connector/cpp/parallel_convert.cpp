@@ -9,54 +9,55 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <cassert>
-#include <iostream>
-#include <vector>
-#include <future>
-#include <pybind11/pybind11.h> // 使用pybind11将函数和类封装为python包
-#include <pybind11/stl.h>      // 函数中用到了C++的STL库，所以要包含该头文件
+
 #include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>  // 使用pybind11将函数和类封装为python包
+#include <pybind11/stl.h>       // 函数中用到了C++的STL库，所以要包含该头文件
+
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
-#include "model_execute_data.pb.h"
+#include <cassert>
+#include <future>
+#include <iostream>
+#include <vector>
+
 #include "log.h"
+#include "model_execute_data.pb.h"
 
 namespace py = pybind11;
 
-using model_execute_data::ExecuteRequest;
 using model_execute_data::CompletionSequenceGroupOutput;
-using model_execute_data::SequenceOutput;
-using model_execute_data::ExecuteResponse;
 using model_execute_data::ExecuteModelResponse;
+using model_execute_data::ExecuteRequest;
+using model_execute_data::ExecuteResponse;
 using model_execute_data::ExecuteType;
 using model_execute_data::MODEL_INFER;
+using model_execute_data::SequenceOutput;
 
 namespace mindie_llm {
 
 // 封装所有输入参数的结构体
 struct ChunkProcessParams {
-    const int64_t *group_indices_data;  // group索引数据
-    const int32_t *num_top_tokens;      // top token数量数组
-    const int64_t *sequence_ids;        // 序列ID数组
-    const int64_t *parent_sequence_ids; // 父序列ID数组
-    const int64_t *eos_info;            // EOS信息数组
-    const int64_t *truncation_indices;  // 截断索引数组
-    int64_t num_parallel_tokens;        // 并行token数量
-    const float *cumulative_logprobs;   // 累积对数概率数组
-    const int64_t *token_ids;           // token ID数组
-    const float *logprobs;              // 对数概率数组
-    ssize_t top_token_ids_shape1;       // top_token_ids第一维度大小
-    ssize_t top_token_ids_shape2;       // top_token_ids第二维度大小
-    const int64_t *top_token_ids;       // top token ID数组
-    const float *top_logprobs;          // top token对数概率数组
+    const int64_t *group_indices_data;   // group索引数据
+    const int32_t *num_top_tokens;       // top token数量数组
+    const int64_t *sequence_ids;         // 序列ID数组
+    const int64_t *parent_sequence_ids;  // 父序列ID数组
+    const int64_t *eos_info;             // EOS信息数组
+    const int64_t *truncation_indices;   // 截断索引数组
+    int64_t num_parallel_tokens;         // 并行token数量
+    const float *cumulative_logprobs;    // 累积对数概率数组
+    const int64_t *token_ids;            // token ID数组
+    const float *logprobs;               // 对数概率数组
+    ssize_t top_token_ids_shape1;        // top_token_ids第一维度大小
+    ssize_t top_token_ids_shape2;        // top_token_ids第二维度大小
+    const int64_t *top_token_ids;        // top token ID数组
+    const float *top_logprobs;           // top token对数概率数组
 };
 
 // 线程数为 CPU 核心数
 static boost::asio::thread_pool thread_pool(boost::thread::hardware_concurrency());
 
-void process_chunk(int index, const ChunkProcessParams &params, CompletionSequenceGroupOutput *group_output)
-{
+void process_chunk(int index, const ChunkProcessParams &params, CompletionSequenceGroupOutput *group_output) {
     int64_t start_index = params.group_indices_data[index * 2];
     int64_t end_index = params.group_indices_data[index * 2 + 1];
     int64_t seq_count = end_index - start_index;
@@ -109,8 +110,7 @@ void process_chunk(int index, const ChunkProcessParams &params, CompletionSequen
 }
 
 // 主转换函数 - 使用Python中定义的Protobuf类
-py::object convert_generate_output(const py::object &generate_output)
-{
+py::object convert_generate_output(const py::object &generate_output) {
     // 构造response
     ExecuteResponse cpp_response;
     cpp_response.set_status(0);
@@ -177,7 +177,7 @@ py::object convert_generate_output(const py::object &generate_output)
 
         // 使用shared_ptr管理packaged_task的生命周期，避免提前释放
         auto task_ptr = std::make_shared<std::packaged_task<void()>>(
-            [g, &params, group_output]() { // 注意：params按值捕获，避免悬空引用
+            [g, &params, group_output]() {  // 注意：params按值捕获，避免悬空引用
                 process_chunk(g, params, group_output);
             });
 
@@ -186,12 +186,12 @@ py::object convert_generate_output(const py::object &generate_output)
 
         // 提交任务到线程池：捕获shared_ptr，确保任务执行期间packaged_task始终有效
         boost::asio::post(thread_pool, [task_ptr]() {
-            (*task_ptr)(); // 执行任务
+            (*task_ptr)();  // 执行任务
         });
     }
     // 等待所有任务完成
     for (auto &fut : futures) {
-        fut.get(); // 阻塞直到当前任务完成，无返回值
+        fut.get();  // 阻塞直到当前任务完成，无返回值
     }
 
     const size_t msg_size = cpp_response.ByteSizeLong();
@@ -202,9 +202,8 @@ py::object convert_generate_output(const py::object &generate_output)
 }
 
 // 边云特性使用
-void lwd_build_cpp_response(ExecuteResponse &cpp_response, ChunkProcessParams &params,
-    bool isPrefill, size_t numGroups)
-{
+void lwd_build_cpp_response(ExecuteResponse &cpp_response, ChunkProcessParams &params, bool isPrefill,
+                            size_t numGroups) {
     cpp_response.set_status(0);
     // 只支持MODEL_INFER
     cpp_response.set_msg_type(1);
@@ -219,7 +218,7 @@ void lwd_build_cpp_response(ExecuteResponse &cpp_response, ChunkProcessParams &p
 
         // 使用shared_ptr管理packaged_task的生命周期，避免提前释放
         auto task_ptr = std::make_shared<std::packaged_task<void()>>(
-            [g, &params, group_output]() { // 注意：params按值捕获，避免悬空引用
+            [g, &params, group_output]() {  // 注意：params按值捕获，避免悬空引用
                 process_chunk(g, params, group_output);
             });
 
@@ -228,17 +227,16 @@ void lwd_build_cpp_response(ExecuteResponse &cpp_response, ChunkProcessParams &p
 
         // 提交任务到线程池：捕获shared_ptr，确保任务执行期间packaged_task始终有效
         boost::asio::post(thread_pool, [task_ptr]() {
-            (*task_ptr)(); // 执行任务
+            (*task_ptr)();  // 执行任务
         });
     }
     // 等待所有任务完成
     for (auto &fut : futures) {
-        fut.get(); // 阻塞直到当前任务完成，无返回值
+        fut.get();  // 阻塞直到当前任务完成，无返回值
     }
     return;
 }
-py::object lwd_convert_generate_output(const py::object &generate_output, bool is_prefill)
-{
+py::object lwd_convert_generate_output(const py::object &generate_output, bool is_prefill) {
     // 构造response
     ExecuteResponse cpp_response;
 
@@ -301,18 +299,17 @@ py::object lwd_convert_generate_output(const py::object &generate_output, bool i
     return pybind11::bytes(buffer);
 }
 
-PYBIND11_MODULE(_mindie_llm_connector, m)
-{
+PYBIND11_MODULE(_mindie_llm_connector, m) {
     m.doc() = "_mindie_llm_connector: C++ Methods Used by the Connector Module.";
     // 绑定转换函数
     m.def("convert_generate_output", &convert_generate_output, "Convert generate output to protobuf response",
           py::arg("generate_output"));
-    m.def("lwd_convert_generate_output",
-          [](const py::object &generate_output, bool is_prefill = false) {
+    m.def(
+        "lwd_convert_generate_output",
+        [](const py::object &generate_output, bool is_prefill = false) {
             return lwd_convert_generate_output(generate_output, is_prefill);
         },
-          "Layerwise-Convert generate output to protobuf response",
-          py::arg("generate_output"),
-          py::arg("is_prefill") = false);
+        "Layerwise-Convert generate output to protobuf response", py::arg("generate_output"),
+        py::arg("is_prefill") = false);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

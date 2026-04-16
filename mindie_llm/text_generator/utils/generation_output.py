@@ -32,6 +32,7 @@ class GenerationOutput:
         num_top_tokens: A 1-d array of the original number of `top_logprobs` used to truncate the `top_token_ids` and
             `top_logprobs`.
     """
+
     sequence_ids: np.ndarray
     parent_sequence_ids: np.ndarray
     group_indices: List[Tuple[int, int]]
@@ -50,7 +51,7 @@ class GenerationOutput:
     simulator_ids: Optional[List[Any]] = None
 
     @classmethod
-    def make_empty(cls) -> 'GenerationOutput':
+    def make_empty(cls) -> "GenerationOutput":
         empty_output = cls(
             sequence_ids=np.zeros((0,), dtype=np.int64),
             parent_sequence_ids=np.zeros((0,), dtype=np.int64),
@@ -64,13 +65,12 @@ class GenerationOutput:
             cumulative_logprobs=np.zeros((0,), dtype=np.float32),
             finish_reason=np.zeros((0,), dtype=np.int32),
             truncation_indices=np.zeros((0,), dtype=np.int_),
-            eos_info=np.zeros((0,), dtype=np.int64)
+            eos_info=np.zeros((0,), dtype=np.int64),
         )
         return empty_output
 
     def collate(self) -> None:
-        self.eos_info = np.copy(
-            np.array([self.finish_reason, self.num_new_tokens], dtype=np.int64).T, order='C')
+        self.eos_info = np.copy(np.array([self.finish_reason, self.num_new_tokens], dtype=np.int64).T, order="C")
 
         self.token_ids = self.token_ids.astype(np.int64)
 
@@ -153,8 +153,18 @@ class GenerationOutput:
         self.parent_sequence_ids = self.parent_sequence_ids[reserved_indices]
         self.group_indices = new_group_indices
 
-        fields_to_update = ['token_ids', 'logprobs', 'top_token_ids', 'top_logprobs', 'num_new_tokens',
-                            'num_top_tokens', 'cumulative_logprobs', 'finish_reason', 'truncation_indices', 'eos_info']
+        fields_to_update = [
+            "token_ids",
+            "logprobs",
+            "top_token_ids",
+            "top_logprobs",
+            "num_new_tokens",
+            "num_top_tokens",
+            "cumulative_logprobs",
+            "finish_reason",
+            "truncation_indices",
+            "eos_info",
+        ]
         for field in fields_to_update:
             setattr(self, field, getattr(self, field)[reserved_indices] if getattr(self, field) is not None else None)
 
@@ -185,11 +195,11 @@ class GenerationOutput:
             logger.info("[layerwiseDisaggregated]Two output-wrappers have overlap sequences!")
             request_slice = []
             batch_sequence_ids = []
-            # The sequence_ids in new_output are already flattened, and there is no longer a batch_sequence_ids 
+            # The sequence_ids in new_output are already flattened, and there is no longer a batch_sequence_ids
             # (their relationship is that the original input is [[1],[2],[3]], while the flattened version is [1,2,3]).
-            # However, after the output response, it is necessary to split all sequences back into their corresponding 
+            # However, after the output response, it is necessary to split all sequences back into their corresponding
             # sequence groups based on group_indices. Therefore, batch_sequence_ids must be reconstructed
-            # at this stage; 
+            # at this stage;
             # directly performing an intersection is not feasible.
             seq_idx = 0
             for start_index, end_index in new_output.group_indices:
@@ -210,16 +220,16 @@ class GenerationOutput:
             self.group_indices.append((current_seq_length, current_seq_length + sequence_group.size))
             self.sequence_ids = np.hstack((self.sequence_ids, sequence_group))
             self.parent_sequence_ids = np.hstack((self.parent_sequence_ids, sequence_group))
-        
+
         self.pad_output(max_generated_tokens)
         new_output.pad_output(max_generated_tokens)
-        
+
         self.token_ids = np.concatenate([self.token_ids, new_output.token_ids], axis=0)
         self.logprobs = np.concatenate([self.logprobs, new_output.logprobs], axis=0)
         self.top_token_ids = np.concatenate([self.top_token_ids, new_output.top_token_ids], axis=0)
         self.top_logprobs = np.concatenate([self.top_logprobs, new_output.top_logprobs], axis=0)
         # When padding dummy, use constant_values = max_generated_tokens.
-        self.num_new_tokens = np.concatenate([self.num_new_tokens, new_output.num_new_tokens], axis=0) 
+        self.num_new_tokens = np.concatenate([self.num_new_tokens, new_output.num_new_tokens], axis=0)
         self.num_top_tokens = np.concatenate([self.num_top_tokens, new_output.num_top_tokens], axis=0)
         self.cumulative_logprobs = np.concatenate([self.cumulative_logprobs, new_output.cumulative_logprobs], axis=0)
         self.finish_reason = np.concatenate([self.finish_reason, new_output.finish_reason], axis=0)

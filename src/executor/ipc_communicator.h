@@ -13,13 +13,14 @@
 #ifndef IPC_COMMUNICATOR_H
 #define IPC_COMMUNICATOR_H
 
-#include <memory>
 #include <condition_variable>
+#include <memory>
+#include <thread>
 
 #include "executor/executor_interface.h"
 #include "memory_utils.h"
-#include "shared_memory.h"
 #include "model_execute_data.pb.h"
+#include "shared_memory.h"
 
 namespace mindie_llm {
 
@@ -39,7 +40,7 @@ struct IPCSharedMemory {
 };
 
 class IPCCommunicator {
-public:
+   public:
     IPCCommunicator(std::string prefixName, const SemaphoreConfig &semConfig, bool receiveAllRank = false);
     ~IPCCommunicator() = default;
 
@@ -59,7 +60,7 @@ public:
 
     void CleanUp();
 
-private:
+   private:
     bool InitSemaphores(IPCSharedMemory &iPCSharedMemory) const;
     bool WriteMessage(const char *message, uint32_t length);
     void WaitOnAllSemaphores(std::vector<sem_t *> &semaphoreList) const;
@@ -88,6 +89,6 @@ private:
 };
 
 bool SerializeExecuteMessage(ExecuteRequest &request, std::string &buf);
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

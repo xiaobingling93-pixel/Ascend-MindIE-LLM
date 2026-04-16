@@ -32,7 +32,6 @@ from .utils import input_guard
 from .wy_fast import recompute_w_u_fwd
 
 
-
 SUPPRESS_LEVEL = 0
 
 

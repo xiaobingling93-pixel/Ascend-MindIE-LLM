@@ -13,18 +13,18 @@
 #ifndef SEQUENCE_GROUP_H
 #define SEQUENCE_GROUP_H
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <string>
-#include <vector>
-#include <atomic>
 #include <unordered_set>
+#include <vector>
 
 #include "basic_types.h"
+#include "concurrent_map.h"
+#include "request_response/request_id.h"
 #include "sampling.h"
 #include "sequence.h"
-#include "request_response/request_id.h"
-#include "concurrent_map.h"
 
 namespace mindie_llm {
 constexpr std::chrono::high_resolution_clock::time_point INVALID_TIME =
@@ -33,7 +33,7 @@ constexpr std::chrono::high_resolution_clock::time_point INVALID_TIME =
 struct RequestMetrics {
     RequestIdNew inferReqId_;
     time_t arrivalTime_{};
-    TimeStamp firstTokenTime_{}; // The time when the first token was generated.
+    TimeStamp firstTokenTime_{};  // The time when the first token was generated.
     uint64_t queueWaitTime_{0};
     std::chrono::time_point<std::chrono::high_resolution_clock> responseTime_{INVALID_TIME};
     uint64_t prefixCachedTokenNum_{0};
@@ -45,11 +45,11 @@ struct SequenceGroup {
 
     std::vector<SequenceSPtr> seqs_;
 
-    SequenceSPtr firstSeq; // no need to define field, use method instead
+    SequenceSPtr firstSeq;  // no need to define field, use method instead
 
     SamplingParamsSPtr sampling;
 
-    RequestMetrics metrics_; // inference metrics of this request
+    RequestMetrics metrics_;  // inference metrics of this request
 
     std::chrono::time_point<std::chrono::high_resolution_clock> arriveTime;
 
@@ -109,7 +109,7 @@ struct SequenceGroup {
     // D 侧维护的已输出 token 前缀，初始化为 P 节点 prefill 已输出 token，随后持续追加 decode 新 token。
     std::vector<TokenId> prefillReplayTokenIds_{};
 
-    WaveId waveId_{-1}; // -1 means not set
+    WaveId waveId_{-1};  // -1 means not set
 
     size_t rankId_ = 0;
 
@@ -118,10 +118,10 @@ struct SequenceGroup {
     SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSPtr> &tSeqs, const SamplingParamsSPtr &tSampling);
 
     SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSPtr> &tSeqs, const SamplingParamsSPtr &tSampling,
-                    const std::optional<std::string> &tLoraId, size_t tRankId);
+                  const std::optional<std::string> &tLoraId, size_t tRankId);
 
     ~SequenceGroup();
-    
+
     std::vector<SequenceSPtr> GetFirstSequence(const SequenceStatus status = SequenceStatus::ALL_STATUS);
 
     std::vector<SequenceSPtr> GetSequences(const SequenceStatus status = {});
@@ -166,7 +166,7 @@ using SequenceGroupSPtr = std::shared_ptr<SequenceGroup>;
 struct ScheduledSequenceGroup {
     SequenceGroupSPtr seqGroup_{};
 
-    size_t tokenChunkSize_{}; // uncached token size need to be computed in following execution
+    size_t tokenChunkSize_{};  // uncached token size need to be computed in following execution
 
     ScheduledSequenceGroup() = default;
 
@@ -217,6 +217,6 @@ struct SchedulerKVTransferOutput {
     bool IsEmpty();
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -12,24 +12,25 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+
 #include <fstream>
-#include "common_util.h"
-#include "file_utils.h"
-#include "env_util.h"
-#include "check_utils.h"
+
 #include "base_config_manager.h"
+#include "check_utils.h"
+#include "common_util.h"
+#include "env_util.h"
+#include "file_utils.h"
 
 using Json = nlohmann::json;
 using namespace nlohmann::literals;
 
 namespace mindie_llm {
 constexpr uint32_t MIN_LOCAL_DEVICE_COUNT = 1;
-constexpr uint32_t MAX_LOCAL_DEVICE_COUNT = 32; // 单机上限32卡
-constexpr uint32_t MIN_SERVER_COUNT = 2;        // 最少2机
-constexpr uint32_t MAX_SERVER_COUNT = 60;       // 最多60机
+constexpr uint32_t MAX_LOCAL_DEVICE_COUNT = 32;  // 单机上限32卡
+constexpr uint32_t MIN_SERVER_COUNT = 2;         // 最少2机
+constexpr uint32_t MAX_SERVER_COUNT = 60;        // 最多60机
 
-RanktableConfigManager::RanktableConfigManager()
-{
+RanktableConfigManager::RanktableConfigManager() {
     const std::string ranktablePath = EnvUtil::GetInstance().Get("RANK_TABLE_FILE");
     if (ranktablePath.empty()) {
         initFlag = false;
@@ -55,8 +56,7 @@ RanktableConfigManager::RanktableConfigManager()
     }
 }
 
-bool RanktableConfigManager::ReadRanktableData(uint32_t &serverCount, Json &serverListData)
-{
+bool RanktableConfigManager::ReadRanktableData(uint32_t &serverCount, Json &serverListData) {
     try {
         std::ifstream file(ranktablePath_);
         if (!file.is_open()) {
@@ -92,8 +92,7 @@ bool RanktableConfigManager::ReadRanktableData(uint32_t &serverCount, Json &serv
 }
 
 // 获取容器的IP地址
-std::string RanktableConfigManager::GetContainerIPAddress()
-{
+std::string RanktableConfigManager::GetContainerIPAddress() {
     auto ip = EnvUtil::GetInstance().Get("MIES_CONTAINER_IP");
     if (ip.empty()) {
         std::cout << "The env variable MIES_CONTAINER_IP isn't exist." << std::endl;
@@ -124,8 +123,7 @@ std::string RanktableConfigManager::GetContainerIPAddress()
 }
 
 // 获取宿主机的IP地址
-std::string RanktableConfigManager::GetHostIPAddress()
-{
+std::string RanktableConfigManager::GetHostIPAddress() {
     auto hostIP = EnvUtil::GetInstance().Get("HOST_IP");
     if (!hostIP.empty() && CheckIp(hostIP, "HOST_IP", true)) {
         return hostIP;
@@ -134,8 +132,7 @@ std::string RanktableConfigManager::GetHostIPAddress()
     }
 }
 
-bool RanktableConfigManager::InitFromJson()
-{
+bool RanktableConfigManager::InitFromJson() {
     std::cout << "Start to parse ranktable file" << std::endl;
     if (ranktablePath_.empty()) {
         initFlag = false;
@@ -179,8 +176,7 @@ bool RanktableConfigManager::InitFromJson()
 }
 
 uint32_t RanktableConfigManager::FillServerEle(const std::string &containerIP, const std::string &hostIP,
-                                               Json &serverEleData, struct ServerEle &serverEle)
-{
+                                               Json &serverEleData, struct ServerEle &serverEle) {
     serverEle.serverId = GetStringParamValue(serverEleData, "server_id");
     if (serverEleData.contains("container_ip")) {
         serverEle.containerIp = GetStringParamValue(serverEleData, "container_ip");
@@ -204,8 +200,7 @@ uint32_t RanktableConfigManager::FillServerEle(const std::string &containerIP, c
     return globalWorldSize;
 }
 
-bool RanktableConfigManager::CheckDeviceId(const std::string &deviceIdStr) const
-{
+bool RanktableConfigManager::CheckDeviceId(const std::string &deviceIdStr) const {
     try {
         uint32_t deviceId = static_cast<uint32_t>(std::stoi(deviceIdStr));
         bool checkDeviceIdFlag = true;
@@ -228,8 +223,7 @@ bool RanktableConfigManager::CheckDeviceId(const std::string &deviceIdStr) const
     return true;
 }
 
-bool RanktableConfigManager::CheckDeviceIp(const std::string &deviceIpStr) const
-{
+bool RanktableConfigManager::CheckDeviceIp(const std::string &deviceIpStr) const {
     bool checkDeviceIpFlag = true;
     CHECK_CONFIG_VALIDATION(checkDeviceIpFlag, CheckIp(deviceIpStr, "device_ip", false));
     if (!checkDeviceIpFlag) {
@@ -239,8 +233,7 @@ bool RanktableConfigManager::CheckDeviceIp(const std::string &deviceIpStr) const
     return true;
 }
 
-bool RanktableConfigManager::CheckRankId(const std::string &rankIdStr) const
-{
+bool RanktableConfigManager::CheckRankId(const std::string &rankIdStr) const {
     try {
         uint32_t rankId = static_cast<uint32_t>(std::stoi(rankIdStr));
         bool checkRankIdFlag = true;
@@ -262,8 +255,7 @@ bool RanktableConfigManager::CheckRankId(const std::string &rankIdStr) const
     return true;
 }
 
-bool RanktableConfigManager::CheckParam()
-{
+bool RanktableConfigManager::CheckParam() {
     if (ranktableParam_.serverCount < MIN_SERVER_COUNT || ranktableParam_.serverCount > MAX_SERVER_COUNT) {
         initFlag = false;
         std::cout << "Parameter server_count must be in range [" << MIN_SERVER_COUNT << ", " << MAX_SERVER_COUNT
@@ -312,4 +304,4 @@ bool RanktableConfigManager::CheckParam()
 }
 
 const struct RanktableParam &RanktableConfigManager::GetParam() { return ranktableParam_; }
-} // namespace mindie_llm
+}  // namespace mindie_llm

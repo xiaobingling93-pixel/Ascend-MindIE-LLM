@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "prefix_cache_block_allocator.h"
 
 using namespace std;
@@ -17,9 +17,10 @@ using namespace std;
 namespace mindie_llm {
 PrefixCacheBlockAllocator::PrefixCacheBlockAllocator(BlockId beginBlockId, size_t numBlocks, size_t blockSize,
                                                      BlockObjPoolSPtr blockObjPool)
-    : beginBlockId_(beginBlockId), blockSize_(blockSize), numBlocks_(numBlocks),
-      blockComputedAttr_(numBlocks_, beginBlockId)
-{
+    : beginBlockId_(beginBlockId),
+      blockSize_(blockSize),
+      numBlocks_(numBlocks),
+      blockComputedAttr_(numBlocks_, beginBlockId) {
     if (!blockObjPool) {
         throw std::invalid_argument("blockObjPool cannot be null");
     }
@@ -44,8 +45,7 @@ PrefixCacheBlockAllocator::PrefixCacheBlockAllocator(BlockId beginBlockId, size_
 }
 
 BlockObjSPtr PrefixCacheBlockAllocator::AllocateMutableBlock(vector<TokenId> &tokenIds, BlockObjSPtr prevBlock,
-                                                             HashValue extraHash)
-{
+                                                             HashValue extraHash) {
     BlockId blockId = AllocateBlockId();
     shared_ptr<BlockObj> block = blockObjPool_->AcquireObj();
     BlockAllocatorSPtr allocator = shared_from_this();
@@ -58,10 +58,9 @@ BlockObjSPtr PrefixCacheBlockAllocator::AllocateMutableBlock(vector<TokenId> &to
     return block;
 }
 
-size_t PrefixCacheBlockAllocator::GetCachedBlockNum(std::vector<HashValue> &hashValues)
-{
+size_t PrefixCacheBlockAllocator::GetCachedBlockNum(std::vector<HashValue> &hashValues) {
     size_t cachedBlockNum = 0;
-    for (HashValue key: hashValues) {
+    for (HashValue key : hashValues) {
         auto it = cachedBlocks_.find(key);
         if (it != cachedBlocks_.end()) {
             cachedBlockNum++;
@@ -73,8 +72,7 @@ size_t PrefixCacheBlockAllocator::GetCachedBlockNum(std::vector<HashValue> &hash
 }
 
 BlockObjSPtr PrefixCacheBlockAllocator::AllocateImmutableBlock(vector<TokenId> &tokenIds, BlockObjSPtr prevBlock,
-                                                               HashValue extraHash)
-{
+                                                               HashValue extraHash) {
     BlockId cachedBlockId = INVALID_BLOCKID;
     BlockObjSPtr block = blockObjPool_->AcquireObj();
 
@@ -107,8 +105,7 @@ BlockObjSPtr PrefixCacheBlockAllocator::AllocateImmutableBlock(vector<TokenId> &
 }
 
 vector<BlockObjSPtr> PrefixCacheBlockAllocator::AllocateImmutableBlocks(vector<vector<TokenId>> &tokenIds,
-                                                                        BlockObjSPtr prevBlock, HashValue extraHash)
-{
+                                                                        BlockObjSPtr prevBlock, HashValue extraHash) {
     vector<BlockObjSPtr> blockObjs = {};
 
     BlockObjSPtr frontBlock = prevBlock;
@@ -119,8 +116,7 @@ vector<BlockObjSPtr> PrefixCacheBlockAllocator::AllocateImmutableBlocks(vector<v
     return blockObjs;
 }
 
-BlockId PrefixCacheBlockAllocator::MayBeAllocateEvictedBlockId()
-{
+BlockId PrefixCacheBlockAllocator::MayBeAllocateEvictedBlockId() {
     EvictionResult evictionResult = evictor_->Evict();
 
     BlockId blockId = evictionResult.blockId;
@@ -145,8 +141,7 @@ BlockId PrefixCacheBlockAllocator::MayBeAllocateEvictedBlockId()
     return blockId;
 }
 
-BlockId PrefixCacheBlockAllocator::AllocateBlockId()
-{
+BlockId PrefixCacheBlockAllocator::AllocateBlockId() {
     // 如果有空闲的block，先申请空闲的
     if (!freeBlockIndices_.empty()) {
         BlockId blockId = freeBlockIndices_.front();
@@ -160,8 +155,7 @@ BlockId PrefixCacheBlockAllocator::AllocateBlockId()
     return MayBeAllocateEvictedBlockId();
 }
 
-void PrefixCacheBlockAllocator::FreeBlockId(BlockObjSPtr &block)
-{
+void PrefixCacheBlockAllocator::FreeBlockId(BlockObjSPtr &block) {
     BlockId blockId = block->GetBlockId();
 
     if (block->PrefixHash() != INVALID_HASH_VALUE) {
@@ -177,16 +171,14 @@ void PrefixCacheBlockAllocator::FreeBlockId(BlockObjSPtr &block)
     }
 }
 
-void PrefixCacheBlockAllocator::Free(BlockObjSPtr &block, bool keepBlockObj)
-{
+void PrefixCacheBlockAllocator::Free(BlockObjSPtr &block, bool keepBlockObj) {
     FreeBlockId(block);
     if (!keepBlockObj) {
         blockObjPool_->FreeObj(block);
     }
 }
 
-vector<BlockObjSPtr> PrefixCacheBlockAllocator::Fork(BlockObjSPtr &lastBlockObj)
-{
+vector<BlockObjSPtr> PrefixCacheBlockAllocator::Fork(BlockObjSPtr &lastBlockObj) {
     std::deque<BlockObjSPtr> sourceBlocks = {};
     BlockObjSPtr visitBlockObj = lastBlockObj;
     while (visitBlockObj) {
@@ -217,8 +209,7 @@ vector<BlockObjSPtr> PrefixCacheBlockAllocator::Fork(BlockObjSPtr &lastBlockObj)
     return forkedBlocks;
 }
 
-void PrefixCacheBlockAllocator::IncrRefCountCacheBlock(BlockObjSPtr block)
-{
+void PrefixCacheBlockAllocator::IncrRefCountCacheBlock(BlockObjSPtr block) {
     BlockId blockId = block->GetBlockId();
     RefCount refCount = refCounter_->Increase(blockId);
     if (refCount == 1) {
@@ -231,8 +222,7 @@ void PrefixCacheBlockAllocator::IncrRefCountCacheBlock(BlockObjSPtr block)
     }
 }
 
-void PrefixCacheBlockAllocator::DecrRefCountCacheBlock(BlockObjSPtr block)
-{
+void PrefixCacheBlockAllocator::DecrRefCountCacheBlock(BlockObjSPtr block) {
     BlockId blockId = block->GetBlockId();
     block->SetBlockId(INVALID_BLOCKID);
     RefCount refCount = refCounter_->Decrease(blockId);
@@ -260,8 +250,7 @@ void PrefixCacheBlockAllocator::DecrRefCountCacheBlock(BlockObjSPtr block)
     }
 }
 
-BlockId PrefixCacheBlockAllocator::PromoteToImmutableBlock(const BlockObjSPtr &block)
-{
+BlockId PrefixCacheBlockAllocator::PromoteToImmutableBlock(const BlockObjSPtr &block) {
     HashValue prefixHash = block->PrefixHash();
     auto it = cachedBlocks_.find(prefixHash);
     // 如果cache中找不到，就将新的插入供后续复用
@@ -286,8 +275,7 @@ BlockId PrefixCacheBlockAllocator::PromoteToImmutableBlock(const BlockObjSPtr &b
     }
 }
 
-void PrefixCacheBlockAllocator::MarkBlocksAsAccessed(const vector<BlockId> &blockIds, TimeStamp now)
-{
+void PrefixCacheBlockAllocator::MarkBlocksAsAccessed(const vector<BlockId> &blockIds, TimeStamp now) {
     for (BlockId blockId : blockIds) {
         if (blockComputedAttr_.IsActive(blockId)) {
             blockComputedAttr_.UpdateAccessTime(blockId, now);
@@ -301,16 +289,14 @@ void PrefixCacheBlockAllocator::MarkBlocksAsAccessed(const vector<BlockId> &bloc
     }
 }
 
-void PrefixCacheBlockAllocator::MarkBlocksAsComputed()
-{
+void PrefixCacheBlockAllocator::MarkBlocksAsComputed() {
     for (BlockId blockId : touchedBlocks_) {
         blockComputedAttr_.SetComputed(blockId, true);
     }
     touchedBlocks_.clear();
 }
 
-BlockId PrefixCacheBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block)
-{
+BlockId PrefixCacheBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block) {
     BlockId srcBlockId = block->GetBlockId();
     if (srcBlockId == INVALID_BLOCKID) {
         throw runtime_error("Cow block id invalid.");
@@ -331,8 +317,7 @@ BlockId PrefixCacheBlockAllocator::CowBlockIfNotAppendable(BlockObjSPtr &block)
 
 // 在多个BlockIds中找到最长的公共前缀，此时的前缀以blockid为比较对象
 vector<BlockId> PrefixCacheBlockAllocator::GetCommonComputedBlockIds(
-    const std::vector<std::vector<BlockId>> &computedSeqBlockIds)
-{
+    const std::vector<std::vector<BlockId>> &computedSeqBlockIds) {
     if (computedSeqBlockIds.empty()) {
         return {};
     }
@@ -362,13 +347,11 @@ vector<BlockId> PrefixCacheBlockAllocator::GetCommonComputedBlockIds(
 
 size_t PrefixCacheBlockAllocator::GetNumTotalBlocks() const { return allBlockIndices_.size(); }
 
-size_t PrefixCacheBlockAllocator::GetNumFreeBlock() const
-{
+size_t PrefixCacheBlockAllocator::GetNumFreeBlock() const {
     return freeBlockIndices_.size() + evictor_->GetNumblocks();
 }
 
-size_t PrefixCacheBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks)
-{
+size_t PrefixCacheBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks) {
     int numTouchedBlocks = 0;
 
     for (BlockObjSPtr block : blocks) {
@@ -383,15 +366,13 @@ size_t PrefixCacheBlockAllocator::GetNumFullBlocksTouched(const std::vector<Bloc
     return numTouchedBlocks;
 }
 
-void PrefixCacheBlockAllocator::SwapOut(std::vector<BlockObjSPtr> &blocks)
-{
+void PrefixCacheBlockAllocator::SwapOut(std::vector<BlockObjSPtr> &blocks) {
     for (BlockObjSPtr block : blocks) {
         FreeBlockId(block);
     }
 }
 
-void PrefixCacheBlockAllocator::SwapIn(std::vector<BlockObjSPtr> &blocks)
-{
+void PrefixCacheBlockAllocator::SwapIn(std::vector<BlockObjSPtr> &blocks) {
     for (BlockObjSPtr block : blocks) {
         BlockObjSPtr tmpBlock;
         if (block->IsFull()) {
@@ -407,8 +388,7 @@ void PrefixCacheBlockAllocator::SwapIn(std::vector<BlockObjSPtr> &blocks)
     }
 }
 
-bool PrefixCacheBlockAllocator::FindCachedBlockPrefix(HashValue blockHash) const
-{
+bool PrefixCacheBlockAllocator::FindCachedBlockPrefix(HashValue blockHash) const {
     if (blockHash == INVALID_HASH_VALUE) {
         return false;
     }
@@ -421,8 +401,7 @@ bool PrefixCacheBlockAllocator::FindCachedBlockPrefix(HashValue blockHash) const
 
 // 确认实现逻辑是否OK， 遇到不命中时，是否跳过时可行的？
 // 找到最长匹配的前缀的blockid lists
-std::vector<BlockId> PrefixCacheBlockAllocator::FindCachedBlocksPrefix(std::vector<HashValue> &blockHashes) const
-{
+std::vector<BlockId> PrefixCacheBlockAllocator::FindCachedBlocksPrefix(std::vector<HashValue> &blockHashes) const {
     std::vector<BlockId> result;
     for (auto blockHash : blockHashes) {
         if (IsBlockCached(blockHash)) {
@@ -434,8 +413,7 @@ std::vector<BlockId> PrefixCacheBlockAllocator::FindCachedBlocksPrefix(std::vect
     return result;
 }
 
-float PrefixCacheBlockAllocator::GetPrefixCacheHitRate() const
-{
+float PrefixCacheBlockAllocator::GetPrefixCacheHitRate() const {
     double ret = hitRateCalculator_->GetHitRate();
     // 外部接口之需要float精度
     return static_cast<float>(ret);
@@ -444,13 +422,12 @@ float PrefixCacheBlockAllocator::GetPrefixCacheHitRate() const
 /* Reset prefix cache. This function may be used in RLHF
 flows to invalid prefix caching after the weights are updated,
 or used for resetting prefix caching status for benchmarking. */
-bool PrefixCacheBlockAllocator::ResetPrefixCache()
-{
+bool PrefixCacheBlockAllocator::ResetPrefixCache() {
     int useBlockNum = static_cast<int>(GetNumTotalBlocks()) - static_cast<int>(GetNumFreeBlock());
     if (useBlockNum > 0) {
         return false;
     }
-    
+
     allBlockIndices_.clear();
     freeBlockIndices_.clear();
     for (size_t blockIdx = 0; blockIdx < numBlocks_; blockIdx++) {
@@ -466,8 +443,7 @@ bool PrefixCacheBlockAllocator::ResetPrefixCache()
 }
 
 // PrefixCacheBlockAllocator专有方法
-bool PrefixCacheBlockAllocator::IsBlockCached(const BlockObjSPtr &block) const
-{
+bool PrefixCacheBlockAllocator::IsBlockCached(const BlockObjSPtr &block) const {
     HashValue prefixHash = block->PrefixHash();
     if (prefixHash == INVALID_HASH_VALUE) {
         return false;
@@ -487,8 +463,7 @@ void PrefixCacheBlockAllocator::TrackBlockId(BlockId blockId, bool computed)
 
 void PrefixCacheBlockAllocator::UntrackBlockId(BlockId blockId) { blockComputedAttr_.Disable(blockId); }
 
-bool PrefixCacheBlockAllocator::IsBlockComputed(BlockId blockId) const
-{
+bool PrefixCacheBlockAllocator::IsBlockComputed(BlockId blockId) const {
     if (blockComputedAttr_.IsActive(blockId)) {
         return blockComputedAttr_.IsComputed(blockId);
     } else {
@@ -496,8 +471,7 @@ bool PrefixCacheBlockAllocator::IsBlockComputed(BlockId blockId) const
     }
 }
 
-bool PrefixCacheBlockAllocator::IsBlockCached(const HashValue prefixHash) const
-{
+bool PrefixCacheBlockAllocator::IsBlockCached(const HashValue prefixHash) const {
     auto it = cachedBlocks_.find(prefixHash);
     if (it == cachedBlocks_.end()) {
         return false;
@@ -510,16 +484,14 @@ bool PrefixCacheBlockAllocator::IsBlockCached(const HashValue prefixHash) const
     return IsBlockComputed(cachedBlockId);
 }
 
-std::vector<std::pair<BlockId, BlockId>> PrefixCacheBlockAllocator::ClearCopyOnWrites()
-{
+std::vector<std::pair<BlockId, BlockId>> PrefixCacheBlockAllocator::ClearCopyOnWrites() {
     std::vector<std::pair<BlockId, BlockId>> ret = cowTracker_.ClearCows();
     return ret;
 }
 
-void PrefixCacheBlockAllocator::AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds)
-{
+void PrefixCacheBlockAllocator::AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds) {
     blockObj->AppendTokenIds(tokenIds);
-    BlockId blockId = CowBlockIfNotAppendable(blockObj); // CoW
+    BlockId blockId = CowBlockIfNotAppendable(blockObj);  // CoW
     blockObj->SetBlockId(blockId);
     // Append后PrefixHash如果有效，说明block变为full， 并且没有place holder
     if (blockObj->PrefixHash() != INVALID_HASH_VALUE) {
@@ -527,8 +499,7 @@ void PrefixCacheBlockAllocator::AppendTokenIds(BlockObjSPtr blockObj, const std:
         // promote后，可能会与别的block共享block id
     }
 }
-void PrefixCacheBlockAllocator::ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken)
-{
+void PrefixCacheBlockAllocator::ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken) {
     blockObj->ReplaceToken(startIndex, newToken);
     // 替换后 block 中的place holder会被替换为有效token，此时的PrefixHash 可能会生效，需要走promote流程
     if (blockObj->PrefixHash() != INVALID_HASH_VALUE) {
@@ -536,4 +507,4 @@ void PrefixCacheBlockAllocator::ReplaceToken(BlockObjSPtr blockObj, size_t start
     }
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

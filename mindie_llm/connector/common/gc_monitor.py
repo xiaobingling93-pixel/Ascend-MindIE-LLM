@@ -49,4 +49,3 @@ class GCMonitor:
             logger.debug(f"GC elapsed:{elapsed}")
             for key, value in info.items():
                 logger.debug(f"{key}:{value}")
-

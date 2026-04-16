@@ -9,14 +9,14 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "http_wrapper.h"
+
 #include "endpoint_def.h"
 #include "http_server.h"
-#include "http_wrapper.h"
 
 namespace mindie_llm {
 
-bool HttpWrapper::Start()
-{
+bool HttpWrapper::Start() {
     std::lock_guard<std::mutex> guard(mMutex);
     if (mStarted) {
         return true;
@@ -29,8 +29,7 @@ bool HttpWrapper::Start()
     return false;
 }
 
-void HttpWrapper::Stop()
-{
+void HttpWrapper::Stop() {
     std::lock_guard<std::mutex> guard(mMutex);
     if (!mStarted) {
         return;
@@ -39,4 +38,4 @@ void HttpWrapper::Stop()
     HttpServer::HttpServerDeInit();
     mStarted = false;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

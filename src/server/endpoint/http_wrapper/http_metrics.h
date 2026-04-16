@@ -13,16 +13,16 @@
 #ifndef ENDPOINT_HTTP_METRICS_H
 #define ENDPOINT_HTTP_METRICS_H
 
-#include <vector>
-#include <queue>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
+#include <queue>
+#include <vector>
 
 #include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 class HttpMetrics {
-public:
+   public:
     HttpMetrics(const HttpMetrics &) = delete;
     ~HttpMetrics() = default;
 
@@ -39,7 +39,7 @@ public:
     size_t DynamicAverageTTFT();
     size_t DynamicAverageTBT();
 
-private:
+   private:
     explicit HttpMetrics();
     std::queue<size_t> TTFTQueue_{};
     std::queue<size_t> TBTQueue_{};
@@ -50,6 +50,6 @@ private:
     std::mutex TTFTMutex;
     std::mutex TBTMutex;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // ENDPOINT_HTTP_METRICS_H
+#endif  // ENDPOINT_HTTP_METRICS_H

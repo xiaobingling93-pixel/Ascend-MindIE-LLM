@@ -14,25 +14,25 @@
 #define GRPC_WRAPPER_H
 
 #include <atomic>
+
 #include "endpoint_def.h"
 
 namespace mindie_llm {
-    class GrpcWrapper {
-    public:
-        static GrpcWrapper& GetInstance()
-        {
-            static GrpcWrapper instance;
-            return instance;
-        }
+class GrpcWrapper {
+   public:
+    static GrpcWrapper& GetInstance() {
+        static GrpcWrapper instance;
+        return instance;
+    }
 
-        int32_t Start();
-        void Stop();
+    int32_t Start();
+    void Stop();
 
-    private:
-        GrpcWrapper() = default;
-        ~GrpcWrapper() = default;
-        std::atomic<bool> started_{false};
-    };
-} // namespace mindie_llm
+   private:
+    GrpcWrapper() = default;
+    ~GrpcWrapper() = default;
+    std::atomic<bool> started_{false};
+};
+}  // namespace mindie_llm
 
-#endif // GRPC_WRAPPER_H
+#endif  // GRPC_WRAPPER_H

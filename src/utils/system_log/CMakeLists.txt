@@ -1,4 +1,4 @@
-file(GLOB SOURCE_FILES 
+file(GLOB SOURCE_FILES
     "${CMAKE_CURRENT_LIST_DIR}/system_log.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../safe_path.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../safe_io.cpp"

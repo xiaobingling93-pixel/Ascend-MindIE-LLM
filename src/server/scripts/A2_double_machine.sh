@@ -31,11 +31,11 @@ export INF_NAN_MODE_ENABLE=1
 #队列优化特性
 export TASK_QUEUE_ENABLE=1
 
-for var in $(compgen -e | grep 'STDOUT$'); do 
+for var in $(compgen -e | grep 'STDOUT$'); do
     export "$var=0"
 done
 
-for var in $(compgen -e | grep 'LOG_TO_FILE$'); do 
+for var in $(compgen -e | grep 'LOG_TO_FILE$'); do
     export "$var=0"
 done
 

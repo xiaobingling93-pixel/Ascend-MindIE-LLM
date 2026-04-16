@@ -51,9 +51,9 @@ def decode_token(req_list: List[Request], tokenizer):
 
 
 class Scheduler:
-    def __init__(self, max_batch_size, max_prefill_tokens, generator,
-                 load_tokenizer, is_mix_model, split_chunk_tokens, **kwargs):
-
+    def __init__(
+        self, max_batch_size, max_prefill_tokens, generator, load_tokenizer, is_mix_model, split_chunk_tokens, **kwargs
+    ):
         self.max_batch_size = max_batch_size
         self.max_prefill_tokens = max_prefill_tokens
 
@@ -64,7 +64,7 @@ class Scheduler:
 
         self.is_mix_model = is_mix_model
         self.split_chunk_tokens = split_chunk_tokens
-        self.speculation_gamma = kwargs.get('speculation_gamma', 0)
+        self.speculation_gamma = kwargs.get("speculation_gamma", 0)
 
         self.sequence_id_counter = -1
 
@@ -83,7 +83,7 @@ class Scheduler:
                 decoding_requests.append(request)
             if request.use_beam_search:
                 completed = sorted(request.completed, key=lambda x: x.cumulative_logprobs, reverse=True)
-                request.completed = completed[:request.n]
+                request.completed = completed[: request.n]
         return decoding_requests
 
     @staticmethod
@@ -103,8 +103,8 @@ class Scheduler:
 
     @staticmethod
     def _collate_sequence_outputs(sequence: Sequence, generation_output, idx):
-        sequence.out_token_list.extend(generation_output.token_ids[idx][:generation_output.eos_info[idx][1]])
-        sequence.logprobs.extend(generation_output.logprobs[idx][:generation_output.eos_info[idx][1]])
+        sequence.out_token_list.extend(generation_output.token_ids[idx][: generation_output.eos_info[idx][1]])
+        sequence.logprobs.extend(generation_output.logprobs[idx][: generation_output.eos_info[idx][1]])
         sequence.eos_flag = generation_output.eos_info[idx][0]
         sequence.kv_length += generation_output.eos_info[idx][1]
         sequence.truncation_indices = generation_output.truncation_indices[idx]
@@ -149,9 +149,10 @@ class Scheduler:
                 max_seq_len = req.max_new_tokens + req.input_length + self.speculation_gamma
                 tokens_num += max_seq_len
                 if self.kvcache_settings.block_size == 0:
-                    raise ValueError('self.kvcache_settings.block_size should not be 0.')
-                req.num_sequence_blocks = math.ceil((req.input_length + req.max_new_tokens)
-                                                    / self.kvcache_settings.block_size)
+                    raise ValueError("self.kvcache_settings.block_size should not be 0.")
+                req.num_sequence_blocks = math.ceil(
+                    (req.input_length + req.max_new_tokens) / self.kvcache_settings.block_size
+                )
                 if req.use_beam_search:
                     req.reserved_seq_ids = [self.get_sequence_id() for _ in range(req.n - 1)]
                     curr_need_blocks = req.num_sequence_blocks * req.n
@@ -161,7 +162,7 @@ class Scheduler:
 
                 req.block_tables = np.arange(free_block_idx, free_block_idx + curr_need_blocks, dtype=np.int32)
                 default_seq = list(req.sequences.values())[0]
-                default_seq.block_tables = req.block_tables[:req.num_sequence_blocks]
+                default_seq.block_tables = req.block_tables[: req.num_sequence_blocks]
                 default_seq.kv_length = req.input_length
                 block_len_max = len(req.block_tables) if len(req.block_tables) > block_len_max else block_len_max
                 free_block_idx += curr_need_blocks
@@ -203,14 +204,16 @@ class Scheduler:
         while req_begin_idx < len(requests):
             # step1: 首轮prefill切块以及对应的block_table生成, 同时输出batch_req_status用于记录每一个batch的req状态：
             # 0：prefill切块，1：最后一个prefill切块，2：decode
-            prefill_requests, batch_req_status, end_idx, alias_input_ids_list = \
-                self.get_first_spf_prefill_requests(requests, req_begin_idx)   
+            prefill_requests, batch_req_status, end_idx, alias_input_ids_list = self.get_first_spf_prefill_requests(
+                requests, req_begin_idx
+            )
 
             # step2: prefill_requests存在, 则进行第一轮推理
             if prefill_requests:
                 is_prefill_batch = self.get_status_by_batch_req_status(batch_req_status)
-                request_tokens_np, eof_np, stop_generate, truncation_indices = \
-                    self.generator.generate_mix(prefill_requests, is_prefill_batch)
+                request_tokens_np, eof_np, stop_generate, truncation_indices = self.generator.generate_mix(
+                    prefill_requests, is_prefill_batch
+                )
                 for i, request in enumerate(prefill_requests):
                     if batch_req_status[i] == 1:
                         request.out_token_list.extend(list(request_tokens_np[i]))
@@ -218,13 +221,14 @@ class Scheduler:
 
             # step3: mix阶段判断, 始终刷新prefill_requests、batch_req_status
             mix_status = self.is_mix_batch_judge(batch_req_status)
-            while (mix_status and (not stop_generate)):
-                prefill_requests, batch_req_status = self.get_spf_requests(prefill_requests, 
-                                                                           batch_req_status,
-                                                                           alias_input_ids_list)
+            while mix_status and (not stop_generate):
+                prefill_requests, batch_req_status = self.get_spf_requests(
+                    prefill_requests, batch_req_status, alias_input_ids_list
+                )
                 is_prefill_batch = self.get_status_by_batch_req_status(batch_req_status)
-                request_tokens_np, eof_np, stop_generate, truncation_indices = \
-                    self.generator.generate_mix(prefill_requests, is_prefill_batch)
+                request_tokens_np, eof_np, stop_generate, truncation_indices = self.generator.generate_mix(
+                    prefill_requests, is_prefill_batch
+                )
                 for i, request in enumerate(prefill_requests):
                     if batch_req_status[i] == 1:
                         request.out_token_list.extend(list(request_tokens_np[i]))
@@ -236,10 +240,11 @@ class Scheduler:
                 mix_status = self.is_mix_batch_judge(batch_req_status)
 
             # step4: 判断是否进入纯decode阶段
-            while (not stop_generate):
+            while not stop_generate:
                 is_prefill_batch = [0] * len(is_prefill_batch)
-                request_tokens_np, eof_np, stop_generate, truncation_indices = \
-                    self.generator.generate_mix(prefill_requests, is_prefill_batch)
+                request_tokens_np, eof_np, stop_generate, truncation_indices = self.generator.generate_mix(
+                    prefill_requests, is_prefill_batch
+                )
                 for i, request in enumerate(prefill_requests):
                     idx = eof_np[i][1]
                     out_tokens = request_tokens_np[i][:idx]
@@ -249,7 +254,7 @@ class Scheduler:
 
         # step5: 生成输出list
         return decode_token(requests, self.tokenizer, truncation_indices_list)
-    
+
     def get_first_spf_prefill_requests(self, requests, req_begin_idx):
         batch_size = 0
         tokens_num = 0
@@ -269,17 +274,17 @@ class Scheduler:
                 max_seq_len = req.max_new_tokens + req.input_length + self.speculation_gamma
                 tokens_num += max_seq_len
                 if self.kvcache_settings.block_size == 0:
-                    raise ValueError('self.kvcache_settings.block_size should not be 0.')
+                    raise ValueError("self.kvcache_settings.block_size should not be 0.")
                 curr_need_blocks = math.ceil(max_seq_len / self.kvcache_settings.block_size)
                 req.block_tables = np.arange(free_block_idx, free_block_idx + curr_need_blocks + 1, dtype=np.int32)
                 block_len_max = len(req.block_tables) if len(req.block_tables) > block_len_max else block_len_max
                 free_block_idx += curr_need_blocks + 1
                 block_tables.append(req.block_tables)
                 alias_input_ids_list.append(requests[i].input_ids)
-                if (self.is_not_last_prompt(input_tokens_num, req.input_length)):
+                if self.is_not_last_prompt(input_tokens_num, req.input_length):
                     req.split_start_position = 0
                     req.split_end_position = self.split_chunk_tokens - input_tokens_num
-                    req.input_ids = req.input_ids[req.split_start_position:req.split_end_position]
+                    req.input_ids = req.input_ids[req.split_start_position : req.split_end_position]
                     req.last_prompt = 0
                     status = 0
                 else:
@@ -293,30 +298,30 @@ class Scheduler:
                 end_idx = i
             else:
                 break
-        batch_req_status = np.array(batch_req_status, dtype=np.int32)    
-        batch_result = (prefill_requests, batch_req_status, end_idx, alias_input_ids_list)    
+        batch_req_status = np.array(batch_req_status, dtype=np.int32)
+        batch_result = (prefill_requests, batch_req_status, end_idx, alias_input_ids_list)
         return batch_result
-    
+
     def get_spf_requests(self, requests, batch_req_status, alias_input_ids_list):
         tokens_num = 0
         for i, req in enumerate(requests):
-            if (batch_req_status[i] == 0): # 上一次没有处理到最后一个prefill块
+            if batch_req_status[i] == 0:  # 上一次没有处理到最后一个prefill块
                 prefill_len_unprocess = len(alias_input_ids_list[i]) - req.split_end_position
-                if (self.is_not_last_prompt(tokens_num, prefill_len_unprocess)):
+                if self.is_not_last_prompt(tokens_num, prefill_len_unprocess):
                     req.split_start_position = req.split_end_position
-                    req.split_end_position = req.split_start_position + self.split_chunk_tokens - tokens_num                    
+                    req.split_end_position = req.split_start_position + self.split_chunk_tokens - tokens_num
                     req.last_prompt = 0
                 else:
                     req.split_start_position = req.split_end_position
                     req.split_end_position = len(alias_input_ids_list[i])
                     req.last_prompt = 1
                     batch_req_status[i] = 1
-            elif (batch_req_status[i] == 1): # 上一次是最后一个prefill快
+            elif batch_req_status[i] == 1:  # 上一次是最后一个prefill快
                 req.split_start_position = 0
                 req.split_end_position = 1
                 req.last_prompt = 1
                 batch_req_status[i] = 2
-            req.input_ids = alias_input_ids_list[i][req.split_start_position:req.split_end_position]
+            req.input_ids = alias_input_ids_list[i][req.split_start_position : req.split_end_position]
             tokens_num += req.split_end_position - req.split_start_position
             requests[i] = req
         return requests, batch_req_status
@@ -359,18 +364,25 @@ class Scheduler:
                         if need_forking:
                             src_dst_indices.append((req.block_tables[src_index], req.block_tables[dst_index]))
                         req.sequences[seq_id].block_tables = np.concatenate(
-                            [req.sequences[parent_id].block_tables[:src_index],
-                             req.block_tables[dst_index: dst_index + dst_step]])
+                            [
+                                req.sequences[parent_id].block_tables[:src_index],
+                                req.block_tables[dst_index : dst_index + dst_step],
+                            ]
+                        )
                     else:
                         dis_id = discarded_seq_ids[reused_block_id]
                         reused_block_tables = req.sequences[dis_id].block_tables
                         reused_block_id += 1
                         if need_forking:
                             src_dst_indices.append(
-                                (req.sequences[parent_id].block_tables[src_index], reused_block_tables[src_index]))
+                                (req.sequences[parent_id].block_tables[src_index], reused_block_tables[src_index])
+                            )
                         req.sequences[seq_id].block_tables = np.concatenate(
-                            [req.sequences[parent_id].block_tables[:src_index],
-                             reused_block_tables[src_index: req.num_sequence_blocks]])
+                            [
+                                req.sequences[parent_id].block_tables[:src_index],
+                                reused_block_tables[src_index : req.num_sequence_blocks],
+                            ]
+                        )
 
             for j, seq_id in enumerate(request_sequence_ids):
                 parent_id = request_parent_ids[j]
@@ -392,6 +404,6 @@ class Scheduler:
     def is_not_last_prompt(self, tokens_num, left_token_num):
         if self.is_mix_model is not True:
             return False
-        if (left_token_num + tokens_num <= self.split_chunk_tokens):
+        if left_token_num + tokens_num <= self.split_chunk_tokens:
             return False
         return True

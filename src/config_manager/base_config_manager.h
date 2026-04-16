@@ -12,10 +12,11 @@
 
 #ifndef BASE_CONFIG_H
 #define BASE_CONFIG_H
-#include <map>
 #include <fstream>
-#include "log_config.h"
+#include <map>
+
 #include "config_info.h"
+#include "log_config.h"
 #include "nlohmann/json.hpp"
 #include "param_checker.h"
 
@@ -23,7 +24,7 @@ using Json = nlohmann::json;
 
 namespace mindie_llm {
 class BaseConfig {
-public:
+   public:
     explicit BaseConfig(std::string jsonPath) : jsonPath_(std::move(jsonPath)) {}
 
     virtual ~BaseConfig() = default;
@@ -36,13 +37,13 @@ public:
 
     static bool CheckSystemConfig(const std::string &jsonPath, Json &inputJsonData, std::string paramType);
 
-protected:
+   protected:
     std::string jsonPath_;
 };
 
 class ScheduleConfigManager : public BaseConfig {
-public:
-    explicit ScheduleConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)){};
+   public:
+    explicit ScheduleConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)) {};
 
     ~ScheduleConfigManager() override = default;
 
@@ -58,7 +59,7 @@ public:
 
     friend class ParamChecker;
 
-private:
+   private:
     struct ScheduleConfig scheduleConfig_;
 
     bool LoadLwdConfig(Json &scheduleJsonData);
@@ -83,8 +84,8 @@ private:
 };
 
 class LogConfigManager : public BaseConfig {
-public:
-    explicit LogConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)){};
+   public:
+    explicit LogConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)) {};
 
     ~LogConfigManager() override = default;
 
@@ -94,14 +95,14 @@ public:
 
     const LogConfig &GetParam() { return logConfig_; };
 
-private:
+   private:
     LogConfig logConfig_;
     bool initFlag = true;
 };
 
 class ServerConfigManager : public BaseConfig {
-public:
-    explicit ServerConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)){};
+   public:
+    explicit ServerConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)) {};
 
     ~ServerConfigManager() override = default;
 
@@ -110,7 +111,7 @@ public:
     bool CheckParam() override;
 
     const struct ServerConfig &GetParam();
-    
+
     void SetPluginEnabled(bool enabled);
 
     void SetMtpEnabled(bool enabled);
@@ -119,14 +120,14 @@ public:
 
     // dump超时参数动态调整相关接口
     void SetTokenTimeout(uint64_t tokenTimeout);
-    
+
     void SetE2eTimeout(uint64_t e2eTimeout);
 
     bool GetDecodeStatus() const;
 
     void UpdateConfig();
 
-private:
+   private:
     bool jsonDecodeSuccess_ = true;
 
     bool CheckHttpsConfig(bool loadManagementSSL);
@@ -137,7 +138,7 @@ private:
 
     bool CheckLayerwiseDisaggregatedConfig();
 
-    bool CheckMetricsHttpsParam(std::string& homePath);
+    bool CheckMetricsHttpsParam(std::string &homePath);
 
     void InitHttpsBusinessConfigFromJson(Json &serveJsonData);
 
@@ -153,8 +154,8 @@ private:
 
     void InitLayerwiseDisaggregatedConfigFromJson(Json &serveJsonData);
 
-    void LoadOptionalParameters(Json& serverParamsJsonData);
-    
+    void LoadOptionalParameters(Json &serverParamsJsonData);
+
     std::string GetIPAddress(Json &serveJsonData);
 
     std::string GetManagementIPAddress(Json &serveJsonData);
@@ -165,8 +166,8 @@ private:
 };
 
 class BackendConfigManager : public BaseConfig {
-public:
-    explicit BackendConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)){};
+   public:
+    explicit BackendConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)) {};
 
     ~BackendConfigManager() override = default;
 
@@ -180,7 +181,7 @@ public:
 
     void UpdateMultiNodesInfer(const RanktableParam &ranktableParam);
 
-private:
+   private:
     bool InitTlsConfigFromJson(Json &backendConfigData);
 
     void InitKvPoolConfigFromJson(Json &backendConfigData);
@@ -195,8 +196,8 @@ private:
 };
 
 class ModelDeployConfigManager : public BaseConfig {
-public:
-    explicit ModelDeployConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)){};
+   public:
+    explicit ModelDeployConfigManager(std::string jsonPath) : BaseConfig(std::move(jsonPath)) {};
 
     ~ModelDeployConfigManager() override = default;
 
@@ -210,18 +211,18 @@ public:
     std::vector<LoraConfig> &GetLoraConfig();
 
     void SetMaxPositionEmbeddings(uint32_t maxPositionEmbeddings);
-    
-    void InitModelConfigImpl(const Json &modelJsonData, uint32_t speculationGamma,
-        const uint32_t maxSeqLength, int32_t truncation);
-    
-    void InitLoraConfigImpl(const Json &modelJsonData); // lora 初始化
+
+    void InitModelConfigImpl(const Json &modelJsonData, uint32_t speculationGamma, const uint32_t maxSeqLength,
+                             int32_t truncation);
+
+    void InitLoraConfigImpl(const Json &modelJsonData);  // lora 初始化
 
     void InitModelConfig(const Json &modelJsonData, uint32_t speculationGamma, const uint32_t maxSeqLength,
-        const int32_t truncation);
+                         const int32_t truncation);
 
     friend class ParamChecker;
 
-private:
+   private:
     void InitGrpcTLSConfigFromJson(Json &serveJsonData);
     bool initFlag = true;
     std::vector<ModelDeployConfig> modelParamVec_;
@@ -230,7 +231,7 @@ private:
 };
 
 class RanktableConfigManager {
-public:
+   public:
     explicit RanktableConfigManager();
 
     ~RanktableConfigManager() = default;
@@ -251,7 +252,7 @@ public:
 
     const struct RanktableParam &GetParam();
 
-private:
+   private:
     bool ReadRanktableData(uint32_t &serverCount, nlohmann::json &serverListData);
 
     uint32_t FillServerEle(const std::string &containerIP, const std::string &hostIP, Json &serverEleData,
@@ -263,5 +264,5 @@ private:
 
     bool initFlag = true;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

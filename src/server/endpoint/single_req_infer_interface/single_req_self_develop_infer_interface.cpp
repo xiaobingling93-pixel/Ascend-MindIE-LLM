@@ -9,34 +9,34 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "endpoint_def.h"
-#include "parse_protocol.h"
-#include "http_rest_resource.h"
-#include "parameters_checker.h"
-#include "infer_tokenizer.h"
-#include "common_util.h"
 #include "single_req_self_develop_infer_interface.h"
+
+#include "common_util.h"
+#include "endpoint_def.h"
+#include "http_rest_resource.h"
+#include "infer_tokenizer.h"
+#include "parameters_checker.h"
+#include "parse_protocol.h"
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
 SingleReqSelfDevelopInferInterface::SingleReqSelfDevelopInferInterface(
     const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute,
     const std::vector<LoraParamSPtr> loraConfigs) noexcept
-    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs}
-{
-}
+    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs} {}
 
-bool SingleReqSelfDevelopInferInterface::CheckTokenInput(nlohmann::ordered_json &body, std::string &msg)
-{
+bool SingleReqSelfDevelopInferInterface::CheckTokenInput(nlohmann::ordered_json &body, std::string &msg) {
     if (body["input_id"].is_null()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "input_id not found. The requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "input_id not found. The requestId is " << requestId_);
         msg = "Input_id should not be empty";
         return false;
     }
     if (!body["input_id"].is_array()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "input_id must be an array.");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "input_id must be an array.");
         msg = "Parameter input_id must be an array";
         return false;
     }
@@ -44,15 +44,17 @@ bool SingleReqSelfDevelopInferInterface::CheckTokenInput(nlohmann::ordered_json 
     auto &dataJson = body["input_id"];
     for (size_t i = 0; i < dataJson.size(); ++i) {
         if (!dataJson[i].is_number_integer()) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Data element must be integer type. The requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Data element must be integer type. The requestId is " << requestId_);
             msg = "Parameter input_id must be integer";
             return false;
         }
         if (dataJson[i] < 0 || dataJson[i] > maxToken) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Data element must be in range [0, " << maxToken <<
-                "], but got " << dataJson[i] << ". The requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Data element must be in range [0, " << maxToken << "], but got " << dataJson[i]
+                                                            << ". The requestId is " << requestId_);
             msg = "Data element in param input_id is invalid";
             return false;
         }
@@ -62,11 +64,11 @@ bool SingleReqSelfDevelopInferInterface::CheckTokenInput(nlohmann::ordered_json 
 }
 
 bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &body, std::string &msg,
-                                                        uint64_t &timestamp)
-{
+                                                        uint64_t &timestamp) {
     if (body["inputs"].is_null()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Inputs not found. The requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Inputs not found. The requestId is " << requestId_);
         msg = "Inputs must not be null";
         return false;
     }
@@ -83,8 +85,8 @@ bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &
         inputParam->textInput = body["inputs"].dump();
     } else {
         msg = "The type of inputs is abnormal";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
         return false;
     }
     std::string errorMsg = "";
@@ -96,10 +98,10 @@ bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &
     }
     if (utf16.length() == 0 || utf16.length() > GetMaxInputLen()) {
         msg = "Inputs must be necessary and data type must be string and length in (0, " +
-            std::to_string(GetMaxInputLen()) + "]";
+              std::to_string(GetMaxInputLen()) + "]";
         msg += ", but the length of inputs is " + std::to_string(utf16.length());
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
         return false;
     }
 
@@ -108,8 +110,8 @@ bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &
         if (!this->GetTokensFromInput(inputParam->textInput, reqTokens_, this->respTokenMap[SPECIAL_SEQ_ID_PRESET],
                                       msg)) {
             msg = "Failed to get token from input: " + msg;
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                ABNORMAL_TRANSMISSION_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, ABNORMAL_TRANSMISSION_ERROR), msg);
             return false;
         }
     } else {
@@ -118,8 +120,9 @@ bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &
             TokenizerProcessPool::GetInstance().Encode(inputParam->textInput, reqTokens_, ENCODE_FLAG, timestamp);
         if (!status.IsOk()) {
             msg = status.StatusMsg();
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                LOCAL_INVOKING_ERROR), msg << ". The requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, LOCAL_INVOKING_ERROR),
+                       msg << ". The requestId is " << requestId_);
             return false;
         }
         PROF(encodeSpan.Metric("recvTokenSize", reqTokens_.size()));
@@ -128,13 +131,13 @@ bool SingleReqSelfDevelopInferInterface::CheckTextInput(nlohmann::ordered_json &
 }
 
 bool SingleReqSelfDevelopInferInterface::ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg,
-                                                                    uint64_t &timestamp)
-{
+                                                                    uint64_t &timestamp) {
     try {
         // inputs
         if (body.contains("inputs") && body.contains("input_id")) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Could not have inputs an input_id at the same time " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Could not have inputs an input_id at the same time " << requestId_);
             msg = std::string("Input conflict.");
             return false;
         }
@@ -147,16 +150,17 @@ bool SingleReqSelfDevelopInferInterface::ValidateAndPrepareReqToken(nlohmann::or
                 return false;
             }
         } else {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Could not find input data. The requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Could not find input data. The requestId is " << requestId_);
             msg = std::string("Not found inputs.");
             return false;
         }
         if (reqTokens_.size() == 0 || reqTokens_.size() > MAX_TOKENS_NUM) {
             msg = "Inputs token length must be in (0, " + std::to_string(MAX_TOKENS_NUM) + "]";
             msg += ", but got " + std::to_string(reqTokens_.size());
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         return true;
@@ -165,13 +169,13 @@ bool SingleReqSelfDevelopInferInterface::ValidateAndPrepareReqToken(nlohmann::or
         return false;
     }
 }
-bool SingleReqSelfDevelopInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg)
-{
+bool SingleReqSelfDevelopInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg) {
     auto paramCheckRet =
         JsonParse::CheckOptionalItemType(reqJsonBody_, "parameters", OrderedJson::value_t::object, msg);
     if (!paramCheckRet.isCorrectType) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "value type of \"parameters\" is invalid, requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "value type of \"parameters\" is invalid, requestId is " << requestId_);
         return false;
     }
     if (!(AssignTemperature(reqJsonBody_["parameters"], tmpReq, msg, false) &&
@@ -185,8 +189,7 @@ bool SingleReqSelfDevelopInferInterface::SetupInferParams(RequestSPtr tmpReq, st
           AssignPriority(reqJsonBody_["parameters"], tmpReq, msg) &&
           AssignMaxNewTokens(reqJsonBody_["parameters"], inputParam, msg) &&
           AssignTimeout(reqJsonBody_["parameters"], inputParam, msg) &&
-          AssignDetails(reqJsonBody_["parameters"], inputParam, msg) &&
-          AssignStream(reqJsonBody_, inputParam, msg))) {
+          AssignDetails(reqJsonBody_["parameters"], inputParam, msg) && AssignStream(reqJsonBody_, inputParam, msg))) {
         return false;
     }
     return true;
@@ -194,19 +197,20 @@ bool SingleReqSelfDevelopInferInterface::SetupInferParams(RequestSPtr tmpReq, st
 
 bool SingleReqSelfDevelopInferInterface::BuildResponseJson(ResponseSPtr response,
                                                            const std::vector<BestNTokens> &tempTokens,
-                                                           RespBodyQueue &jsonStrings, const uint64_t &timestamp)
-{
+                                                           RespBodyQueue &jsonStrings, const uint64_t &timestamp) {
     bool res = true;
     if (inputParam->streamMode) {
         if (!ProcessResponseStream(response, tempTokens, jsonStrings, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process selfDevelop response stream");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process selfDevelop response stream");
             return false;
         }
     } else {
         if (!ProcessResponseSingle(response, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process selfDevelop response single");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process selfDevelop response single");
             return false;
         }
         res = EncodeSelfDevelopResponse(jsonStrings);
@@ -214,27 +218,27 @@ bool SingleReqSelfDevelopInferInterface::BuildResponseJson(ResponseSPtr response
     return res;
 }
 
-std::string SingleReqSelfDevelopInferInterface::ChangeUtf8Str(std::string &input) const
-{
+std::string SingleReqSelfDevelopInferInterface::ChangeUtf8Str(std::string &input) const {
     try {
         return CleanStringForJson(input);
     } catch (const std::exception &e) {
         // 处理转换错误
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to change str to utf8. " << e.what());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                   "Failed to change str to utf8. " << e.what());
         return " ";
     }
 }
 
-bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopResponse(RespBodyQueue &jsonStrs)
-{
+bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopResponse(RespBodyQueue &jsonStrs) {
     uint64_t seqId;
     if (!GetUniqueSequenceId(seqId)) {
         return false;
     }
     try {
         OrderedJson jsonObj;
-        jsonObj["generated_text"] = ChangeUtf8Str(fullTextMap[seqId]);;
+        jsonObj["generated_text"] = ChangeUtf8Str(fullTextMap[seqId]);
+        ;
         if (inputParam->showDetails) {
             jsonObj["details"]["finish_reason"] = finishReasonMap[seqId];
             jsonObj["details"]["generated_tokens"] = postTokenIdMap[seqId].size();
@@ -248,21 +252,21 @@ bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopResponse(RespBodyQueue
         jsonStrs.push(jsonObj.dump());
         return true;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ENCODE_DECODE_ERROR), "Failed to encode infer response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                   "Failed to encode infer response");
         return false;
     }
 }
 
-bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopStreamResponse(RespBodyQueue &jsonStrings) noexcept
-{
+bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopStreamResponse(RespBodyQueue &jsonStrings) noexcept {
     uint64_t seqId;
     if (!GetUniqueSequenceId(seqId)) {
         return false;
     }
     try {
         OrderedJson jsonObj;
-        auto& metrics = singleLLMReqHandlerBase_->GetMetrics();
+        auto &metrics = singleLLMReqHandlerBase_->GetMetrics();
         if (!metrics.callbackIndexQue.empty()) {
             uint8_t callbackMetricsStage = metrics.callbackIndexQue.front();
             metrics.callbackIndexQue.pop();
@@ -270,7 +274,7 @@ bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopStreamResponse(RespBod
                 jsonObj["prefill_time"] = metrics.firstTokenCost;
                 jsonObj["decode_time"] = nullptr;
             } else if (callbackMetricsStage == DECODE_CALLBACK_METRICS_TAG &&
-                metrics.decodeTime.size() > metrics.callbackIndex) {
+                       metrics.decodeTime.size() > metrics.callbackIndex) {
                 jsonObj["prefill_time"] = nullptr;
                 jsonObj["decode_time"] = metrics.decodeTime[metrics.callbackIndex++];
             }
@@ -302,31 +306,29 @@ bool SingleReqSelfDevelopInferInterface::EncodeSelfDevelopStreamResponse(RespBod
         jsonStrings.push(outputStr);
         return true;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ENCODE_DECODE_ERROR), "Failed to encode infer response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                   "Failed to encode infer response");
         return false;
     }
 }
 
-void SingleReqSelfDevelopInferInterface::SendStreamResponse(RespBodyQueue &jsonStrings)
-{
+void SingleReqSelfDevelopInferInterface::SendStreamResponse(RespBodyQueue &jsonStrings) {
     if (!EncodeSelfDevelopStreamResponse(jsonStrings)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to encode buffer");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to encode buffer");
         return;
     }
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Response has ended is " << isEnd << ", requestId is " << requestId_);
 }
 
-void SingleReqSelfDevelopInferInterface::SetDMIReComputeBuilder()
-{
+void SingleReqSelfDevelopInferInterface::SetDMIReComputeBuilder() {
     singleLLMReqHandlerBase_->SetDMIReComputeBuildCallBack(
         std::bind(&SingleReqSelfDevelopInferInterface::BuildSelfDevelopReComputeBody, this, std::placeholders::_1));
 }
 
-std::string SingleReqSelfDevelopInferInterface::BuildSelfDevelopReComputeBody(
-    const std::vector<BestNTokens> &tokens)
-{
+std::string SingleReqSelfDevelopInferInterface::BuildSelfDevelopReComputeBody(const std::vector<BestNTokens> &tokens) {
     OrderedJson newReqJsonObj;
     // Get tokens in non-stream mode
     if (tokens.size() != 0) {
@@ -366,4 +368,4 @@ std::string SingleReqSelfDevelopInferInterface::BuildSelfDevelopReComputeBody(
     }
     return newReqJsonObj.dump();
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

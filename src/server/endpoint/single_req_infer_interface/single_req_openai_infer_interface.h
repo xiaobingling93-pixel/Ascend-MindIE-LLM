@@ -14,9 +14,10 @@
 #define ENDPOINT_OPENAI_INFER_H
 
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_vllm_openai_infer_interface.h"
 #include "infer_param.h"
+#include "single_req_vllm_openai_infer_interface.h"
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
@@ -24,16 +25,16 @@ namespace mindie_llm {
  * @brief OpenAi 格式的推理请求处理类
  */
 class SingleReqOpenAiInferInterface : public SingleReqVllmOpenAiInferInterface {
-public:
+   public:
     explicit SingleReqOpenAiInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                            bool isReCompute = false,
                                            const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
 
-protected:
+   protected:
     bool CheckModelName(const std::string &modelName) const;
     // Resolve model name with LoRA fallback (vLLM behavior)
     bool ParseModelName(nlohmann::ordered_json &body, std::string &outModel, std::string &err) override;
 };
-} // namespace mindie_llm
-#endif // ENDPOINT_OPENAI_INFER_H
+}  // namespace mindie_llm
+#endif  // ENDPOINT_OPENAI_INFER_H

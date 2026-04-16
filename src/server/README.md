@@ -85,9 +85,9 @@ MindIE_Server主要包含如下组件：
 
 检查服务状态是否正常
 
-```shell    
+```shell
 # 请求1
-GET https://{ip}:{port}/v2/health/live 
+GET https://{ip}:{port}/v2/health/live
 # 响应1
 # 正常场景：服务状态正常 不会返回结果
 
@@ -98,7 +98,7 @@ GET https://{ip}:{port}/v2/health/live
 }
 
 # 请求2
-GET https://{ip}:{port}/v2/models/llama_65b/ready 
+GET https://{ip}:{port}/v2/models/llama_65b/ready
 # 响应1
 # 正常场景：状态码200，无内容
 

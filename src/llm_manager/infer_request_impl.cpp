@@ -11,17 +11,15 @@
  */
 
 #include "infer_request_impl.h"
-#include "log.h"
+
 #include "check_utils.h"
+#include "log.h"
 using namespace mindie_llm;
 
 namespace mindie_llm {
-InferRequestImpl::InferRequestImpl(InferRequestId requestId) : requestId_(requestId)
-{
-}
+InferRequestImpl::InferRequestImpl(InferRequestId requestId) : requestId_(requestId) {}
 
-void InferRequestImpl::SetTensor(const std::string& tensorName, TensorPtr &tensor)
-{
+void InferRequestImpl::SetTensor(const std::string &tensorName, TensorPtr &tensor) {
     if (!CheckStringInputLength(tensorName, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The length of tensor name: " << tensorName << "is too long.");
         return;
@@ -29,8 +27,7 @@ void InferRequestImpl::SetTensor(const std::string& tensorName, TensorPtr &tenso
     inputs_[tensorName] = tensor;
 }
 
-Status InferRequestImpl::AddTensor(const std::string& tensorName, TensorPtr &tensor)
-{
+Status InferRequestImpl::AddTensor(const std::string &tensorName, TensorPtr &tensor) {
     if (!CheckStringInputLength(tensorName, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The length of tensor name: " << tensorName << "is too long in 'AddTensor'.");
         return Status(Error::Code::INVALID_ARG, "The length of tensor name: " + tensorName + " is too long");
@@ -45,8 +42,7 @@ Status InferRequestImpl::AddTensor(const std::string& tensorName, TensorPtr &ten
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferRequestImpl::GetTensorByName(const std::string& tensorName, TensorPtr &tensor)
-{
+Status InferRequestImpl::GetTensorByName(const std::string &tensorName, TensorPtr &tensor) {
     if (!CheckStringInputLength(tensorName, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The length of tensor name: " << tensorName << " is too long in 'GetTensorByName'.");
         return Status(Error::Code::INVALID_ARG, "The length of tensor name: " + tensorName + " is too long");
@@ -62,8 +58,7 @@ Status InferRequestImpl::GetTensorByName(const std::string& tensorName, TensorPt
     return Status(Error::Code::OK, "Success");
 }
 
-Status InferRequestImpl::DelTensorByName(const std::string &name)
-{
+Status InferRequestImpl::DelTensorByName(const std::string &name) {
     if (!CheckStringInputLength(name, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The length of tensor name: " << name << "is too long in 'DelTensorByName'.");
         return Status(Error::Code::INVALID_ARG, "The length of tensor name: " + name + " is too long");
@@ -74,13 +69,9 @@ Status InferRequestImpl::DelTensorByName(const std::string &name)
     return Status(Error::Code::OK, "Success");
 }
 
-InferRequestId InferRequestImpl::GetRequestId() const
-{
-    return requestId_;
-}
+InferRequestId InferRequestImpl::GetRequestId() const { return requestId_; }
 
-Status InferRequestImpl::SetMaxOutputLen(uint32_t maxOutputLen)
-{
+Status InferRequestImpl::SetMaxOutputLen(uint32_t maxOutputLen) {
     if (maxOutputLen > 0) {
         maxOutputLen_ = maxOutputLen;
         return Status(Error::Code::OK, "Success");
@@ -90,78 +81,41 @@ Status InferRequestImpl::SetMaxOutputLen(uint32_t maxOutputLen)
     }
 }
 
-uint32_t InferRequestImpl::GetMaxOutputLen() const
-{
-    return maxOutputLen_;
-}
+uint32_t InferRequestImpl::GetMaxOutputLen() const { return maxOutputLen_; }
 
-void InferRequestImpl::SetSendResponseCallback(const mindie_llm::SendResponseCallback4Request &callback)
-{
+void InferRequestImpl::SetSendResponseCallback(const mindie_llm::SendResponseCallback4Request &callback) {
     responseCallback_ = callback;
 }
 
-mindie_llm::SendResponseCallback4Request &InferRequestImpl::GetSendResponseCallback()
-{
-    return responseCallback_;
-}
+mindie_llm::SendResponseCallback4Request &InferRequestImpl::GetSendResponseCallback() { return responseCallback_; }
 
-void InferRequestImpl::SetReleaseCallback(const mindie_llm::ReleaseCallback &callback)
-{
-    releaseCallback_ = callback;
-}
+void InferRequestImpl::SetReleaseCallback(const mindie_llm::ReleaseCallback &callback) { releaseCallback_ = callback; }
 
-mindie_llm::ReleaseCallback &InferRequestImpl::GetReleaseCallback()
-{
-    return releaseCallback_;
-}
+mindie_llm::ReleaseCallback &InferRequestImpl::GetReleaseCallback() { return releaseCallback_; }
 
-void InferRequestImpl::SetEngineResponseCallback(const mindie_llm::SendResponseCallback4Request &callback)
-{
+void InferRequestImpl::SetEngineResponseCallback(const mindie_llm::SendResponseCallback4Request &callback) {
     engineResponseCallback_ = callback;
 }
 
-mindie_llm::SendResponseCallback4Request &InferRequestImpl::GetEngineResponseCallback()
-{
+mindie_llm::SendResponseCallback4Request &InferRequestImpl::GetEngineResponseCallback() {
     return engineResponseCallback_;
 }
 
-const mindie_llm::TensorMap &InferRequestImpl::ImmutableInputs() const
-{
-    return inputs_;
-}
+const mindie_llm::TensorMap &InferRequestImpl::ImmutableInputs() const { return inputs_; }
 
-void InferRequestImpl::SetReqType(mindie_llm::InferReqType reqType)
-{
-    reqType_ = reqType;
-}
+void InferRequestImpl::SetReqType(mindie_llm::InferReqType reqType) { reqType_ = reqType; }
 
-mindie_llm::InferReqType InferRequestImpl::GetReqType() const
-{
-    return reqType_;
-}
+mindie_llm::InferReqType InferRequestImpl::GetReqType() const { return reqType_; }
 
-void InferRequestImpl::SetRecompute(bool isRecompute)
-{
-    isRecompute_ = isRecompute;
-}
+void InferRequestImpl::SetRecompute(bool isRecompute) { isRecompute_ = isRecompute; }
 
-bool InferRequestImpl::IsRecompute() const
-{
-    return isRecompute_;
-}
+bool InferRequestImpl::IsRecompute() const { return isRecompute_; }
 
-bool InferRequestImpl::IsPrefillReq() const
-{
-    return reqType_ == mindie_llm::InferReqType::REQ_PREFILL;
-}
+bool InferRequestImpl::IsPrefillReq() const { return reqType_ == mindie_llm::InferReqType::REQ_PREFILL; }
 
-bool InferRequestImpl::IsDecodeReq() const
-{
-    return reqType_ == mindie_llm::InferReqType::REQ_DECODE;
-}
+bool InferRequestImpl::IsDecodeReq() const { return reqType_ == mindie_llm::InferReqType::REQ_DECODE; }
 
-void InferRequestImpl::SetDTarget(std::string &dTarget)
-{
+void InferRequestImpl::SetDTarget(std::string &dTarget) {
     if (!CheckStringInputLength(dTarget, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The Length of dTarget: " << dTarget << " is too long in SetDTarget.");
         return;
@@ -169,13 +123,9 @@ void InferRequestImpl::SetDTarget(std::string &dTarget)
     dTarget_ = dTarget;
 }
 
-std::string InferRequestImpl::GetDTarget() const
-{
-    return dTarget_;
-}
+std::string InferRequestImpl::GetDTarget() const { return dTarget_; }
 
-void InferRequestImpl::SetPrefillAddr(std::string &prefillAddr)
-{
+void InferRequestImpl::SetPrefillAddr(std::string &prefillAddr) {
     if (!CheckStringInputLength(prefillAddr, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The Length of dTarget: prefillAddr is too long");
         return;
@@ -183,43 +133,28 @@ void InferRequestImpl::SetPrefillAddr(std::string &prefillAddr)
     prefillAddr_ = prefillAddr;
 }
 
-std::string InferRequestImpl::GetPrefillAddr() const
-{
-    return prefillAddr_;
-}
+std::string InferRequestImpl::GetPrefillAddr() const { return prefillAddr_; }
 
-void InferRequestImpl::SetSrcBlockTable(const std::vector<int64_t> &srcBlockTable)
-{
+void InferRequestImpl::SetSrcBlockTable(const std::vector<int64_t> &srcBlockTable) {
     srcBlockTable_.clear();
     srcBlockTable_.push_back(srcBlockTable);
 }
 
-std::vector<int64_t> InferRequestImpl::GetSrcBlockTable() const
-{
+std::vector<int64_t> InferRequestImpl::GetSrcBlockTable() const {
     if (srcBlockTable_.empty()) {
         return {};
     }
     return srcBlockTable_[0];
 }
 
-void InferRequestImpl::SetDpInstanceIds(const std::vector<uint64_t> &dpInstanceIds)
-{
-    dpInstanceIds_ = dpInstanceIds;
-}
+void InferRequestImpl::SetDpInstanceIds(const std::vector<uint64_t> &dpInstanceIds) { dpInstanceIds_ = dpInstanceIds; }
 
-std::vector<uint64_t> InferRequestImpl::GetDpInstanceIds() const
-{
-    return dpInstanceIds_;
-}
+std::vector<uint64_t> InferRequestImpl::GetDpInstanceIds() const { return dpInstanceIds_; }
 
-void InferRequestImpl::SetSrcHmoTable(const std::vector<std::vector<int64_t>> &srcHmoTable)
-{
+void InferRequestImpl::SetSrcHmoTable(const std::vector<std::vector<int64_t>> &srcHmoTable) {
     srcHmoTable_ = srcHmoTable;
 }
 
-std::vector<std::vector<int64_t>> InferRequestImpl::GetSrcHmoTable() const
-{
-    return srcHmoTable_;
-}
+std::vector<std::vector<int64_t>> InferRequestImpl::GetSrcHmoTable() const { return srcHmoTable_; }
 
-}
+}  // namespace mindie_llm

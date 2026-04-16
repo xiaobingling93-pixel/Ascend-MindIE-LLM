@@ -15,8 +15,6 @@ import numpy as np
 from .dynamic_decoding import DynamicBranch
 from .tokens_knowledge_base_cache import TokensKnowledgeBaseCache
 from ...utils.model_input import ModelInput
-from ....modeling.backend_type import BackendType
-from ....utils.env import ENV
 from ....utils.log.logging import logger
 
 # trie-tree 查询窗口默认长度
@@ -34,13 +32,13 @@ class DecodingPolicy:
     def __init__(self, kwargs, infer_context, decode_length):
         self.infer_context = infer_context
         self.decode_length = decode_length
-        self.device = kwargs.get('device')
-        self.eos_token_id = kwargs.get('eos_token_id')
+        self.device = kwargs.get("device")
+        self.eos_token_id = kwargs.get("eos_token_id")
         self.last_accepted_token = {}
-        self.dynamic_algo = kwargs.get('dynamic_algo', False)
-        self.cache_size = kwargs.get('cache_size')
-        self.max_gen_len = kwargs.get('max_gen_len')
-        self.max_block_size = kwargs.get('max_block_size')
+        self.dynamic_algo = kwargs.get("dynamic_algo", False)
+        self.cache_size = kwargs.get("cache_size")
+        self.max_gen_len = kwargs.get("max_gen_len")
+        self.max_block_size = kwargs.get("max_block_size")
 
         # tokens_knowledge_base speculative decoding
         self.prefix_ids = [[] for _ in range(self.cache_size)]
@@ -51,7 +49,7 @@ class DecodingPolicy:
             self.tokens_knowledge_base_cache.eos = tuple(self.eos_token_id)
         self.tokens_knowledge_base_cache.stop_words = {}  # stop_words
         self.tokens_knowledge_base_param = defaultdict(int)
-        self.tokens_knowledge_base_param['branch_length'] = DEFAULT_BRANCH_LENGTH
+        self.tokens_knowledge_base_param["branch_length"] = DEFAULT_BRANCH_LENGTH
         self.free_block = []
         self.next_draft = {}
         self.branch_length = INITIAL_BRANCH_LENGTH
@@ -92,7 +90,8 @@ class DecodingPolicy:
                     continue
                 next_token_pair = (next_tokens_indices, next_tokens_length)
                 all_accepted, next_tokens_indices, next_tokens_length = self.verify_single_draft_process(
-                    offset, draft_ids, next_token_ids, batch_index, next_token_pair)
+                    offset, draft_ids, next_token_ids, batch_index, next_token_pair
+                )
                 if all_accepted:
                     next_tokens_indices[batch_index].append(offset + len(draft_ids))
                     next_tokens_length[batch_index] += 1
@@ -108,23 +107,25 @@ class DecodingPolicy:
             seq_len = host_context_length[i]
             start_idx = cumulative_seq_len
             end_idx = cumulative_seq_len + seq_len
-            ids = host_input_ids[start_idx + 1: end_idx]
+            ids = host_input_ids[start_idx + 1 : end_idx]
             if self.dynamic_algo:
                 self.tokens_knowledge_base_cache.add(
-                    ids, search_size=self.branch_length + 1,
-                    pattern='input', use_batch=cache_ids[i])
+                    ids, search_size=self.branch_length + 1, pattern="input", use_batch=cache_ids[i]
+                )
             else:
                 self.tokens_knowledge_base_cache.add(
-                    ids, search_size=self.tokens_knowledge_base_param['branch_length'] + 1,
-                    pattern='input', use_batch=cache_ids[i])
-            self.prefix_ids[cache_ids[i]] = host_input_ids[start_idx: end_idx]
+                    ids,
+                    search_size=self.tokens_knowledge_base_param["branch_length"] + 1,
+                    pattern="input",
+                    use_batch=cache_ids[i],
+                )
+            self.prefix_ids[cache_ids[i]] = host_input_ids[start_idx:end_idx]
             cumulative_seq_len += seq_len
 
     def filter_out_eos(self, end_reason, cache_ids: np.ndarray):
         for i, reason in enumerate(end_reason):
             if reason != 0:
-                self.tokens_knowledge_base_cache.output_add([], final=True, pattern='output',
-                                                            use_batch=cache_ids[i])
+                self.tokens_knowledge_base_cache.output_add([], final=True, pattern="output", use_batch=cache_ids[i])
         self.tokens_knowledge_base_cache.changed_input_prefix_trees.clear()
 
     def verify(self, next_token_ids, decoding_ids, cache_ids):
@@ -163,9 +164,9 @@ class DecodingPolicy:
     def get_remain_slot(self, input_data, cache_ids):
         decoding_lengths = [self.decode_length] * len(cache_ids)
         if self.dynamic_algo:
-            self.branch_length, decoding_lengths = self.dynamic_branch.dynamic_decoding(cache_ids, self.branch_length,
-                                                                                        self.last_accepted_token,
-                                                                                        self.last_decoding_len)
+            self.branch_length, decoding_lengths = self.dynamic_branch.dynamic_decoding(
+                cache_ids, self.branch_length, self.last_accepted_token, self.last_decoding_len
+            )
         else:
             decoding_lengths = self.get_remain_slot_static_process(cache_ids, decoding_lengths, input_data)
         return decoding_lengths
@@ -175,24 +176,23 @@ class DecodingPolicy:
         if self.dynamic_algo:
             branch_length = self.get_remain_slot(input_data, cache_ids)
         else:
-            branch_length = self.tokens_knowledge_base_param.get('branch_length', DEFAULT_BRANCH_LENGTH)
+            branch_length = self.tokens_knowledge_base_param.get("branch_length", DEFAULT_BRANCH_LENGTH)
         batch_indices = cache_ids.tolist()
         decoding_qids = []
         for batch_index in batch_indices:
             decoding_qids.append(self.prefix_ids[batch_index][-PREFIX_WINDOW_SIZE:])
 
         if self.dynamic_algo:
-            decoding_ids, decoding_masks, hit_sizes = (self.tokens_knowledge_base_cache.
-                                                       get_all_batch_draft(decoding_qids,
-                                                                           batch_decoding_length=decoding_lengths,
-                                                                           search_size=branch_length[0],
-                                                                           indices=batch_indices))
+            decoding_ids, decoding_masks, hit_sizes = self.tokens_knowledge_base_cache.get_all_batch_draft(
+                decoding_qids,
+                batch_decoding_length=decoding_lengths,
+                search_size=branch_length[0],
+                indices=batch_indices,
+            )
         else:
-            decoding_ids, decoding_masks, hit_sizes = (self.tokens_knowledge_base_cache.
-                                                       get_all_batch_draft(decoding_qids,
-                                                                           batch_decoding_length=decoding_lengths,
-                                                                           search_size=branch_length,
-                                                                           indices=batch_indices))
+            decoding_ids, decoding_masks, hit_sizes = self.tokens_knowledge_base_cache.get_all_batch_draft(
+                decoding_qids, batch_decoding_length=decoding_lengths, search_size=branch_length, indices=batch_indices
+            )
         return decoding_ids, decoding_masks, hit_sizes
 
     def calc_new_tensor(self, input_data, cache_ids, decoding_ids, decoding_masks, batch_indices):
@@ -200,8 +200,9 @@ class DecodingPolicy:
         new_input_lengths = []
         for index, temp_decoding_ids in enumerate(decoding_ids):
             input_ids += temp_decoding_ids
-            new_input_lengths.append(len(temp_decoding_ids) +
-                                     self.infer_context.get_last_position_ids(batch_indices[index]))
+            new_input_lengths.append(
+                len(temp_decoding_ids) + self.infer_context.get_last_position_ids(batch_indices[index])
+            )
 
         new_input_ids_tensor = np.asarray(input_ids, dtype=np.int64)
         new_input_lengths_tensor = np.asarray(new_input_lengths, dtype=np.int64)
@@ -209,8 +210,9 @@ class DecodingPolicy:
 
         position_ids = []
         for index, decoding_mask in enumerate(decoding_masks):
-            position_ids += ((np.sum(decoding_mask, axis=1) +
-                              self.infer_context.get_last_position_ids(batch_indices[index])) - 1).tolist()
+            position_ids += (
+                (np.sum(decoding_mask, axis=1) + self.infer_context.get_last_position_ids(batch_indices[index])) - 1
+            ).tolist()
         new_position_ids_tensor = np.asarray(position_ids, dtype=np.int64)
 
         host_block_table = input_data.block_tables
@@ -227,17 +229,17 @@ class DecodingPolicy:
             next_block_slot_count = 0
 
             if (start_slot + len(decoding_ids[idx])) > ((cur_block + 1) * self.max_block_size):
-                next_block_slot_count = ((start_slot + len(decoding_ids[idx])) -
-                                         ((cur_block + 1) * self.max_block_size))
+                next_block_slot_count = (start_slot + len(decoding_ids[idx])) - ((cur_block + 1) * self.max_block_size)
 
             temp = np.arange(start_slot, start_slot + len(decoding_ids[idx]))
             if next_block_slot_count > 0:
                 next_block = host_block_table[idx][cur_block_idx[idx] + 1]
-                back_temp = np.arange(next_block * self.max_block_size,
-                                      next_block * self.max_block_size + next_block_slot_count)
+                back_temp = np.arange(
+                    next_block * self.max_block_size, next_block * self.max_block_size + next_block_slot_count
+                )
                 temp[-next_block_slot_count:] = back_temp
 
-            new_slots[start: start + len(decoding_ids[idx])] = temp
+            new_slots[start : start + len(decoding_ids[idx])] = temp
             start += len(decoding_ids[idx])
         res = (new_input_lengths_tensor, new_max_seq_len, new_input_ids_tensor, new_position_ids_tensor, new_slots)
         return res
@@ -246,18 +248,21 @@ class DecodingPolicy:
         batch_indices = cache_ids.tolist()
         decoding_ids, decoding_masks, _ = self.calc_decoding_info(input_data, cache_ids)
 
-        new_input_lengths_tensor, new_max_seq_len, new_input_ids_tensor, new_position_ids_tensor, new_slots \
-            = self.calc_new_tensor(input_data, cache_ids, decoding_ids, decoding_masks, batch_indices)
-        new_model_inputs = ModelInput(input_ids=new_input_ids_tensor,
-                                      position_ids=new_position_ids_tensor,
-                                      block_tables=input_data.block_tables,
-                                      slots=new_slots,
-                                      context_length=new_input_lengths_tensor,
-                                      cached_context_length=new_input_lengths_tensor,
-                                      max_seq_len=new_max_seq_len,
-                                      prefill_head_indices=input_data.prefill_head_indices,
-                                      is_prefill=input_data.is_prefill)
-        logger.debug(f'update_infer_input new_model_inputs.input_ids: {new_model_inputs.input_ids}')
+        new_input_lengths_tensor, new_max_seq_len, new_input_ids_tensor, new_position_ids_tensor, new_slots = (
+            self.calc_new_tensor(input_data, cache_ids, decoding_ids, decoding_masks, batch_indices)
+        )
+        new_model_inputs = ModelInput(
+            input_ids=new_input_ids_tensor,
+            position_ids=new_position_ids_tensor,
+            block_tables=input_data.block_tables,
+            slots=new_slots,
+            context_length=new_input_lengths_tensor,
+            cached_context_length=new_input_lengths_tensor,
+            max_seq_len=new_max_seq_len,
+            prefill_head_indices=input_data.prefill_head_indices,
+            is_prefill=input_data.is_prefill,
+        )
+        logger.debug(f"update_infer_input new_model_inputs.input_ids: {new_model_inputs.input_ids}")
         return new_model_inputs, decoding_ids, decoding_masks
 
     def truncate_long_tokens(self, cache_ids, input_metadata, sampling_output, next_tokens_indices):

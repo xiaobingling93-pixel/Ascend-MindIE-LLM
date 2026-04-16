@@ -10,15 +10,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "common_util.h"
 #include "base_config_manager.h"
+#include "common_util.h"
 
 using Json = nlohmann::json;
 using namespace nlohmann::literals;
 
 namespace mindie_llm {
-bool BaseConfig::CheckSystemConfig(const std::string &jsonPath, Json &inputJsonData, std::string paramType)
-{
+bool BaseConfig::CheckSystemConfig(const std::string &jsonPath, Json &inputJsonData, std::string paramType) {
     std::string homePath;
     if (!GetHomePath(homePath).IsOk()) {
         std::cout << "Failed to get home path." << std::endl;
@@ -31,4 +30,4 @@ bool BaseConfig::CheckSystemConfig(const std::string &jsonPath, Json &inputJsonD
     }
     return ParamChecker::ReadJsonFile(jsonPath, baseDir, inputJsonData, paramType);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

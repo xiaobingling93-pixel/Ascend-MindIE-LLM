@@ -19,7 +19,7 @@
 
 namespace mindie_llm {
 class PolicyHelper {
-public:
+   public:
     PolicyHelper(std::shared_ptr<SchedulerConfig> schedulerConfig, BlockSpaceManagerSPtr blockManager);
 
     std::pair<size_t, size_t> GetNumComputeNewUnCachedAndCachedTokens(const SequenceGroupSPtr seqGroup,
@@ -53,7 +53,7 @@ public:
 
     size_t GetNumComputeChunkSize(SchedulingBudget &budget, size_t numNewTokens) const;
 
-private:
+   private:
     void SeqsSwapIn(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapIn) const;
     void SeqsSwapOut(SequenceGroupSPtr seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut);
 
@@ -61,8 +61,8 @@ private:
 
     BlockSpaceManagerSPtr blockManager_;
 
-    void validateSequenceGroup(const SequenceGroupSPtr& seqGroup, const std::string& context) const;
+    void validateSequenceGroup(const SequenceGroupSPtr &seqGroup, const std::string &context) const;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

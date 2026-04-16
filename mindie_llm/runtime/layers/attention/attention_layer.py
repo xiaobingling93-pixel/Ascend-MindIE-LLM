@@ -20,18 +20,15 @@ from . import update_global_attn_dict
 
 
 class AttentionLayerBase(CustomLayer, ABC):
-
     @abstractmethod
     def get_attn_backend(self) -> type[AttentionBackend]:
         pass
 
 
 class AttentionQuant(torch.nn.Module):
-    def __init__(
-        self,
-        head_size, num_kv_heads, num_kv_heads_replicas, weight_dtype, quant_config, prefix):
+    def __init__(self, head_size, num_kv_heads, num_kv_heads_replicas, weight_dtype, quant_config, prefix):
         super().__init__()
-        self.prefix = None # prefix differs from different quant methods, e.g., k_proj for c8, fa_q for fa3 
+        self.prefix = None  # prefix differs from different quant methods, e.g., k_proj for c8, fa_q for fa3
         self.quant_method = quant_config.get_quant_method(self, prefix=prefix) if quant_config else None
         self.enable_kv_quant = False
         if self.quant_method:
@@ -41,12 +38,11 @@ class AttentionQuant(torch.nn.Module):
                 num_kv_heads=num_kv_heads,
                 num_kv_heads_replicas=num_kv_heads_replicas,
                 weight_dtype=weight_dtype,
-                prefix=prefix
+                prefix=prefix,
             )
 
 
 class Attention(AttentionLayerBase):
-
     def __init__(
         self,
         num_heads: int,
@@ -65,15 +61,14 @@ class Attention(AttentionLayerBase):
         self.value_cache = None
         update_global_attn_dict(prefix, self)
         self.prefix = prefix
-    
+
         if attn_backend is None:
-            self.attn_backend = get_attn_backend(
-                use_mla=False
-            )
+            self.attn_backend = get_attn_backend(use_mla=False)
         else:
             self.attn_backend = attn_backend
-        self.attn_quant = AttentionQuant(head_size, num_kv_heads,
-            num_kv_heads_replicas, weight_dtype, quant_config, prefix)
+        self.attn_quant = AttentionQuant(
+            head_size, num_kv_heads, num_kv_heads_replicas, weight_dtype, quant_config, prefix
+        )
 
         impl_cls = self.attn_backend.get_impl_cls()
         self.impl = impl_cls(
@@ -95,6 +90,4 @@ class Attention(AttentionLayerBase):
         value: torch.Tensor,
     ) -> torch.Tensor:
         self_kv_cache = (self.key_cache, self.value_cache)
-        return self.impl.forward(
-            self, query, key, value, self_kv_cache
-        )
+        return self.impl.forward(self, query, key, value, self_kv_cache)

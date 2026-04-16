@@ -14,14 +14,15 @@
 #define GRPC_CONTEXT_H
 
 #include <atomic>
-#include <vector>
 #include <cstdint>
-#include <string>
 #include <sstream>
+#include <string>
+#include <vector>
+
+#include "common_util.h"
 #include "data_type.h"
 #include "endpoint_def.h"
 #include "prefillAndDecodeCommunication.grpc.pb.h"
-#include "common_util.h"
 
 namespace mindie_llm {
 struct KvCacheInfo {
@@ -29,8 +30,7 @@ struct KvCacheInfo {
     std::vector<uint64_t> dpInstanceIds;
 
     // toString 方法使用 vectorToString
-    std::string ToString() const
-    {
+    std::string ToString() const {
         std::ostringstream oss;
         oss << "KvCacheInfo { blockTable: [";
         for (size_t i = 0; i < blockTable.size(); ++i) {
@@ -52,18 +52,15 @@ struct DmiServerInfo {
     KvCacheInfo kvCacheInfo;
     InferReqType reqType;
     // 构造函数
-    DmiServerInfo(const std::string& reqId,
-                  const std::string& pNodeAddr,
-                  const std::string& dtargetAddr,
-                  KvCacheInfo kvCacheInfo,
-                  InferReqType reqType)
+    DmiServerInfo(const std::string& reqId, const std::string& pNodeAddr, const std::string& dtargetAddr,
+                  KvCacheInfo kvCacheInfo, InferReqType reqType)
         : reqId(reqId),
           pNodeAddr(pNodeAddr),
           dtargetAddr(dtargetAddr),
-          kvCacheInfo(kvCacheInfo), // 使用拷贝构造函数
+          kvCacheInfo(kvCacheInfo),  // 使用拷贝构造函数
           reqType(reqType) {}
     // 拷贝构造函数
-    DmiServerInfo(const DmiServerInfo &other)
+    DmiServerInfo(const DmiServerInfo& other)
         : reqId(other.reqId),
           pNodeAddr(other.pNodeAddr),
           dtargetAddr(other.dtargetAddr),
@@ -72,14 +69,13 @@ struct DmiServerInfo {
     DmiServerInfo& operator=(const DmiServerInfo&) = default;
 
     // ToString method
-    std::string ToString() const
-    {
+    std::string ToString() const {
         std::ostringstream oss;
         oss << "DmiServerInfo { "
             << "reqId: " << reqId << ", "
             << "pNodeAddr: " << pNodeAddr << ", "
             << "kvCacheInfo: " << kvCacheInfo.ToString() << ", "
-            << "reqType: " << static_cast<int>(reqType) // Assuming reqType can be cast to int
+            << "reqType: " << static_cast<int>(reqType)  // Assuming reqType can be cast to int
             << " }";
         return oss.str();
     }
@@ -92,10 +88,9 @@ struct TritonTextInfo {
     // 构造函数
     TritonTextInfo(const std::string& userSepcId) : userSepcId(userSepcId) {}
     // 拷贝构造函数
-    TritonTextInfo(const TritonTextInfo &other) : userSepcId(other.userSepcId) {}
+    TritonTextInfo(const TritonTextInfo& other) : userSepcId(other.userSepcId) {}
     // 拷贝赋值操作符
-    TritonTextInfo& operator=(const TritonTextInfo &other)
-    {
+    TritonTextInfo& operator=(const TritonTextInfo& other) {
         if (this != &other) {  // 防止自赋值
             this->userSepcId = other.userSepcId;
         }
@@ -104,52 +99,36 @@ struct TritonTextInfo {
 };
 // 给grpc扩展接口预留的上下文信息
 class GrpcContext {
-public:
+   public:
     GrpcContext() = default;
     ~GrpcContext() = default;
 
-    explicit GrpcContext(const DmiServerInfo& info): serverInfo_(info) {}
+    explicit GrpcContext(const DmiServerInfo& info) : serverInfo_(info) {}
 
-    GrpcContext(const DmiServerInfo& info, const TritonTextInfo& tritonText): serverInfo_(info),
-        protocalType_(MsgType::MSG_TYPE_TRITON), tritonTextInfo_(tritonText) {}
+    GrpcContext(const DmiServerInfo& info, const TritonTextInfo& tritonText)
+        : serverInfo_(info), protocalType_(MsgType::MSG_TYPE_TRITON), tritonTextInfo_(tritonText) {}
 
-    const DmiServerInfo& GetDmiServerInfo() const
-    {
-        return serverInfo_;
-    }
+    const DmiServerInfo& GetDmiServerInfo() const { return serverInfo_; }
 
-    void SetTritonTextInfo(const TritonTextInfo& info)
-    {
+    void SetTritonTextInfo(const TritonTextInfo& info) {
         tritonTextInfo_ = info;
         protocalType_ = MsgType::MSG_TYPE_TRITON;
     }
 
-    const TritonTextInfo& GetTritonTextInfo() const
-    {
-        return tritonTextInfo_;
-    }
+    const TritonTextInfo& GetTritonTextInfo() const { return tritonTextInfo_; }
 
-    MsgType GetProtocalTyep() const
-    {
-        return protocalType_;
-    }
+    MsgType GetProtocalTyep() const { return protocalType_; }
 
-    void SetDecodeParams(const prefillAndDecodeCommunication::DecodeParameters& para)
-    {
-        para_ = para;
-    }
+    void SetDecodeParams(const prefillAndDecodeCommunication::DecodeParameters& para) { para_ = para; }
 
-    const prefillAndDecodeCommunication::DecodeParameters& GetDecodeParams() const
-    {
-        return para_;
-    }
+    const prefillAndDecodeCommunication::DecodeParameters& GetDecodeParams() const { return para_; }
 
-private:
+   private:
     DmiServerInfo serverInfo_;
     MsgType protocalType_ = MsgType::MSG_TYPE_TRITON;
     TritonTextInfo tritonTextInfo_;
     prefillAndDecodeCommunication::DecodeParameters para_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // GRPC_CONTEXT_H
+#endif  // GRPC_CONTEXT_H

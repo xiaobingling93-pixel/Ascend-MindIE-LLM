@@ -31,36 +31,35 @@ enum class ResultCode {
 };
 
 inline const std::unordered_map<ResultCode, std::string> resultCodeMap = {
-    { ResultCode::OK, "[OK]" },
-    { ResultCode::NONE_ARGUMENT, "[NONE_ARGUMENT]" },
-    { ResultCode::TYPE_MISMATCH, "[TYPE_MISMATCH]" },
-    { ResultCode::INVALID_ARGUMENT, "[INVALID_ARGUMENT]" },
-    { ResultCode::NO_PERMISSION, "[NO_PERMISSION]" },
-    { ResultCode::RISK_ALERT, "[RISK_ALERT]" },
-    { ResultCode::INIT_FAILURE, "[INIT_FAILURE]" },
-    { ResultCode::IO_FAILURE, "[IO_FAILURE]" },
-    { ResultCode::PARSE_FAILURE, "[PARSE_FAILURE]" }
-};
+    {ResultCode::OK, "[OK]"},
+    {ResultCode::NONE_ARGUMENT, "[NONE_ARGUMENT]"},
+    {ResultCode::TYPE_MISMATCH, "[TYPE_MISMATCH]"},
+    {ResultCode::INVALID_ARGUMENT, "[INVALID_ARGUMENT]"},
+    {ResultCode::NO_PERMISSION, "[NO_PERMISSION]"},
+    {ResultCode::RISK_ALERT, "[RISK_ALERT]"},
+    {ResultCode::INIT_FAILURE, "[INIT_FAILURE]"},
+    {ResultCode::IO_FAILURE, "[IO_FAILURE]"},
+    {ResultCode::PARSE_FAILURE, "[PARSE_FAILURE]"}};
 
 class Result {
-public:
+   public:
     static Result OK();
     static Result Error(ResultCode code, std::string msg);
 
     bool IsOk() const noexcept;
     const std::string& message() const noexcept;
 
-private:
+   private:
     Result(ResultCode code, std::string msg);
     std::string Result2Str() const;
 
     static std::string CodeToString(ResultCode code);
 
-private:
+   private:
     ResultCode code_;
     std::string message_;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // SAFE_RESULT_H
+#endif  // SAFE_RESULT_H

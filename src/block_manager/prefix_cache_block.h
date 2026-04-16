@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
 #include "hashless_block_obj.h"
@@ -17,7 +17,7 @@
 namespace mindie_llm {
 
 class PrefixCachingBlockObj : public HashLessBlockObj, public std::enable_shared_from_this<PrefixCachingBlockObj> {
-public:
+   public:
     PrefixCachingBlockObj() = default;
 
     ~PrefixCachingBlockObj() override = default;
@@ -39,7 +39,7 @@ public:
 
     HashValue GetHashValue() override;
 
-private:
+   private:
     size_t blockSize_ = 0;
 
     HashValue cachedPrefixHash_ = INVALID_HASH_VALUE;
@@ -51,9 +51,9 @@ private:
     void UpdateNumTokensTotal();
 
     bool IsLastTokenPlaceholder() const;
-    
+
     bool IsReadyToCalcPrefixHash() const;
 };
 
 using PrefixCachingBlockObjSPtr = std::shared_ptr<PrefixCachingBlockObj>;
-} // namespace mindie_llm
+}  // namespace mindie_llm

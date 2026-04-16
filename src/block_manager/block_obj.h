@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef BLOCK_OBJ_H
 #define BLOCK_OBJ_H
 
@@ -18,13 +18,12 @@
 
 #include "basic_types.h"
 
-
 namespace mindie_llm {
 
 struct BlockSharedAttr;
 
 class BlockObj {
-public:
+   public:
     explicit BlockObj() = default;
 
     virtual ~BlockObj() = default;
@@ -51,9 +50,9 @@ public:
 
     virtual std::shared_ptr<BlockObj> &GetPrevBlock() = 0;
 
-    virtual bool IsComputed() const = 0; // Should be only used by PrefixCacingAllocator
+    virtual bool IsComputed() const = 0;  // Should be only used by PrefixCacingAllocator
 
-    virtual float LastAccessed() const = 0; // block 最后一次被访问的时间
+    virtual float LastAccessed() const = 0;  // block 最后一次被访问的时间
 
     virtual size_t GetBlockSize() const = 0;
 
@@ -63,9 +62,9 @@ public:
 
     virtual HashValue GetHashValue() = 0;
 
-    virtual HashValue ExtraHash() = 0; // 用于Lora
+    virtual HashValue ExtraHash() = 0;  // 用于Lora
 
-    virtual HashValue PrefixHash() = 0; // 前缀block和当前block的hash
+    virtual HashValue PrefixHash() = 0;  // 前缀block和当前block的hash
 
     virtual void InitBlockObj(const std::shared_ptr<BlockObj> prevBlock, const std::vector<TokenId> &tokenIds,
                               BlockSharedAttr blockSharedAttr, BlockId blockId, HashValue extraHash = 0) = 0;
@@ -75,6 +74,6 @@ public:
     virtual void SetRankIdx(size_t rankIdx) = 0;
 };
 using BlockObjSPtr = std::shared_ptr<BlockObj>;
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

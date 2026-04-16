@@ -10,34 +10,33 @@
  * See the Mulan PSL v2 for more details.
  */
 
+#include "dresult_event_dispatcher.h"
+
 #include <condition_variable>
 #include <cstdlib>
 #include <mutex>
 #include <stdexcept>
+
 #include "endpoint_def.h"
-#include "memory_utils.h"
 #include "log.h"
-#include "dresult_event_dispatcher.h"
+#include "memory_utils.h"
 
 namespace mindie_llm {
 DResultEventDispatcher::DResultEventDispatcher() {}
 
-DResultEventDispatcher::~DResultEventDispatcher()
-{
+DResultEventDispatcher::~DResultEventDispatcher() {
     isDestroyed_ = true;
     ClearQueue();
 }
 
-void DResultEventDispatcher::ClearQueue()
-{
+void DResultEventDispatcher::ClearQueue() {
     std::string *temp;
     while (queue_.pop(temp)) {
         delete temp;
     }
 }
 
-void DResultEventDispatcher::WriteStreamMessage(httplib::DataSink *sink)
-{
+void DResultEventDispatcher::WriteStreamMessage(httplib::DataSink *sink) {
     std::string *msg;
     while (!queue_.empty()) {
         while (!queue_.pop(msg)) {
@@ -52,8 +51,7 @@ void DResultEventDispatcher::WriteStreamMessage(httplib::DataSink *sink)
     }
 }
 
-void DResultEventDispatcher::WaitEvent(httplib::DataSink *sink)
-{
+void DResultEventDispatcher::WaitEvent(httplib::DataSink *sink) {
     while (!isDestroyed_.load()) {
         std::unique_lock<std::mutex> lock(qMutex_);
         cv_.wait(lock, [this]() { return isDestroyed_.load() || !queue_.empty(); });
@@ -76,11 +74,10 @@ void DResultEventDispatcher::WaitEvent(httplib::DataSink *sink)
     }
 }
 
-void DResultEventDispatcher::SendEvent(const std::string &message, bool finishFlag, std::string reqInfo)
-{
+void DResultEventDispatcher::SendEvent(const std::string &message, bool finishFlag, std::string reqInfo) {
     if (isFinish_.load()) {
         ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
-            "D Result long connection is closed, won't send data, Request Id is" << reqInfo);
+                  "D Result long connection is closed, won't send data, Request Id is" << reqInfo);
         return;
     }
     lastTimestamp_ = boost::chrono::steady_clock::now();
@@ -106,8 +103,7 @@ void DResultEventDispatcher::SendEvent(const std::string &message, bool finishFl
  *     最后一个报文，前缀为lastData
  *      reqId:1234567\0lastData:data:{xxx}\0
  */
-void DResultEventDispatcher::WrapChunkedDResponse(std::string &msg, const DResultWrapParam &param)
-{
+void DResultEventDispatcher::WrapChunkedDResponse(std::string &msg, const DResultWrapParam &param) {
     auto reqId = param.tritonReqId.empty() ? param.reqId : param.tritonReqId;
     std::string idPrefix = "reqId:";
     std::string bodyPrefix = param.prefix;
@@ -121,11 +117,9 @@ void DResultEventDispatcher::WrapChunkedDResponse(std::string &msg, const DResul
             }
             len += value_to_add;
             return true;
-        }
-        ;
-        if (!safeAdd(idPrefix.size()) || !safeAdd(reqId.size()) ||
-            !safeAdd(separatorSize) || !safeAdd(bodyPrefix.size()) ||
-            !safeAdd(param.body.size()) || !safeAdd(separatorSize)) {
+        };
+        if (!safeAdd(idPrefix.size()) || !safeAdd(reqId.size()) || !safeAdd(separatorSize) ||
+            !safeAdd(bodyPrefix.size()) || !safeAdd(param.body.size()) || !safeAdd(separatorSize)) {
             ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
                        GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
                        "Message size would overflow size_t. RequestID is " << reqId);
@@ -133,11 +127,11 @@ void DResultEventDispatcher::WrapChunkedDResponse(std::string &msg, const DResul
         }
         msg.reserve(len);
         msg.append(idPrefix)
-           .append(reqId)
-           .append(1, separator)
-           .append(bodyPrefix)
-           .append(param.body)
-           .append(1, separator);
+            .append(reqId)
+            .append(1, separator)
+            .append(bodyPrefix)
+            .append(param.body)
+            .append(1, separator);
     } catch (const std::bad_alloc &e) {
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
@@ -151,8 +145,7 @@ void DResultEventDispatcher::WrapChunkedDResponse(std::string &msg, const DResul
     }
 }
 
-boost::chrono::nanoseconds DResultEventDispatcher::GetIntervalFromPrevSend() const
-{
+boost::chrono::nanoseconds DResultEventDispatcher::GetIntervalFromPrevSend() const {
     return boost::chrono::steady_clock::now() - lastTimestamp_;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

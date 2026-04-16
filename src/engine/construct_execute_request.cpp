@@ -9,15 +9,16 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <string>
-#include "log.h"
-#include "id_utils.h"
 #include "construct_execute_request.h"
+
+#include <string>
+
+#include "id_utils.h"
+#include "log.h"
 
 namespace mindie_llm {
 
-model_execute_data::SequenceData ConstructExecuteRequest::MakeSequenceData(SequenceData &metaData)
-{
+model_execute_data::SequenceData ConstructExecuteRequest::MakeSequenceData(SequenceData &metaData) {
     model_execute_data::SequenceData protoSeqData;
     for (TokenId promptTokenId : metaData.promptTokenIds) {
         protoSeqData.add_prompt_token_ids(promptTokenId);
@@ -30,8 +31,7 @@ model_execute_data::SequenceData ConstructExecuteRequest::MakeSequenceData(Seque
 }
 
 void ConstructExecuteRequest::ConstructSampleParam(model_execute_data::SamplingParams &sampleParams,
-                                                   const SequenceGroupMetaData &metaData)
-{
+                                                   const SequenceGroupMetaData &metaData) {
     sampleParams.set_n(metaData.samplingParams_->n);
     sampleParams.set_best_of(metaData.samplingParams_->bestOf);
     sampleParams.set_max_output_len(metaData.samplingParams_->maxOutputLen);
@@ -66,8 +66,7 @@ void ConstructExecuteRequest::ConstructSampleParam(model_execute_data::SamplingP
 }
 
 void ConstructExecuteRequest::ConstructChunkedPrefillParam(const SequenceGroupMetaData &metaData,
-                                                           model_execute_data::SequenceGroupMetadata &protoMeta)
-{
+                                                           model_execute_data::SequenceGroupMetadata &protoMeta) {
     // 基础参数
     for (size_t i = 0; i < metaData.isReqPrefill_.size(); ++i) {
         protoMeta.add_is_req_prefill(metaData.isReqPrefill_[i]);
@@ -80,10 +79,8 @@ void ConstructExecuteRequest::ConstructChunkedPrefillParam(const SequenceGroupMe
     if (metaData.isReqPrefill_.size() == 1 && metaData.isReqPrefill_[0]) {
         std::vector<size_t> partialPromtLens = {metaData.splitEndPos_[0] - metaData.splitStartPos_[0]};
         protoMeta.set_prompt_lens(partialPromtLens.data(), sizeof(int64_t));
-        protoMeta.set_prompt_token_ids(
-            metaData.tokenIds_.data() + metaData.splitStartPos_[0],
-            (metaData.splitEndPos_[0] - metaData.splitStartPos_[0]) * sizeof(TokenId)
-        );
+        protoMeta.set_prompt_token_ids(metaData.tokenIds_.data() + metaData.splitStartPos_[0],
+                                       (metaData.splitEndPos_[0] - metaData.splitStartPos_[0]) * sizeof(TokenId));
     }
 
     // ChunkedPrefill下prefill和decode都需要computed_block，以保证混合batch在TextGenerator中维度完整
@@ -93,8 +90,7 @@ void ConstructExecuteRequest::ConstructChunkedPrefillParam(const SequenceGroupMe
 }
 
 void ConstructExecuteRequest::ConstructPrefillData(const SequenceGroupMetaData &metaData,
-                                                   model_execute_data::SequenceGroupMetadata &protoMeta)
-{
+                                                   model_execute_data::SequenceGroupMetadata &protoMeta) {
     // 构造prompt token id
     protoMeta.set_prompt_lens(metaData.promptLens_.data(), metaData.promptLens_.size() * sizeof(int64_t));
     protoMeta.set_prompt_token_ids(metaData.tokenIds_.data(), metaData.tokenIds_.size() * sizeof(TokenId));
@@ -108,8 +104,7 @@ void ConstructExecuteRequest::ConstructPrefillData(const SequenceGroupMetaData &
 }
 
 void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &metaData,
-                                                 model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill)
-{
+                                                 model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill) {
     protoMeta.set_request_id(metaData.requestId_);
     protoMeta.set_server_id(metaData.serverid_);
     protoMeta.set_is_prompt(isPrefill);
@@ -130,7 +125,7 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
         const char *ptr = reinterpret_cast<const char *>(mgrBlockIds.data());
         protoMeta.add_block_tables(ptr, bytesLen);
     }
-    
+
     if (metaData.isSp_ or metaData.isCp_) {
         // sp & cp common part
         protoMeta.set_sp_rank_id(metaData.spRankId_);
@@ -149,7 +144,7 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
             protoMeta.add_sp_rank_block_num(blockNum);
         }
     }
-    
+
     protoMeta.add_stop(metaData.samplingParams_->stopStrings);
     for (TokenId stopTokenId : metaData.samplingParams_->stopTokenIds) {
         protoMeta.add_stop_token_ids(stopTokenId);
@@ -205,21 +200,18 @@ void ConstructExecuteRequest::ConstructProtoMeta(const SequenceGroupMetaData &me
     }
 
     // beamsearch叠加chunkedprefill时对于非最后一个chunk需要去除beam参数
-    if (metaData.samplingParams_ != nullptr &&
-        !metaData.isReqLastChunk_.empty() &&
-        metaData.samplingParams_->useBeamsearch &&
-        !metaData.isReqLastChunk_[0] &&
-        sampleParams != nullptr) {
+    if (metaData.samplingParams_ != nullptr && !metaData.isReqLastChunk_.empty() &&
+        metaData.samplingParams_->useBeamsearch && !metaData.isReqLastChunk_[0] && sampleParams != nullptr) {
         ClearBeamParam4ChunkedPrefill(*sampleParams, protoMeta);
     }
 }
 
 void ConstructExecuteRequest::LwdConstructCloudProtoMeta(const SequenceGroupMetaData &metaData,
-    model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill)
-{
-    auto* lwdMeta = protoMeta.mutable_lwd_cloud_metadata();
+                                                         model_execute_data::SequenceGroupMetadata &protoMeta,
+                                                         bool isPrefill) {
+    auto *lwdMeta = protoMeta.mutable_lwd_cloud_metadata();
     lwdMeta->set_lwd_cloud_block_tables(metaData.lwdCloudBlockIds_.data(),
-        metaData.lwdCloudBlockIds_.size() * sizeof(BlockId));
+                                        metaData.lwdCloudBlockIds_.size() * sizeof(BlockId));
     if (metaData.isSp_ || metaData.isCp_) {
         lwdMeta->set_lwd_cloud_sp_rank_id(metaData.lwdCloudSpRankId_);
         lwdMeta->set_lwd_cloud_append_block_rank_id(metaData.lwdCloudAppendBlockRankId_);
@@ -233,8 +225,7 @@ void ConstructExecuteRequest::LwdConstructCloudProtoMeta(const SequenceGroupMeta
 }
 
 void ConstructExecuteRequest::ClearBeamParam4ChunkedPrefill(model_execute_data::SamplingParams &sampleParams,
-                                                            model_execute_data::SequenceGroupMetadata &protoMeta)
-{
+                                                            model_execute_data::SequenceGroupMetadata &protoMeta) {
     // beamsearch叠加chunkedprefill时，对非最后一个chunk的prefill请求不能扩充为n个序列
     sampleParams.set_use_beam_search(false);
     sampleParams.set_best_of(1);
@@ -242,21 +233,26 @@ void ConstructExecuteRequest::ClearBeamParam4ChunkedPrefill(model_execute_data::
     protoMeta.clear_reserved_seq_ids();
 }
 
-model_execute_data::ForwardType ConstructExecuteRequest::ConvertToProtoForwardType(ForwardMode fMode)
-{
+model_execute_data::ForwardType ConstructExecuteRequest::ConvertToProtoForwardType(ForwardMode fMode) {
     switch (fMode) {
-        case ForwardMode::PREFILL: return model_execute_data::ForwardType::PREFILL;
-        case ForwardMode::DECODE: return model_execute_data::ForwardType::DECODE;
-        case ForwardMode::EXTEND: return model_execute_data::ForwardType::EXTEND;
-        case ForwardMode::MIXED: return model_execute_data::ForwardType::MIXED;
-        case ForwardMode::DUMMY: return model_execute_data::ForwardType::DUMMY;
-        default: throw std::runtime_error("Not support ForwardMode");
+        case ForwardMode::PREFILL:
+            return model_execute_data::ForwardType::PREFILL;
+        case ForwardMode::DECODE:
+            return model_execute_data::ForwardType::DECODE;
+        case ForwardMode::EXTEND:
+            return model_execute_data::ForwardType::EXTEND;
+        case ForwardMode::MIXED:
+            return model_execute_data::ForwardType::MIXED;
+        case ForwardMode::DUMMY:
+            return model_execute_data::ForwardType::DUMMY;
+        default:
+            throw std::runtime_error("Not support ForwardMode");
     }
 }
 
 void ConstructExecuteRequest::ConstructExecuteModelRequest(ExecuteModelRequestPtr &modelRequest,
-    SequenceGroupMetaDatas &metadatas, SchedulerOutputs &scOut, size_t dpRankId)
-{
+                                                           SequenceGroupMetaDatas &metadatas, SchedulerOutputs &scOut,
+                                                           size_t dpRankId) {
     // construct proto metadata
     bool isPrefill = scOut.forwardMode_ == ForwardMode::PREFILL;
     for (const SequenceGroupMetaData &metadata : metadatas.metaList) {
@@ -301,13 +297,12 @@ void ConstructExecuteRequest::ConstructExecuteModelRequest(ExecuteModelRequestPt
     }
 }
 
-PullKVRequestPtr ConstructExecuteRequest::ConstructPullKVRequest(SequenceGroupMetaDatas &seqGroupMetadata)
-{
+PullKVRequestPtr ConstructExecuteRequest::ConstructPullKVRequest(SequenceGroupMetaDatas &seqGroupMetadata) {
     PullKVRequestPtr request = std::make_unique<model_execute_data::PullKVRequest>();
     for (auto &metadata : seqGroupMetadata.metaList) {
         auto *info = request->add_pull_kv_infos();
 
-        for (const auto& blockIds : metadata.blockIds_) {
+        for (const auto &blockIds : metadata.blockIds_) {
             const size_t bytesLen = blockIds.size() * sizeof(BlockId);
             if (bytesLen == 0) {
                 info->add_dst_block_tables("");
@@ -317,7 +312,7 @@ PullKVRequestPtr ConstructExecuteRequest::ConstructPullKVRequest(SequenceGroupMe
             info->add_dst_block_tables(ptr, bytesLen);
         }
 
-        for (const auto& blockIds : metadata.srcBlockIds_) {
+        for (const auto &blockIds : metadata.srcBlockIds_) {
             const size_t bytesLen = blockIds.size() * sizeof(BlockId);
             if (bytesLen == 0) {
                 info->add_src_block_tables("");
@@ -335,4 +330,4 @@ PullKVRequestPtr ConstructExecuteRequest::ConstructPullKVRequest(SequenceGroupMe
 
     return request;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

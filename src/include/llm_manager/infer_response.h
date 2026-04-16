@@ -12,9 +12,9 @@
 
 #ifndef LLM_MANAGER_UTILS_INFER_RESPONSE_H
 #define LLM_MANAGER_UTILS_INFER_RESPONSE_H
-#include "status.h"
 #include "infer_request_id.h"
 #include "infer_tensor.h"
+#include "status.h"
 
 namespace mindie_llm {
 // InferResponse GetFlags接口获取到的标志定义
@@ -53,7 +53,7 @@ enum class IbisSchedulerResponseTransferFlagEnum {
 };
 
 class InferResponse {
-public:
+   public:
     explicit InferResponse(const InferRequestId &reqId);
 
     InferResponse() = default;
@@ -72,5 +72,5 @@ public:
 
     virtual uint32_t GetTransferFlag() const = 0;
 };
-}
+}  // namespace mindie_llm
 #endif

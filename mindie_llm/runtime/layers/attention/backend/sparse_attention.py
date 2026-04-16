@@ -32,12 +32,11 @@ from functools import wraps
 import torch
 import torch_npu
 import torch.nn.functional as F
-import torch.distributed as torch_dist
 import numpy as np
 
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.layers.linear.linear_op import maybe_all_gather_and_maybe_unpad
-from mindie_llm.runtime.utils.distributed.communication_op import all_gather, gather_tensor, allgather_and_reorder
+from mindie_llm.runtime.utils.distributed.communication_op import gather_tensor, allgather_and_reorder
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
 
 from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext, get_forward_context
@@ -55,6 +54,7 @@ def run_once(f):
         result = f(self, *args, **kwargs)
         setattr(self, f.__name__, lambda *a, **k: None)
         return result
+
     return wrapper
 
 
@@ -84,8 +84,8 @@ def transdata(nd_mat, block_size: tuple = (16, 16)):
 
 
 def trans_rope_weight(weight, rope_dim):
-    weight_1 = weight[..., -rope_dim:: 2, :].contiguous()
-    weight_2 = weight[..., -rope_dim + 1:: 2, :].contiguous()
+    weight_1 = weight[..., -rope_dim::2, :].contiguous()
+    weight_2 = weight[..., -rope_dim + 1 :: 2, :].contiguous()
     weight[..., -rope_dim:, :] = torch.cat([weight_1, weight_2], dim=-2)
 
     return weight.contiguous()
@@ -133,17 +133,17 @@ def prepare_cp_prefill_inputs(cp_size, input_ids, position_ids, input_lengths_cu
         gather_idx_per_chunk = [[] for _ in range(cp_size * 2)]
         for cp_rank_id in range(cp_size):  # Traverse the chunks of the current request on each cp_rank.
             rank_offset = cp_rank_id * input_ids.size(0)
-            gather_idx_per_chunk[cp_rank_id] = \
-                [rank_offset + req_offset + idx for idx in range(req_chunk_len)]
-            gather_idx_per_chunk[cp_size * 2 - 1 - cp_rank_id] = \
-                [rank_offset + req_offset + idx for idx in range(req_chunk_len, req_chunk_len * 2)]
+            gather_idx_per_chunk[cp_rank_id] = [rank_offset + req_offset + idx for idx in range(req_chunk_len)]
+            gather_idx_per_chunk[cp_size * 2 - 1 - cp_rank_id] = [
+                rank_offset + req_offset + idx for idx in range(req_chunk_len, req_chunk_len * 2)
+            ]
         cp_kv_recover_idx.extend(np.array(gather_idx_per_chunk).flatten().tolist())
         req_offset += req_chunk_len * 2
     cp_input_dict["cp_kv_recover_idx"] = torch.tensor(cp_kv_recover_idx, dtype=torch.int32).npu()
-    
+
     input_lengths_cumsum_cp_prev = torch.zeros((len(input_lengths_cumsum)), dtype=torch.int32).npu()
     input_lengths_cumsum_cp_next = torch.zeros((len(input_lengths_cumsum)), dtype=torch.int32).npu()
-    
+
     offset = 0
     for i, _ in enumerate(input_lengths_cumsum):
         input_lengths_cumsum_cp_prev[i] = offset + (input_lengths_cumsum[i] - offset) // 2
@@ -159,14 +159,16 @@ def prepare_cp_prefill_inputs(cp_size, input_ids, position_ids, input_lengths_cu
     for i, _ in enumerate(input_lengths):
         k_gather_index_prev.extend(list(range(k_offset, actual_seq_lengths_kv_cp_prev[i] + k_offset)))
         k_gather_index_next.extend(list(range(k_offset, actual_seq_lengths_kv_cp_next[i] + k_offset)))
-        k_offset += (input_lengths[i] * cp_size)
-    cp_input_dict['k_gather_index'] = (torch.tensor(k_gather_index_prev, dtype=torch.int32).npu(), \
-                                        torch.tensor(k_gather_index_next, dtype=torch.int32).npu())
+        k_offset += input_lengths[i] * cp_size
+    cp_input_dict["k_gather_index"] = (
+        torch.tensor(k_gather_index_prev, dtype=torch.int32).npu(),
+        torch.tensor(k_gather_index_next, dtype=torch.int32).npu(),
+    )
 
     actual_seq_lengths_kv_cp_prev = torch.cumsum(actual_seq_lengths_kv_cp_prev, dim=0, dtype=torch.int32)
     actual_seq_lengths_kv_cp_next = torch.cumsum(actual_seq_lengths_kv_cp_next, dim=0, dtype=torch.int32)
-    cp_input_dict['actual_seq_lengths_key'] = (actual_seq_lengths_kv_cp_prev, actual_seq_lengths_kv_cp_next)
-    cp_input_dict['actual_seq_lengths_query'] = (input_lengths_cumsum // 2, input_lengths_cumsum // 2)
+    cp_input_dict["actual_seq_lengths_key"] = (actual_seq_lengths_kv_cp_prev, actual_seq_lengths_kv_cp_next)
+    cp_input_dict["actual_seq_lengths_query"] = (input_lengths_cumsum // 2, input_lengths_cumsum // 2)
 
     return cp_input_dict
 
@@ -180,7 +182,6 @@ def get_speculative_reqs_padding_length(num_tokens, num_actual_tokens):
 
 
 class SfaBackend(AttentionBackend):
-
     @staticmethod
     def get_name() -> str:
         return "SPARSE_FUSION_ATTENTION"
@@ -188,11 +189,11 @@ class SfaBackend(AttentionBackend):
     @staticmethod
     def get_impl_cls() -> Type["SfaBackendImpl"]:
         return SfaBackendImpl
-    
+
     @staticmethod
     def get_builder_cls():
         return SfaMetadataBuilder
-    
+
 
 @dataclass
 class SfaMetadata(AttentionMetadata):
@@ -209,8 +210,11 @@ class SfaMetadata(AttentionMetadata):
     def from_model_input(model_inputs, mask, num_speculative_tokens=0):
         if model_inputs.is_prefill:
             q_lens = getattr(model_inputs, "q_lens", None)
-            actual_seq_lengths_query = torch.tensor(model_inputs.context_length, dtype=torch.int32) \
-                if q_lens is None else torch.tensor(q_lens, dtype=torch.int32)
+            actual_seq_lengths_query = (
+                torch.tensor(model_inputs.context_length, dtype=torch.int32)
+                if q_lens is None
+                else torch.tensor(q_lens, dtype=torch.int32)
+            )
         else:
             actual_seq_lengths_query = (
                 torch.tensor(model_inputs.q_lens, dtype=torch.int32)
@@ -219,7 +223,7 @@ class SfaMetadata(AttentionMetadata):
             )
         actual_seq_lengths_query = torch.cumsum(actual_seq_lengths_query, dim=0, dtype=torch.int32)
         actual_seq_lengths_kv = torch.tensor(model_inputs.context_length, dtype=torch.int32)
-        
+
         cp_size = get_parallel_info_manager().attn_cp.group_size
         cp_input_dict = None
         if cp_size > 1 and model_inputs.is_prefill:
@@ -228,7 +232,7 @@ class SfaMetadata(AttentionMetadata):
                 model_inputs.input_ids,
                 model_inputs.position_ids,
                 actual_seq_lengths_query,
-                actual_seq_lengths_kv
+                actual_seq_lengths_kv,
             )
 
         return SfaMetadata(
@@ -241,14 +245,15 @@ class SfaMetadata(AttentionMetadata):
             actual_seq_lengths_query=actual_seq_lengths_query,
             num_speculative_tokens=num_speculative_tokens,
             cp_input_dict=cp_input_dict,
-            num_actual_tokens=len(model_inputs.input_ids)
+            num_actual_tokens=len(model_inputs.input_ids),
         )
 
     @staticmethod
     def register_buffer(max_num_token, device, max_block_per_seq):
         input_buffer.register("seq_lens", torch.zeros(max_num_token, dtype=torch.int32, device=device))
-        input_buffer.register("block_tables", 
-                              torch.zeros((max_num_token, max_block_per_seq), dtype=torch.int32, device=device))
+        input_buffer.register(
+            "block_tables", torch.zeros((max_num_token, max_block_per_seq), dtype=torch.int32, device=device)
+        )
         input_buffer.register("slot_mapping", -torch.ones(max_num_token, dtype=torch.int32, device=device))
 
         input_buffer.register("actual_seq_lengths_kv", torch.zeros(max_num_token, dtype=torch.int32, device=device))
@@ -269,12 +274,12 @@ class SfaMetadata(AttentionMetadata):
         num_padded_tokens = self.num_tokens + (tp_size - self.num_tokens % tp_size) % tp_size
         unit_size = num_padded_tokens // tp_size
         all_mask = [1] * self.num_actual_tokens + [0] * (num_padded_tokens - self.num_actual_tokens)
-        self.mc2_mask = torch.tensor(all_mask[unit_size * tp_rank:unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
+        self.mc2_mask = torch.tensor(all_mask[unit_size * tp_rank : unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
 
     def copy(self, num_actual_tokens, num_tokens):
         # NOTE: only D2D operation is allowed, should be refactored later
-        max_len = self.seq_lens_list.max()
-        max_seq_pages = (max_len + 128 - 1) // 128
+        # only D2D operation is allowed, should be refactored later. max_len = self.seq_lens_list.max()
+        # only D2D operation is allowed, should be refactored later. max_seq_pages = (max_len + 128 - 1) // 128
         num_reqs = num_actual_tokens // (self.num_speculative_tokens + 1)
 
         input_buffer_slot_mapping = input_buffer.get("slot_mapping")
@@ -282,13 +287,13 @@ class SfaMetadata(AttentionMetadata):
         input_buffer_slot_mapping[:num_actual_tokens].copy_(self.slot_mapping[:num_actual_tokens])
         self.slot_mapping = input_buffer_slot_mapping[:num_tokens]
 
-        actual_len, last_req_tokens = get_speculative_reqs_padding_length(num_tokens=num_tokens,
-                                                                    num_actual_tokens=self.num_speculative_tokens + 1)
-        reqs_padding_length = actual_len - self.actual_seq_lengths_kv.shape[0]
-        
+        actual_len, last_req_tokens = get_speculative_reqs_padding_length(
+            num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+        )
+
         input_buffer_seq_lens = input_buffer.get("seq_lens")
         input_buffer_seq_lens.fill_(0)
-        input_buffer_seq_lens[:self.seq_lens.shape[0]].copy_(self.seq_lens)
+        input_buffer_seq_lens[: self.seq_lens.shape[0]].copy_(self.seq_lens)
         self.seq_lens = input_buffer_seq_lens[:actual_len]
 
         if actual_len > num_actual_tokens:
@@ -296,22 +301,24 @@ class SfaMetadata(AttentionMetadata):
 
         input_buffer_actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")
         input_buffer_actual_seq_lengths_kv.fill_(self.num_speculative_tokens + 1)
-        input_buffer_actual_seq_lengths_kv[:self.actual_seq_lengths_kv.shape[-1]].copy_(
-            self.actual_seq_lengths_kv[:self.actual_seq_lengths_kv.shape[-1]])
+        input_buffer_actual_seq_lengths_kv[: self.actual_seq_lengths_kv.shape[-1]].copy_(
+            self.actual_seq_lengths_kv[: self.actual_seq_lengths_kv.shape[-1]]
+        )
         self.actual_seq_lengths_kv = input_buffer_actual_seq_lengths_kv[:actual_len]
         if last_req_tokens > 0:
             self.actual_seq_lengths_kv[-1] = last_req_tokens
 
         input_buffer_actual_seq_lengths_query = input_buffer.get("actual_seq_lengths_query")
-        input_buffer_actual_seq_lengths_query[:self.actual_seq_lengths_query.shape[-1]].copy_(
-            self.actual_seq_lengths_query[:self.actual_seq_lengths_query.shape[-1]])
+        input_buffer_actual_seq_lengths_query[: self.actual_seq_lengths_query.shape[-1]].copy_(
+            self.actual_seq_lengths_query[: self.actual_seq_lengths_query.shape[-1]]
+        )
         self.actual_seq_lengths_query = input_buffer_actual_seq_lengths_query[:actual_len]
         if last_req_tokens > 0:
             self.actual_seq_lengths_query[-1] = self.actual_seq_lengths_query[-2] + last_req_tokens
 
         input_buffer_block_tables = input_buffer.get("block_tables")
         input_buffer_block_tables.fill_(0)
-        input_buffer_block_tables[:num_reqs, :self.block_tables.shape[-1]].copy_(self.block_tables)
+        input_buffer_block_tables[:num_reqs, : self.block_tables.shape[-1]].copy_(self.block_tables)
         self.block_tables = input_buffer_block_tables[:actual_len, :]
 
         unit_size = len(self.mc2_mask)
@@ -321,8 +328,9 @@ class SfaMetadata(AttentionMetadata):
 
     def prepare_dummy_input(self, num_tokens):
         num_actual_tokens = self.num_speculative_tokens + 1
-        reqs_padding_length, _ = get_speculative_reqs_padding_length(num_tokens=num_tokens,
-                                                                    num_actual_tokens=self.num_speculative_tokens + 1)
+        reqs_padding_length, _ = get_speculative_reqs_padding_length(
+            num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+        )
         self.seq_lens = self.seq_lens[:reqs_padding_length]
         self.block_tables = self.block_tables[:reqs_padding_length, :]
         self.actual_seq_lengths_kv = input_buffer.get("actual_seq_lengths_kv")[:reqs_padding_length]
@@ -331,7 +339,7 @@ class SfaMetadata(AttentionMetadata):
             reqs_padding_length * num_actual_tokens + 1,
             num_actual_tokens,
             dtype=torch.int32,
-            device=self.seq_lens.device
+            device=self.seq_lens.device,
         )
         input_buffer.get("actual_seq_lengths_query")[:reqs_padding_length].copy_(actual_seq_lengths_query)
         self.actual_seq_lengths_query = input_buffer.get("actual_seq_lengths_query")[:reqs_padding_length]
@@ -351,8 +359,9 @@ class SfaMetadataBuilder:
             position_ids = input_metadata["position_ids"]
             actual_seq_lengths_query = input_metadata["actual_seq_lengths_query"]
             actual_seq_lengths_kv = input_metadata["actual_seq_lengths_kv"]
-            cp_input_dict = prepare_cp_prefill_inputs(cp_size, input_ids, position_ids, 
-                                                    actual_seq_lengths_query, actual_seq_lengths_kv)
+            cp_input_dict = prepare_cp_prefill_inputs(
+                cp_size, input_ids, position_ids, actual_seq_lengths_query, actual_seq_lengths_kv
+            )
 
         attn_metadata = SfaMetadata(
             seq_lens=common_attn_metadata.seq_lens,
@@ -362,7 +371,7 @@ class SfaMetadataBuilder:
             attn_mask=common_attn_metadata.attn_mask,
             actual_seq_lengths_kv=input_metadata["actual_seq_lengths_kv"],
             actual_seq_lengths_query=input_metadata["actual_seq_lengths_query"],
-            cp_input_dict=cp_input_dict
+            cp_input_dict=cp_input_dict,
         )
         return attn_metadata
 
@@ -434,55 +443,46 @@ class SfaBackendImpl(SelectAttentionImpl):
         self.kv_cache = None
         self.pe_cache = None
         self.index_cache = None
-        self.block_size = 128   # NOTE: currently hard-coding.
+        self.block_size = 128  # NOTE: currently hard-coding.
         self.prefix = prefix
         self.parallel_info = get_parallel_info_manager()
         self.cp_size = self.parallel_info.attn_cp.group_size
         self.check_parallel_info()
 
         # MLA Args
-        self.q_lora_rank = kwargs['q_lora_rank']
-        self.kv_lora_rank = kwargs['kv_lora_rank']
-        self.qk_nope_head_dim = kwargs['qk_nope_head_dim']
-        self.qk_rope_head_dim = kwargs['qk_rope_head_dim']
-        self.qk_head_dim = kwargs['qk_head_dim']
-        self.v_head_dim = kwargs['v_head_dim']
-        self.num_heads_per_rank = kwargs['num_heads_per_rank']
-        self.softmax_scale = kwargs['softmax_scale']
-        self.q_proj = kwargs['q_proj']
+        self.q_lora_rank = kwargs["q_lora_rank"]
+        self.kv_lora_rank = kwargs["kv_lora_rank"]
+        self.qk_nope_head_dim = kwargs["qk_nope_head_dim"]
+        self.qk_rope_head_dim = kwargs["qk_rope_head_dim"]
+        self.qk_head_dim = kwargs["qk_head_dim"]
+        self.v_head_dim = kwargs["v_head_dim"]
+        self.num_heads_per_rank = kwargs["num_heads_per_rank"]
+        self.softmax_scale = kwargs["softmax_scale"]
+        self.q_proj = kwargs["q_proj"]
         self.q_a_proj, self.q_a_layernorm, self.q_b_proj = self.q_proj
-        self.kv_a_proj_with_mqa = kwargs['kv_a_proj_with_mqa']
-        self.kv_a_layernorm = kwargs['kv_a_layernorm']
-        self.kv_b_proj = kwargs['kv_b_proj']
-        self.o_proj = kwargs['o_proj']
-        self.indexer = kwargs['indexer']
+        self.kv_a_proj_with_mqa = kwargs["kv_a_proj_with_mqa"]
+        self.kv_a_layernorm = kwargs["kv_a_layernorm"]
+        self.kv_b_proj = kwargs["kv_b_proj"]
+        self.o_proj = kwargs["o_proj"]
+        self.indexer = kwargs["indexer"]
 
-        self.enable_mlapo = kwargs['enable_mlapo']
+        self.enable_mlapo = kwargs["enable_mlapo"]
         if self.enable_mlapo:
-            from mindie_llm.runtime.ops import mie_ops
-        self.input_layernorm = kwargs.get('input_layernorm', None)
+            pass
+        self.input_layernorm = kwargs.get("input_layernorm", None)
         self.mlapo_weight_pack = MlapoWeightPack()
 
         self.kv_b_proj_w_k = torch.empty(
-            self.num_heads_per_rank,
-            self.qk_nope_head_dim,
-            self.kv_lora_rank,
-            dtype=self.kv_b_proj.weight.dtype
+            self.num_heads_per_rank, self.qk_nope_head_dim, self.kv_lora_rank, dtype=self.kv_b_proj.weight.dtype
         )
         self.kv_b_proj_w_v = torch.empty(
-            self.num_heads_per_rank,
-            self.kv_lora_rank,
-            self.v_head_dim,
-            dtype=self.kv_b_proj.weight.dtype
+            self.num_heads_per_rank, self.kv_lora_rank, self.v_head_dim, dtype=self.kv_b_proj.weight.dtype
         )
 
     @run_once
     def process_weights_after_loading(self):
         kv_b_proj_weight = self.kv_b_proj.weight.data.T
-        expected_shape = (
-                self.kv_lora_rank,
-                self.num_heads_per_rank * (self.qk_nope_head_dim + self.v_head_dim)
-            )
+        expected_shape = (self.kv_lora_rank, self.num_heads_per_rank * (self.qk_nope_head_dim + self.v_head_dim))
         if kv_b_proj_weight.shape != expected_shape:
             raise RuntimeError(f"{kv_b_proj_weight.shape} != {expected_shape}")
         kv_b_proj_weight = kv_b_proj_weight.view(
@@ -490,8 +490,7 @@ class SfaBackendImpl(SelectAttentionImpl):
             self.num_heads_per_rank,
             self.qk_nope_head_dim + self.v_head_dim,
         )
-        kv_b_proj_w_k, kv_b_proj_w_v = kv_b_proj_weight.split(
-            [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        kv_b_proj_w_k, kv_b_proj_w_v = kv_b_proj_weight.split([self.qk_nope_head_dim, self.v_head_dim], dim=-1)
         self.kv_b_proj_w_k.copy_(kv_b_proj_w_k.permute(1, 2, 0).contiguous())
         self.kv_b_proj_w_v.copy_(kv_b_proj_w_v.transpose(0, 1).contiguous())
         self._process_weights_for_fused_mlapo()
@@ -514,15 +513,17 @@ class SfaBackendImpl(SelectAttentionImpl):
         kv_a_proj_deq_scl = kv_a_proj_deq_scl.reshape(self.kv_lora_rank + self.qk_rope_head_dim, -1).contiguous()
         kv_a_proj_deq_scl = trans_rope_weight(kv_a_proj_deq_scl, self.qk_rope_head_dim)
         kv_a_proj_deq_scl = kv_a_proj_deq_scl.view(self.kv_lora_rank + self.qk_rope_head_dim).contiguous()
-        self.mlapo_weight_pack.deq_scale_qkv = torch.cat((kv_a_proj_deq_scl,
-                                                          self.q_a_proj.deq_scale.clone()), dim=-1).contiguous()
+        self.mlapo_weight_pack.deq_scale_qkv = torch.cat(
+            (kv_a_proj_deq_scl, self.q_a_proj.deq_scale.clone()), dim=-1
+        ).contiguous()
 
         kv_a_proj_qt_bias = self.kv_a_proj_with_mqa.quant_bias.clone()
         kv_a_proj_qt_bias = kv_a_proj_qt_bias.reshape(self.kv_lora_rank + self.qk_rope_head_dim, -1).contiguous()
         kv_a_proj_qt_bias = trans_rope_weight(kv_a_proj_qt_bias, self.qk_rope_head_dim)
         kv_a_proj_qt_bias = kv_a_proj_qt_bias.view(self.kv_lora_rank + self.qk_rope_head_dim).contiguous()
-        self.mlapo_weight_pack.quant_bias_qkv = torch.cat((kv_a_proj_qt_bias,
-                                                           self.q_a_proj.quant_bias.clone()), dim=-1).contiguous()
+        self.mlapo_weight_pack.quant_bias_qkv = torch.cat(
+            (kv_a_proj_qt_bias, self.q_a_proj.quant_bias.clone()), dim=-1
+        ).contiguous()
 
         wu_q = self.q_b_proj.weight.clone()
         wu_q = wu_q.t().reshape(self.num_heads_per_rank, self.qk_nope_head_dim + self.qk_rope_head_dim, -1)
@@ -534,14 +535,16 @@ class SfaBackendImpl(SelectAttentionImpl):
         qb_deq_scl = self.q_b_proj.deq_scale.clone()
         qb_deq_scl = qb_deq_scl.reshape(self.num_heads_per_rank, self.qk_nope_head_dim + self.qk_rope_head_dim, -1)
         qb_deq_scl = trans_rope_weight(qb_deq_scl, self.qk_rope_head_dim)
-        self.mlapo_weight_pack.qb_deq_scl = qb_deq_scl.reshape(self.num_heads_per_rank * \
-                                                               (self.qk_nope_head_dim + self.qk_rope_head_dim))
+        self.mlapo_weight_pack.qb_deq_scl = qb_deq_scl.reshape(
+            self.num_heads_per_rank * (self.qk_nope_head_dim + self.qk_rope_head_dim)
+        )
 
         qb_qt_bias = self.q_b_proj.quant_bias.data.clone()
         qb_qt_bias = qb_qt_bias.reshape(self.num_heads_per_rank, self.qk_nope_head_dim + self.qk_rope_head_dim, -1)
         qb_qt_bias = trans_rope_weight(qb_qt_bias, self.qk_rope_head_dim)
-        self.mlapo_weight_pack.qb_qt_bias = qb_qt_bias.reshape(self.num_heads_per_rank * \
-                                                               (self.qk_nope_head_dim + self.qk_rope_head_dim))
+        self.mlapo_weight_pack.qb_qt_bias = qb_qt_bias.reshape(
+            self.num_heads_per_rank * (self.qk_nope_head_dim + self.qk_rope_head_dim)
+        )
 
         self.mlapo_weight_pack.gamma0 = self.input_layernorm.weight
         self.mlapo_weight_pack.beta0 = torch.zeros_like(self.mlapo_weight_pack.gamma0)
@@ -552,19 +555,21 @@ class SfaBackendImpl(SelectAttentionImpl):
         self.mlapo_weight_pack.quant_offset0 = self.q_a_proj.input_offset.to(torch.int8)
         self.mlapo_weight_pack.quant_scale1 = 1 / self.q_b_proj.input_scale
         self.mlapo_weight_pack.quant_offset1 = self.q_b_proj.input_offset.to(torch.int8)
-        self.mlapo_weight_pack.ctkv_scale = torch.tensor([1],
-                                                         dtype=self.kv_b_proj.weight.dtype,
-                                                         device=self.kv_b_proj.weight.device)
-        self.mlapo_weight_pack.q_nope_scale = torch.tensor([1],
-                                                           dtype=self.kv_b_proj.weight.dtype,
-                                                           device=self.kv_b_proj.weight.device)
+        self.mlapo_weight_pack.ctkv_scale = torch.tensor(
+            [1], dtype=self.kv_b_proj.weight.dtype, device=self.kv_b_proj.weight.device
+        )
+        self.mlapo_weight_pack.q_nope_scale = torch.tensor(
+            [1], dtype=self.kv_b_proj.weight.dtype, device=self.kv_b_proj.weight.device
+        )
 
     def check_parallel_info(self):
         if self.parallel_info.get("attn_inner_sp").is_enabled():
             raise RuntimeError("Not support sp!")
         if self.parallel_info.get("attn_cp").is_enabled() and self.parallel_info.get("attn_dp").is_enabled():
-            raise RuntimeError(f"Not support cp and dp: cp size is {self.parallel_info.attn_cp.group_size};"
-                                f"dp size is {self.parallel_info.attn_dp.group_size}")
+            raise RuntimeError(
+                f"Not support cp and dp: cp size is {self.parallel_info.attn_cp.group_size};"
+                f"dp size is {self.parallel_info.attn_dp.group_size}"
+            )
 
     def do_npu_cp_balance_indexer(
         self,
@@ -575,14 +580,12 @@ class SfaBackendImpl(SelectAttentionImpl):
     ):
         layout_query = "TND"
         layout_key = "TND"
-        actual_seq_lengths_q = cp_input_dict['actual_seq_lengths_query']
-        actual_seq_lengths_kv = cp_input_dict['actual_seq_lengths_key']
+        actual_seq_lengths_q = cp_input_dict["actual_seq_lengths_query"]
+        actual_seq_lengths_kv = cp_input_dict["actual_seq_lengths_key"]
         q_prev, q_next = torch.split(q, (q.size(0) + 1) // 2, dim=0)
         weights_prev, weights_next = None, None
         if indexer_weights is not None:
-            weights_prev, weights_next = torch.split(
-                indexer_weights, (indexer_weights.size(0) + 1) // 2, dim=0
-            )
+            weights_prev, weights_next = torch.split(indexer_weights, (indexer_weights.size(0) + 1) // 2, dim=0)
             weights_prev = weights_prev.contiguous().view(-1, weights_prev.shape[-1])
             weights_next = weights_next.contiguous().view(-1, weights_next.shape[-1])
 
@@ -591,7 +594,7 @@ class SfaBackendImpl(SelectAttentionImpl):
 
         actual_seq_lengths_q_prev = actual_seq_lengths_q_prev.to(device=q.device, dtype=torch.int32)
         actual_seq_lengths_kv_prev = actual_seq_lengths_kv_prev.to(device=q.device, dtype=torch.int32)
-        k_gather_index_prev, k_gather_index_next = cp_input_dict['k_gather_index']
+        k_gather_index_prev, k_gather_index_next = cp_input_dict["k_gather_index"]
         k_gather_prev = gather_tensor(past_key_states, k_gather_index_prev)
         k_gather_next = gather_tensor(past_key_states, k_gather_index_next)
 
@@ -611,12 +614,8 @@ class SfaBackendImpl(SelectAttentionImpl):
             query=q_next,
             key=k_gather_next,
             weights=weights_next,
-            actual_seq_lengths_query=actual_seq_lengths_q_next.to(
-                device=q.device, dtype=torch.int32
-            ),
-            actual_seq_lengths_key=actual_seq_lengths_kv_next.to(
-                device=q.device, dtype=torch.int32
-            ),
+            actual_seq_lengths_query=actual_seq_lengths_q_next.to(device=q.device, dtype=torch.int32),
+            actual_seq_lengths_key=actual_seq_lengths_kv_next.to(device=q.device, dtype=torch.int32),
             block_table=None,
             layout_query=layout_query,
             layout_key=layout_key,
@@ -627,16 +626,16 @@ class SfaBackendImpl(SelectAttentionImpl):
         index_out = gather_tensor(index_out, cp_input_dict["cp_o_recover_idx"])
         return index_out
 
-
     def indexer_select(
-            self,
-            hidden_state: torch.Tensor,
-            q_c: torch.Tensor,
-            forward_context: ForwardContext, 
-            attn_metadata: SfaMetadata,
-            cos, sin
-        ):
-        q = self.indexer.wq_b(q_c) 
+        self,
+        hidden_state: torch.Tensor,
+        q_c: torch.Tensor,
+        forward_context: ForwardContext,
+        attn_metadata: SfaMetadata,
+        cos,
+        sin,
+    ):
+        q = self.indexer.wq_b(q_c)
         q = q.view(-1, self.indexer.n_heads, self.indexer.head_dim)
         q_pe, q_nope = torch.split(q, [self.qk_rope_head_dim, self.indexer.head_dim - self.qk_rope_head_dim], dim=-1)
 
@@ -649,9 +648,9 @@ class SfaBackendImpl(SelectAttentionImpl):
         k = self.indexer.k_norm(k_proj).unsqueeze(1)
         k_pe, k_nope = torch.split(k, [self.qk_rope_head_dim, self.indexer.head_dim - self.qk_rope_head_dim], dim=-1)
         k_pe = k_pe.unsqueeze(2)
-        k_pe = torch_npu.npu_rotary_mul(k_pe,
-                                        cos.view(-1, 1, 1, self.qk_rope_head_dim),
-                                        sin.view(-1, 1, 1, self.qk_rope_head_dim))
+        k_pe = torch_npu.npu_rotary_mul(
+            k_pe, cos.view(-1, 1, 1, self.qk_rope_head_dim), sin.view(-1, 1, 1, self.qk_rope_head_dim)
+        )
         k_pe = k_pe.squeeze(2)
         k = torch.cat([k_pe, k_nope], dim=-1)
         # cp
@@ -659,16 +658,16 @@ class SfaBackendImpl(SelectAttentionImpl):
         if forward_context.is_prefill and self.cp_size > 1:
             k = allgather_and_reorder(k, self.parallel_info.attn_cp.process_group, cp_input_dict["cp_kv_recover_idx"])
 
-        torch_npu.npu_scatter_nd_update_(self.index_cache.view(-1, k.shape[-1]),
-                                         attn_metadata.slot_mapping.view(-1, 1), 
-                                         k.view(-1, k.shape[-1]))
+        torch_npu.npu_scatter_nd_update_(
+            self.index_cache.view(-1, k.shape[-1]), attn_metadata.slot_mapping.view(-1, 1), k.view(-1, k.shape[-1])
+        )
 
         weights = self.indexer.weights_proj(hidden_state)
         actual_seq_lengths_key = attn_metadata.actual_seq_lengths_kv
         if forward_context.is_prefill and self.cp_size > 1:
             q = gather_tensor(q, cp_input_dict["cp_load_balance_idx"])
             weights = gather_tensor(weights, cp_input_dict["cp_load_balance_idx"])
-            
+
             topk_indices = self.do_npu_cp_balance_indexer(
                 q=q,
                 past_key_states=k,
@@ -686,7 +685,7 @@ class SfaBackendImpl(SelectAttentionImpl):
                 layout_query="TND",
                 layout_key="PA_BSND",
                 sparse_count=2048,
-                sparse_mode=3
+                sparse_mode=3,
             )
 
         return topk_indices
@@ -699,14 +698,12 @@ class SfaBackendImpl(SelectAttentionImpl):
         forward_context: ForwardContext,
         attn_metadata: AttentionMetadata,
         cos,
-        sin
+        sin,
     ):
         decode_q = self.q_b_proj(q_c)
         bsz, _ = decode_q.shape
         decode_q = decode_q.view(bsz, self.num_heads_per_rank, 1, self.qk_head_dim)
-        decode_q_nope, decode_q_pe = torch.split(
-            decode_q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
-        )
+        decode_q_nope, decode_q_pe = torch.split(decode_q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
         decode_q_nope = decode_q_nope.view(-1, self.num_heads_per_rank, self.qk_nope_head_dim).transpose(0, 1)
         decode_q_nope = (
             torch.matmul(decode_q_nope, self.kv_b_proj_w_k)
@@ -720,12 +717,15 @@ class SfaBackendImpl(SelectAttentionImpl):
         cp_kv_recover_idx_key = "cp_kv_recover_idx"
         if forward_context.is_prefill and self.cp_size > 1:
             cp_input_dict = attn_metadata.cp_input_dict
-            kv_no_split = allgather_and_reorder(kv_no_split, self.parallel_info.attn_cp.process_group, \
-                cp_input_dict[cp_kv_recover_idx_key])
-            cos_cache = allgather_and_reorder(cos, self.parallel_info.attn_cp.process_group, \
-                cp_input_dict[cp_kv_recover_idx_key])
-            sin_cache = allgather_and_reorder(sin, self.parallel_info.attn_cp.process_group, \
-                cp_input_dict[cp_kv_recover_idx_key])
+            kv_no_split = allgather_and_reorder(
+                kv_no_split, self.parallel_info.attn_cp.process_group, cp_input_dict[cp_kv_recover_idx_key]
+            )
+            cos_cache = allgather_and_reorder(
+                cos, self.parallel_info.attn_cp.process_group, cp_input_dict[cp_kv_recover_idx_key]
+            )
+            sin_cache = allgather_and_reorder(
+                sin, self.parallel_info.attn_cp.process_group, cp_input_dict[cp_kv_recover_idx_key]
+            )
             is_output_kv = True
 
         decode_k_rope, decode_k_nope, k_rope_a, k_nope_a = torch_npu.npu_kv_rmsnorm_rope_cache(
@@ -738,12 +738,11 @@ class SfaBackendImpl(SelectAttentionImpl):
             self.kv_cache,
             c_kv_scale=None,
             epsilon=self.kv_a_layernorm.variance_epsilon,
-            cache_mode='PA',
-            is_output_kv=is_output_kv)
-        
-        decode_q_pe = torch_npu.npu_interleave_rope(decode_q_pe,
-                                                    cos,
-                                                    sin)
+            cache_mode="PA",
+            is_output_kv=is_output_kv,
+        )
+
+        decode_q_pe = torch_npu.npu_interleave_rope(decode_q_pe, cos, sin)
 
         decode_q_nope = decode_q_nope.view(bsz, self.num_heads_per_rank, self.kv_lora_rank)
         decode_q_pe = decode_q_pe.view(bsz, self.num_heads_per_rank, -1)
@@ -758,10 +757,10 @@ class SfaBackendImpl(SelectAttentionImpl):
             k_pe=decode_k_rope,
             value=decode_k_nope,
             topk_indices=topk_indices,
-            key_states=key_states
+            key_states=key_states,
         )
         return decode_preprocess_res
-        
+
     def sfa_decode_preprocess(
         self,
         hidden_states: torch.Tensor,
@@ -770,14 +769,12 @@ class SfaBackendImpl(SelectAttentionImpl):
         forward_context: ForwardContext,
         attn_metadata: AttentionMetadata,
         cos,
-        sin
+        sin,
     ):
         decode_q = self.q_b_proj(q_c)
         bsz, _ = decode_q.shape
         decode_q = decode_q.view(bsz, self.num_heads_per_rank, 1, self.qk_head_dim)
-        decode_q_nope, decode_q_pe = torch.split(
-            decode_q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1
-        )
+        decode_q_nope, decode_q_pe = torch.split(decode_q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
         decode_q_nope = decode_q_nope.view(-1, self.num_heads_per_rank, self.qk_nope_head_dim).transpose(0, 1)
         decode_q_nope = (
             torch.matmul(decode_q_nope, self.kv_b_proj_w_k)
@@ -795,31 +792,28 @@ class SfaBackendImpl(SelectAttentionImpl):
             self.pe_cache,
             self.kv_cache,
             c_kv_scale=None,
-            epsilon=self.kv_a_layernorm.variance_epsilon, cache_mode='PA')
-        
-        decode_q_pe = torch_npu.npu_interleave_rope(decode_q_pe,
-                                                    cos,
-                                                    sin)
+            epsilon=self.kv_a_layernorm.variance_epsilon,
+            cache_mode="PA",
+        )
+
+        decode_q_pe = torch_npu.npu_interleave_rope(decode_q_pe, cos, sin)
 
         decode_q_nope = decode_q_nope.view(bsz, self.num_heads_per_rank, self.kv_lora_rank)
         decode_q_pe = decode_q_pe.view(bsz, self.num_heads_per_rank, -1)
         topk_indices = self.indexer_select(hidden_states, q_c, forward_context, attn_metadata, cos, sin)
         decode_preprocess_res = DecodeSFAPreprocessResult(
-            q_nope=decode_q_nope,
-            q_pe=decode_q_pe,
-            k_nope=decode_k_nope,
-            k_pe=decode_k_rope,
-            topk_indices=topk_indices
+            q_nope=decode_q_nope, q_pe=decode_q_pe, k_nope=decode_k_nope, k_pe=decode_k_rope, topk_indices=topk_indices
         )
         return decode_preprocess_res
-    
+
     def sfa_decode_mlapo_preprocess(
         self,
         hidden_states: torch.Tensor,
         q_c: torch.Tensor,
         forward_context: ForwardContext,
         attn_metadata: AttentionMetadata,
-        cos, sin
+        cos,
+        sin,
     ):
         bsz, _ = hidden_states.shape
 
@@ -858,22 +852,19 @@ class SfaBackendImpl(SelectAttentionImpl):
 
         topk_indices = self.indexer_select(hidden_states, q_c, forward_context, attn_metadata, cos, sin)
         decode_preprocess_res = DecodeSFAPreprocessResult(
-            q_nope=decode_q_nope,
-            q_pe=decode_q_pe,
-            k_nope=decode_k_nope,
-            k_pe=decode_k_pe,
-            topk_indices=topk_indices
+            q_nope=decode_q_nope, q_pe=decode_q_pe, k_nope=decode_k_nope, k_pe=decode_k_pe, topk_indices=topk_indices
         )
-        
+
         return decode_preprocess_res
 
     def sfa_preprocess(
-        self, 
+        self,
         hidden_states: torch.Tensor,
         kv_cache: Tuple[torch.Tensor],
         forward_context: ForwardContext,
         attn_metadata: AttentionMetadata,
-        cos, sin
+        cos,
+        sin,
     ):
         if self.kv_cache is None or id(self.kv_cache) != id(kv_cache[0]):
             self.kv_cache, self.pe_cache, self.index_cache = kv_cache[0], kv_cache[1], kv_cache[2]
@@ -885,45 +876,29 @@ class SfaBackendImpl(SelectAttentionImpl):
         q_c = self.q_a_layernorm(ckq)
         if not forward_context.is_prefill and self.enable_mlapo:
             decode_preprocess_res = self.sfa_decode_mlapo_preprocess(
-                hidden_states,
-                q_c,
-                forward_context,
-                attn_metadata, cos, sin
+                hidden_states, q_c, forward_context, attn_metadata, cos, sin
             )
             return decode_preprocess_res, prefill_preprocess_res
 
         kv_no_split = self.kv_a_proj_with_mqa(hidden_states)
         if forward_context.is_prefill:
             prefill_preprocess_res = self.sfa_prefill_preprocess(
-                hidden_states,
-                q_c,
-                kv_no_split,
-                forward_context,
-                attn_metadata, cos, sin
+                hidden_states, q_c, kv_no_split, forward_context, attn_metadata, cos, sin
             )
         else:
             decode_preprocess_res = self.sfa_decode_preprocess(
-                hidden_states,
-                q_c,
-                kv_no_split,
-                forward_context,
-                attn_metadata, cos, sin
+                hidden_states, q_c, kv_no_split, forward_context, attn_metadata, cos, sin
             )
 
         return decode_preprocess_res, prefill_preprocess_res
 
-    def do_cp_balance_attn(
-        self,
-        prefill_preprocess_res: PrefillSFAPreprocessResult,
-        attn_metadata: SfaMetadata
-    ):
+    def do_cp_balance_attn(self, prefill_preprocess_res: PrefillSFAPreprocessResult, attn_metadata: SfaMetadata):
         k_nope, k_pe = prefill_preprocess_res.key_states
         q_nope = prefill_preprocess_res.q_nope
         q_pe = prefill_preprocess_res.q_pe
         topk_indices = prefill_preprocess_res.topk_indices
-        actual_seq_qlen = attn_metadata.actual_seq_lengths_query
         cp_input_dict = attn_metadata.cp_input_dict
-        actual_seq_lengths_kv = cp_input_dict['actual_seq_lengths_key']
+        actual_seq_lengths_kv = cp_input_dict["actual_seq_lengths_key"]
         layout_query = "TND"
         layout_kv = "TND"
         cp_load_balance_idx_key = "cp_load_balance_idx"
@@ -941,7 +916,7 @@ class SfaBackendImpl(SelectAttentionImpl):
 
         actual_seq_qlen_prev, actual_seq_qlen_next = cp_input_dict["actual_seq_lengths_query"]
         actual_seq_lengths_kv_prev, actual_seq_lengths_kv_next = actual_seq_lengths_kv
-        k_gather_index_prev, k_gather_index_next = cp_input_dict['k_gather_index']
+        k_gather_index_prev, k_gather_index_next = cp_input_dict["k_gather_index"]
         k_nope_prev = gather_tensor(k_nope, k_gather_index_prev)
         k_nope_next = gather_tensor(k_nope, k_gather_index_next)
         k_pe_prev = gather_tensor(k_pe, k_gather_index_prev)
@@ -985,17 +960,9 @@ class SfaBackendImpl(SelectAttentionImpl):
         attn_out = gather_tensor(attn_out, cp_input_dict["cp_o_recover_idx"])
         return attn_out
 
-    def apply_prefill_sfa(
-        self,
-        prefill_preprocess_res: PrefillSFAPreprocessResult,
-        attn_metadata: SfaMetadata
-    ):
+    def apply_prefill_sfa(self, prefill_preprocess_res: PrefillSFAPreprocessResult, attn_metadata: SfaMetadata):
         if self.cp_size > 1:
-            
-            output = self.do_cp_balance_attn(
-                prefill_preprocess_res,
-                attn_metadata
-            )
+            output = self.do_cp_balance_attn(prefill_preprocess_res, attn_metadata)
         else:
             output, _, __ = torch_npu.npu_sparse_flash_attention(
                 query=prefill_preprocess_res.q_nope,
@@ -1015,12 +982,8 @@ class SfaBackendImpl(SelectAttentionImpl):
                 attention_mode=2,
             )
         return self.sfa_postprocess(output)
-    
-    def apply_decode_sfa(
-        self,
-        prefill_preprocess_res: DecodeSFAPreprocessResult,
-        attn_metadata: SfaMetadata
-    ):
+
+    def apply_decode_sfa(self, prefill_preprocess_res: DecodeSFAPreprocessResult, attn_metadata: SfaMetadata):
         output, _, _ = torch_npu.npu_sparse_flash_attention(
             query=prefill_preprocess_res.q_nope,
             key=prefill_preprocess_res.k_nope,
@@ -1040,17 +1003,13 @@ class SfaBackendImpl(SelectAttentionImpl):
         )
         output = output.squeeze(1)
         return self.sfa_postprocess(output)
-    
+
     def sfa_postprocess(self, slc_fa_fusion):
         if self.kv_b_proj_w_v.shape[0] * self.kv_b_proj_w_v.shape[1] < 65536:
             slc_fa_fusion = slc_fa_fusion.view(-1, self.num_heads_per_rank, self.kv_lora_rank)
             attn_output = torch_npu.npu_transpose_batchmatmul(
-                slc_fa_fusion,
-                self.kv_b_proj_w_v,
-                perm_x1=[1, 0, 2],
-                perm_x2=[0, 1, 2],
-                perm_y=[1, 0, 2]
-                )
+                slc_fa_fusion, self.kv_b_proj_w_v, perm_x1=[1, 0, 2], perm_x2=[0, 1, 2], perm_y=[1, 0, 2]
+            )
             attn_output = attn_output.reshape(-1, self.num_heads_per_rank * self.v_head_dim)
         else:
             slc_fa_fusion = slc_fa_fusion.view(-1, self.num_heads_per_rank, self.kv_lora_rank).transpose(0, 1)
@@ -1067,7 +1026,7 @@ class SfaBackendImpl(SelectAttentionImpl):
         prefill_preprocess_res,
         decode_preprocess_res,
         forward_context: ForwardContext,
-        attn_metadata: AttentionMetadata
+        attn_metadata: AttentionMetadata,
     ):
         if forward_context.is_prefill:
             return self.apply_prefill_sfa(prefill_preprocess_res, attn_metadata)
@@ -1080,33 +1039,31 @@ class SfaBackendImpl(SelectAttentionImpl):
         hidden_states: torch.Tensor,
         kv_cache: Tuple[torch.Tensor] = None,
         cos=None,
-        sin=None
+        sin=None,
     ) -> torch.Tensor:
-
         forward_context = get_forward_context()
         attn_metadata = forward_context.attn_metadata_dict
         if isinstance(attn_metadata, dict):
             attn_metadata = attn_metadata[layer.prefix]
 
         if forward_context.batch_descriptor.is_flash_comm_enabled:
-            hidden_states = maybe_all_gather_and_maybe_unpad(
-                hidden_states,
-                get_parallel_info_manager().attn_tp
-            )
+            hidden_states = maybe_all_gather_and_maybe_unpad(hidden_states, get_parallel_info_manager().attn_tp)
         decode_preprocess_res, prefill_preprocess_res = self.sfa_preprocess(
             hidden_states=hidden_states,
             kv_cache=kv_cache,
             forward_context=forward_context,
             attn_metadata=attn_metadata,
-            cos=cos, sin=sin)
+            cos=cos,
+            sin=sin,
+        )
         if not forward_context.is_prefill and weight_prefetcher.is_prefetch_enabled():
             weight_prefetcher.prefetch_weight_preprocess(self.o_proj.weight, hidden_states)
 
         o_proj_input = self.forward_impl(
-                prefill_preprocess_res=prefill_preprocess_res,
-                decode_preprocess_res=decode_preprocess_res,
-                forward_context=forward_context,
-                attn_metadata=attn_metadata,
-            )
+            prefill_preprocess_res=prefill_preprocess_res,
+            decode_preprocess_res=decode_preprocess_res,
+            forward_context=forward_context,
+            attn_metadata=attn_metadata,
+        )
         output = self.mla_epilog(o_proj_input)
         return output

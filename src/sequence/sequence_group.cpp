@@ -10,16 +10,16 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "sequence_group.h"
+
 #include <stdexcept>
+
 #include "src/engine/lora_manager.h"
 
 namespace mindie_llm {
 SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSPtr> &tSeqs)
-    : requestId(tRequestId), seqs_(tSeqs)
-{
+    : requestId(tRequestId), seqs_(tSeqs) {
     if (seqs_.empty()) {
-        throw std::invalid_argument(
-            "Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
+        throw std::invalid_argument("Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
     }
     arriveTime = std::chrono::high_resolution_clock::now();
     firstSeq = seqs_[0];
@@ -27,11 +27,9 @@ SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSP
 
 SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSPtr> &tSeqs,
                              const SamplingParamsSPtr &tSampling)
-    : requestId(tRequestId), seqs_(tSeqs), sampling(tSampling)
-{
+    : requestId(tRequestId), seqs_(tSeqs), sampling(tSampling) {
     if (seqs_.empty()) {
-        throw std::invalid_argument(
-            "Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
+        throw std::invalid_argument("Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
     }
     arriveTime = std::chrono::high_resolution_clock::now();
     firstSeq = seqs_[0];
@@ -40,15 +38,13 @@ SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSP
 SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSPtr> &tSeqs,
                              const SamplingParamsSPtr &tSampling, const std::optional<std::string> &tLoraId,
                              size_t tRankId)
-    : requestId(tRequestId), seqs_(tSeqs), sampling(tSampling), rankId_(tRankId)
-{
+    : requestId(tRequestId), seqs_(tSeqs), sampling(tSampling), rankId_(tRankId) {
     if (seqs_.empty()) {
-        throw std::invalid_argument(
-            "Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
+        throw std::invalid_argument("Cannot create SequenceGroup with empty sequences, requestId = " + requestId);
     }
     arriveTime = std::chrono::high_resolution_clock::now();
     firstSeq = seqs_[0];
-    
+
     auto loraManager = mindie_llm::LoraManager::GetInstance(rankId_);
     if (loraManager && loraManager->ValidateLoraId(tLoraId)) {
         loraId_ = tLoraId;
@@ -57,8 +53,7 @@ SequenceGroup::SequenceGroup(RequestId &tRequestId, const std::vector<SequenceSP
         loraId_ = "None";
     }
 }
-SequenceGroup::~SequenceGroup()
-{
+SequenceGroup::~SequenceGroup() {
     if (loraId_.has_value() && loraId_ != "None") {
         auto loraManager = mindie_llm::LoraManager::GetInstance(rankId_);
         if (loraManager) {
@@ -67,8 +62,7 @@ SequenceGroup::~SequenceGroup()
     }
 }
 
-std::vector<SequenceSPtr> SequenceGroup::GetFirstSequence(const SequenceStatus status)
-{
+std::vector<SequenceSPtr> SequenceGroup::GetFirstSequence(const SequenceStatus status) {
     /* 默认参数，0表示没有传入状态 */
     if (static_cast<int>(status) == 0) {
         return seqs_;
@@ -81,8 +75,7 @@ std::vector<SequenceSPtr> SequenceGroup::GetFirstSequence(const SequenceStatus s
     return {};
 }
 
-std::vector<SequenceSPtr> SequenceGroup::GetSequences(const SequenceStatus status)
-{
+std::vector<SequenceSPtr> SequenceGroup::GetSequences(const SequenceStatus status) {
     if (sampling && sampling->enableParallelSampling) {
         return GetParallelSequences(status);
     }
@@ -92,8 +85,7 @@ std::vector<SequenceSPtr> SequenceGroup::GetSequences(const SequenceStatus statu
 /**
 获取所有的beam search的seqgrp下的所有sequence。status 0 表示获取所有状态
  */
-std::vector<SequenceSPtr> SequenceGroup::GetParallelSequences(const SequenceStatus status) const
-{
+std::vector<SequenceSPtr> SequenceGroup::GetParallelSequences(const SequenceStatus status) const {
     std::vector<SequenceSPtr> seqs;
 
     std::vector<SequenceId> parallelSeqIds = seqId2ParallelSeqGroup_.KeySet();
@@ -109,8 +101,7 @@ std::vector<SequenceSPtr> SequenceGroup::GetParallelSequences(const SequenceStat
     return seqs;
 }
 
-std::vector<SequenceGroupSPtr> SequenceGroup::GetParallelSeqGrp()
-{
+std::vector<SequenceGroupSPtr> SequenceGroup::GetParallelSeqGrp() {
     std::vector<SequenceGroupSPtr> parallelSeqGrp;
     std::vector<SequenceId> parallelSeqIds = seqId2ParallelSeqGroup_.KeySet();
     for (auto seqId : parallelSeqIds) {
@@ -122,8 +113,7 @@ std::vector<SequenceGroupSPtr> SequenceGroup::GetParallelSeqGrp()
     return parallelSeqGrp;
 }
 
-void SequenceGroup::UpdateNumComputedTokens(size_t numNewComputedTokens)
-{
+void SequenceGroup::UpdateNumComputedTokens(size_t numNewComputedTokens) {
     for (auto seq : seqs_) {
         if (!seq->IsFinished()) {
             seq->data_.UpdateNumComputedTokens(numNewComputedTokens);
@@ -131,8 +121,7 @@ void SequenceGroup::UpdateNumComputedTokens(size_t numNewComputedTokens)
     }
 }
 
-int SequenceGroup::GetMaxNumRunningSeqs() const
-{
+int SequenceGroup::GetMaxNumRunningSeqs() const {
     if (sampling && !sampling->enableParallelSampling) {
         return firstSeq->IsFinished() ? 0 : 1;
     }
@@ -156,8 +145,7 @@ bool SequenceGroup::IsSimulateRequest() const { return firstSeq->seqId_ == SIMUL
 
 ScheduledSequenceGroup::ScheduledSequenceGroup(const SequenceGroupSPtr &tSeqGroup, const size_t tTokenChunkSize,
                                                bool enableChunked)
-    : seqGroup_(tSeqGroup), tokenChunkSize_(tTokenChunkSize)
-{
+    : seqGroup_(tSeqGroup), tokenChunkSize_(tTokenChunkSize) {
     if (enableChunked) {
         SequenceSPtr seq = seqGroup_->firstSeq;
         if (seq->GetNumComputedTokens() + tokenChunkSize_ >= seq->data_.promptTokenIds.size()) {
@@ -168,11 +156,10 @@ ScheduledSequenceGroup::ScheduledSequenceGroup(const SequenceGroupSPtr &tSeqGrou
     }
 }
 
-bool SchedulerOutputs::IsEmpty()
-{
+bool SchedulerOutputs::IsEmpty() {
     return scheduledSeqGroups_.empty() && blocksToSwapIn_.empty() && blocksToSwapOut_.empty();
 }
 
 bool SchedulerKVTransferOutput::IsEmpty() { return pullSeqGroups.empty(); }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

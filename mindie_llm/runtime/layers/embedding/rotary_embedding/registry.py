@@ -9,11 +9,10 @@
 # See the Mulan PSL v2 for more details.
 
 from functools import wraps
-from typing import Any, Callable
+from typing import Callable
 from dataclasses import asdict
 
 import torch
-import torch_npu
 
 from mindie_llm.runtime.config.huggingface_config import BaseRopeScaling
 from .base import RotaryEmbedding
@@ -55,14 +54,15 @@ def register_rope_type(rope_type: str) -> Callable:
     Raises:
         ValueError: If the rope_type is already registered.
     """
+
     def decorator(factory_func: Callable) -> Callable:
         if rope_type in _ROPE_REGISTRY:
             raise ValueError(
-                f"RoPE type '{rope_type}' is already registered. "
-                f"Use a different name or unregister the existing one."
+                f"RoPE type '{rope_type}' is already registered. Use a different name or unregister the existing one."
             )
         _ROPE_REGISTRY[rope_type] = factory_func
         return factory_func
+
     return decorator
 
 
@@ -98,7 +98,7 @@ def cached_rope_factory(factory_func: Callable) -> Callable:
         - is_neox_style
         - rope_config parameters (converted to hashable tuple)
         - dtype
-    
+
     Automatically handles:
         - partial_rotary_factor adjustment to rotary_dim
         - Conversion of BaseRopeScaling to hashable format
@@ -111,6 +111,7 @@ def cached_rope_factory(factory_func: Callable) -> Callable:
         Wrapped factory function with integrated caching logic.
 
     """
+
     @wraps(factory_func)
     def wrapper(
         head_size: int,
@@ -122,12 +123,9 @@ def cached_rope_factory(factory_func: Callable) -> Callable:
         rope_config: BaseRopeScaling,
     ) -> RotaryEmbedding:
         # Convert BaseRopeScaling to hashable format for cache key
-        rope_parameters_tuple = {
-            k: tuple(v) if isinstance(v, list) else v
-            for k, v in asdict(rope_config).items()
-        }
+        rope_parameters_tuple = {k: tuple(v) if isinstance(v, list) else v for k, v in asdict(rope_config).items()}
         rope_parameters_args = tuple(rope_parameters_tuple.items())
-        
+
         # Construct composite cache key
         key = (
             head_size,
@@ -137,11 +135,11 @@ def cached_rope_factory(factory_func: Callable) -> Callable:
             rope_parameters_args,
             dtype,
         )
-        
+
         # Return cached instance if available
         if key in _ROPE_DICT:
             return _ROPE_DICT[key]
-        
+
         # Create new instance with appropriate arguments
         if rope_config.rope_type != "default":
             rotary_emb = factory_func(
@@ -163,11 +161,11 @@ def cached_rope_factory(factory_func: Callable) -> Callable:
                 is_neox_style,
                 dtype,
             )
-        
+
         # Cache and return the new instance
         _ROPE_DICT[key] = rotary_emb
         return rotary_emb
-    
+
     return wrapper
 
 

@@ -14,21 +14,22 @@
 #define ROUND_ROBIN_BALANCE_POLICY_H
 
 #include <vector>
+
 #include "ibalance_policy.h"
 
 namespace mindie_llm {
 
 class RoundRobinPolicy : public IBalancePolicy {
-public:
+   public:
     explicit RoundRobinPolicy();
     void SetConstraint(const BalancerConstraintParam &param) override;
     std::vector<std::vector<SequenceGroupSPtr>> Apply(std::vector<SequenceGroupSPtr> &candidates) override;
 
-private:
+   private:
     size_t maxReqNumPerWavePerDP_{0};
     size_t dispatchNum_{0};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

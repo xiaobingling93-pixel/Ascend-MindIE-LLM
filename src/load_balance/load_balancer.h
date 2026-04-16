@@ -9,30 +9,29 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_LOAD_BALANCE_H
 #define MINDIE_LLM_LOAD_BALANCE_H
 
-#include "iload_balancer.h"
-#include "basic_types.h"
-
+#include <boost/asio.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/bind.hpp>
+#include <deque>
 #include <thread>
 #include <vector>
-#include <deque>
-#include <boost/asio/post.hpp>
-#include <boost/asio.hpp>
-#include <boost/bind.hpp>
 
-#include "sequence_group.h"
-#include "concurrent_deque.h"
-#include "llm_engine.h"
 #include "balance_policy/ibalance_policy.h"
+#include "basic_types.h"
+#include "concurrent_deque.h"
+#include "iload_balancer.h"
+#include "llm_engine.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 class LoadBalancer : public ILoadBalancer {
-public:
+   public:
     explicit LoadBalancer(const std::vector<EnginePerDPSPtr> &enginePerDPs, size_t waveNumPerDP = 256,
-                          size_t thresholdPerDP = 1, size_t intervalMs = 1); // every 1ms to dispatch requests
+                          size_t thresholdPerDP = 1, size_t intervalMs = 1);  // every 1ms to dispatch requests
 
     ~LoadBalancer() override;
 
@@ -41,7 +40,7 @@ public:
 
     void Stop() override;
 
-protected:
+   protected:
     void ExecutePeriodicTask(const boost::system::error_code &ec);
 
     void TriggerImmediatelyTask();
@@ -54,22 +53,22 @@ protected:
 
     void DistributeSeqGroups(const std::vector<size_t> &dpRankIds);
 
-private:
+   private:
     std::vector<EnginePerDPSPtr> enginePerDPs_;
 
     BalancePolicyPtr balancePolicyPtr_;
 
     size_t dpSize_;
 
-    size_t waveNumPerDP_; // 每个wave下发的最大seqgroup数量
+    size_t waveNumPerDP_;  // 每个wave下发的最大seqgroup数量
 
-    size_t thresholdPerDP_; // 每个DP可下发SeqGroup的个数超过该阈值，就会触发distribute
+    size_t thresholdPerDP_;  // 每个DP可下发SeqGroup的个数超过该阈值，就会触发distribute
 
-    ConcurrentDeque<SequenceGroupSPtr> seqGroups_; // 存储待分配的SequenceGroup
+    ConcurrentDeque<SequenceGroupSPtr> seqGroups_;  // 存储待分配的SequenceGroup
 
-    std::vector<SequenceGroupSPtr> candidates_; // TBC_待优化PrepCandidates要么全取管理，要么取多少用多少
+    std::vector<SequenceGroupSPtr> candidates_;  // TBC_待优化PrepCandidates要么全取管理，要么取多少用多少
 
-    WaveId waveId_{0}; // 当前wave的ID，用于负载均衡
+    WaveId waveId_{0};  // 当前wave的ID，用于负载均衡
 
     size_t intervalMs_;
 
@@ -79,10 +78,10 @@ private:
 
     boost::asio::steady_timer timer_;
 
-    std::atomic<bool> stop_{false}; // 停止标志
+    std::atomic<bool> stop_{false};  // 停止标志
 
     std::atomic<size_t> lastIntervalTime_{0};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -15,22 +15,19 @@
 #include <stdexcept>
 
 namespace mindie_llm {
-bool CopyOnWriteTracker::IsAppendable(BlockId blockId) const
-{
+bool CopyOnWriteTracker::IsAppendable(BlockId blockId) const {
     RefCount refCount = refCounterSPtr_->GetRefCount(blockId);
 
     return refCount <= 1;
 }
 
-void CopyOnWriteTracker::RecordCow(BlockId srcBlockId, BlockId targetBlockId)
-{
+void CopyOnWriteTracker::RecordCow(BlockId srcBlockId, BlockId targetBlockId) {
     copyOnWrites_.emplace_back(std::make_pair(srcBlockId, targetBlockId));
 }
 
-std::vector<std::pair<BlockId, BlockId>> CopyOnWriteTracker::ClearCows()
-{
+std::vector<std::pair<BlockId, BlockId>> CopyOnWriteTracker::ClearCows() {
     std::vector<std::pair<BlockId, BlockId>> result(copyOnWrites_.begin(), copyOnWrites_.end());
     copyOnWrites_.clear();
     return result;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

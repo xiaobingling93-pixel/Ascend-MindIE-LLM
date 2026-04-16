@@ -11,9 +11,11 @@
  */
 #pragma once
 #include <dlfcn.h>
-#include <unordered_map>
-#include <string>
+
 #include <mutex>
+#include <string>
+#include <unordered_map>
+
 #include "file_utils.h"
 #include "log.h"
 
@@ -33,7 +35,7 @@ namespace mindie_llm {
  * 3. 详细用途链接：https://www.hiascend.com/document/detail/zh/Atlas%20200I%20A2/253RC1/re/api/api_062.html
  */
 class DCMIWrapper {
-public:
+   public:
     static DCMIWrapper& GetInstance();
 
     // 初始化/反初始化
@@ -44,16 +46,14 @@ public:
     void CleanUp();
 
     // 函数获取接口
-    template<typename FuncType>
-    FuncType GetFunction(const std::string& funcName)
-    {
+    template <typename FuncType>
+    FuncType GetFunction(const std::string& funcName) {
         std::lock_guard<std::mutex> lock(mutex_);
 
         if (!initialized_) {
             std::string errorMsg = "DCMI wrapper not initialized";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                errorMsg.c_str());
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                       errorMsg.c_str());
             return nullptr;
         }
 
@@ -62,7 +62,7 @@ public:
 
     bool IsInitialized() const { return initialized_; }
 
-private:
+   private:
     DCMIWrapper();
     ~DCMIWrapper();
 
@@ -70,20 +70,18 @@ private:
     DCMIWrapper& operator=(const DCMIWrapper&) = delete;
 
     // 函数加载器
-    template<typename FuncType>
-    FuncType LoadFunction(const std::string& funcName)
-    {
+    template <typename FuncType>
+    FuncType LoadFunction(const std::string& funcName) {
         if (!handle_) {
             return nullptr;
         }
 
         auto it = funcCache_.find(funcName);
         if (it != funcCache_.end()) {
-            auto result =  reinterpret_cast<FuncType>(it->second);
+            auto result = reinterpret_cast<FuncType>(it->second);
             if (!result) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                    "reinterpret_cast produced null from dlsym result");
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                           "reinterpret_cast produced null from dlsym result");
                 funcCache_.erase(it);
                 return nullptr;
             }
@@ -93,17 +91,15 @@ private:
         void* funcPtr = dlsym(handle_, funcName.c_str());
         if (!funcPtr) {
             std::string errorMsg = std::string("DCMI function ") + funcName + " not found: " + dlerror();
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                errorMsg.c_str());
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                       errorMsg.c_str());
             return nullptr;
         }
         funcCache_[funcName] = funcPtr;
         auto result = reinterpret_cast<FuncType>(funcPtr);
         if (!result) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                "reinterpret_cast produced null from dlsym result");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                       "reinterpret_cast produced null from dlsym result");
             return nullptr;
         }
         return result;
@@ -120,4 +116,4 @@ private:
     // 函数指针缓存
     std::unordered_map<std::string, void*> funcCache_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

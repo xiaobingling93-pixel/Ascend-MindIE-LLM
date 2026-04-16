@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "common_util.h"
-#include "file_utils.h"
-#include "env_util.h"
-#include "log.h"
 #include "base_config_manager.h"
 #include "check_utils.h"
+#include "common_util.h"
+#include "env_util.h"
+#include "file_utils.h"
+#include "log.h"
 #include "safe_io.h"
 
 using Json = nlohmann::json;
@@ -64,8 +64,7 @@ static std::vector<ParamSpec> g_serverParamsConstraint = {
     {"layerwiseDisaggregatedDataPort", "int32_t", false},
     {"layerwiseDisaggregatedCrtlPort", "array", false}};
 
-void ServerConfigManager::InitHttpsConfigFromJson(Json &serveJsonData, bool loadManagementSSL)
-{
+void ServerConfigManager::InitHttpsConfigFromJson(Json &serveJsonData, bool loadManagementSSL) {
     if (serveJsonData.contains("tlsCaPath")) {
         serverConfig_.tlsCaPath = serveJsonData["tlsCaPath"];
     }
@@ -89,8 +88,7 @@ void ServerConfigManager::InitHttpsConfigFromJson(Json &serveJsonData, bool load
     }
 }
 
-void ServerConfigManager::InitDMIHttpsConfigFromJson(Json &serveJsonData)
-{
+void ServerConfigManager::InitDMIHttpsConfigFromJson(Json &serveJsonData) {
     if (serveJsonData.contains("interCommTlsCert")) {
         serverConfig_.interCommTlsCert = serveJsonData["interCommTlsCert"];
     }
@@ -129,8 +127,7 @@ void ServerConfigManager::InitDMIHttpsConfigFromJson(Json &serveJsonData)
     }
 }
 
-void ServerConfigManager::InitHttpsBusinessConfigFromJson(Json &serveJsonData)
-{
+void ServerConfigManager::InitHttpsBusinessConfigFromJson(Json &serveJsonData) {
     if (serveJsonData.contains("tlsCert")) {
         serverConfig_.tlsCert = serveJsonData["tlsCert"];
     }
@@ -166,8 +163,7 @@ void ServerConfigManager::InitHttpsBusinessConfigFromJson(Json &serveJsonData)
     }
 }
 
-void ServerConfigManager::InitHttpsManagementConfigFromJson(Json &serveJsonData)
-{
+void ServerConfigManager::InitHttpsManagementConfigFromJson(Json &serveJsonData) {
     if (serveJsonData.contains("managementTlsCert")) {
         serverConfig_.managementTlsCert = serveJsonData["managementTlsCert"];
     }
@@ -202,8 +198,7 @@ void ServerConfigManager::InitHttpsManagementConfigFromJson(Json &serveJsonData)
     }
 }
 
-void ServerConfigManager::InitLayerwiseDisaggregatedConfigFromJson(Json &serveJsonData)
-{
+void ServerConfigManager::InitLayerwiseDisaggregatedConfigFromJson(Json &serveJsonData) {
     if (serveJsonData.contains("layerwiseDisaggregated")) {
         serverConfig_.layerwiseDisaggregated = serveJsonData["layerwiseDisaggregated"];
     }
@@ -227,8 +222,10 @@ void ServerConfigManager::InitLayerwiseDisaggregatedConfigFromJson(Json &serveJs
     if (serveJsonData.contains("layerwiseDisaggregatedSlaveIpAddress")) {
         auto ret = ParamChecker::CheckJsonArray(serveJsonData["layerwiseDisaggregatedSlaveIpAddress"], "string", "");
         if (!ret) {
-            MINDIE_LLM_LOG_ERROR("layerwiseDisaggregatedSlaveIpAddress format is incorrect, "
-                         "it should be of type string-JsonArray." << std::endl);
+            MINDIE_LLM_LOG_ERROR(
+                "layerwiseDisaggregatedSlaveIpAddress format is incorrect, "
+                "it should be of type string-JsonArray."
+                << std::endl);
             jsonDecodeSuccess_ = false;
             return;
         } else {
@@ -241,8 +238,10 @@ void ServerConfigManager::InitLayerwiseDisaggregatedConfigFromJson(Json &serveJs
     if (serveJsonData.contains("layerwiseDisaggregatedCrtlPort")) {
         auto ret = ParamChecker::CheckJsonArray(serveJsonData["layerwiseDisaggregatedCrtlPort"], "integer", "int32_t");
         if (!ret) {
-            MINDIE_LLM_LOG_ERROR("layerwiseDisaggregatedCrtlPort format is incorrect, "
-                         "it should be of type integer-JsonArray." << std::endl);
+            MINDIE_LLM_LOG_ERROR(
+                "layerwiseDisaggregatedCrtlPort format is incorrect, "
+                "it should be of type integer-JsonArray."
+                << std::endl);
             jsonDecodeSuccess_ = false;
             return;
         } else {
@@ -253,8 +252,7 @@ void ServerConfigManager::InitLayerwiseDisaggregatedConfigFromJson(Json &serveJs
     }
 }
 
-void ServerConfigManager::InitHttpsMetricsConfigFromJson(Json &serveJsonData)
-{
+void ServerConfigManager::InitHttpsMetricsConfigFromJson(Json &serveJsonData) {
     if (serveJsonData.contains("metricsTlsCert")) {
         serverConfig_.metricsTlsCert = serveJsonData["metricsTlsCert"];
     }
@@ -289,8 +287,7 @@ void ServerConfigManager::InitHttpsMetricsConfigFromJson(Json &serveJsonData)
     }
 }
 
-bool ServerConfigManager::InitFromJson()
-{
+bool ServerConfigManager::InitFromJson() {
     Json serverParamsJsonData;
     if (!CheckSystemConfig(jsonPath_, serverParamsJsonData, "ServerConfig")) {
         return false;
@@ -312,30 +309,32 @@ bool ServerConfigManager::InitFromJson()
     serverConfig_.e2eTimeout = serverParamsJsonData["e2eTimeout"];
     serverConfig_.fullTextEnabled = ParamChecker::GetBoolParamValue(serverParamsJsonData, "fullTextEnabled", false);
     serverConfig_.distDPServerEnabled = serverParamsJsonData["distDPServerEnabled"];
-    
+
     LoadOptionalParameters(serverParamsJsonData);
     InitLayerwiseDisaggregatedConfigFromJson(serverParamsJsonData);
     return initFlag;
 }
 
-void ServerConfigManager::LoadOptionalParameters(Json& serverParamsJsonData)
-{
+void ServerConfigManager::LoadOptionalParameters(Json &serverParamsJsonData) {
     if (serverParamsJsonData.contains("maxRequestLength")) {
         serverConfig_.maxRequestLength = serverParamsJsonData["maxRequestLength"];
-        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxRequestLength, 100U,
-                                                                                  1U, "serverConfig.maxRequestLength"));
+        CHECK_CONFIG_VALIDATION(initFlag,
+                                ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxRequestLength, 100U, 1U,
+                                                                         "serverConfig.maxRequestLength"));
     }
     if (serverParamsJsonData.contains("maxJsonDepth")) {
         serverConfig_.maxJsonDepth = serverParamsJsonData["maxJsonDepth"];
-        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxJsonDepth,
-            JSON_DEPTH_LIMIT_MAX, JSON_DEPTH_LIMIT_MIN, "serverConfig.maxJsonDepth"));
+        CHECK_CONFIG_VALIDATION(
+            initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.maxJsonDepth, JSON_DEPTH_LIMIT_MAX,
+                                                               JSON_DEPTH_LIMIT_MIN, "serverConfig.maxJsonDepth"));
         SetJsonDepthLimit(static_cast<int>(serverConfig_.maxJsonDepth));
     }
     if (serverParamsJsonData.contains("HealthCheckConfig") &&
         serverParamsJsonData["HealthCheckConfig"].contains("npuUsageThreshold")) {
         serverConfig_.npuUsageThreshold = serverParamsJsonData["HealthCheckConfig"]["npuUsageThreshold"];
-        CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.npuUsageThreshold,
-            100U, 0U, "serverConfig.HealthCheckConfig.npuUsageThreshold"));
+        CHECK_CONFIG_VALIDATION(
+            initFlag, ParamChecker::CheckMaxMinValue<uint32_t>(serverConfig_.npuUsageThreshold, 100U, 0U,
+                                                               "serverConfig.HealthCheckConfig.npuUsageThreshold"));
     }
     if (serverParamsJsonData.contains("inferMode")) {
         serverConfig_.inferMode = serverParamsJsonData["inferMode"];
@@ -367,11 +366,10 @@ void ServerConfigManager::LoadOptionalParameters(Json& serverParamsJsonData)
         }
     }
     serverConfig_.openAiSupportedvLLM = !(serverParamsJsonData.contains("openAiSupport") &&
-        std::string(serverParamsJsonData["openAiSupport"]) != "vllm");
+                                          std::string(serverParamsJsonData["openAiSupport"]) != "vllm");
 }
 
-bool ServerConfigManager::CheckParam()
-{
+bool ServerConfigManager::CheckParam() {
     // log路径的参数校验移至inferengine日志初始化处
     CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckInferMode(serverConfig_.inferMode));
     CHECK_CONFIG_VALIDATION(initFlag,
@@ -390,7 +388,7 @@ bool ServerConfigManager::CheckParam()
                                                                               "serverConfig.tokenTimeout"));
     CHECK_CONFIG_VALIDATION(initFlag, ParamChecker::CheckMaxMinValue<int32_t>(
                                           serverConfig_.e2eTimeout, 65535U, 1U,
-                                          "serverConfig.e2eTimeout")); // 65535: Max end-to-end inference timeout
+                                          "serverConfig.e2eTimeout"));  // 65535: Max end-to-end inference timeout
     if (serverConfig_.httpsEnabled) {
         bool checkManagement = true;
         if (serverConfig_.managementIpAddress == serverConfig_.ipAddress &&
@@ -404,12 +402,11 @@ bool ServerConfigManager::CheckParam()
     if (serverConfig_.layerwiseDisaggregated) {
         CHECK_CONFIG_VALIDATION(initFlag, CheckLayerwiseDisaggregatedConfig());
     }
-    
+
     return initFlag;
 }
 
-bool ServerConfigManager::CheckHttpsConfig(bool loadManagementSSL)
-{
+bool ServerConfigManager::CheckHttpsConfig(bool loadManagementSSL) {
     // log路径的参数校验移至inferengine日志初始化处
     bool checkRes = true;
     std::string homePath;
@@ -428,8 +425,7 @@ bool ServerConfigManager::CheckHttpsConfig(bool loadManagementSSL)
     return checkRes;
 }
 
-bool ServerConfigManager::CheckBusinessHttpsParam()
-{
+bool ServerConfigManager::CheckBusinessHttpsParam() {
     bool checkRes = true;
     std::string homePath;
     if (!GetHomePath(homePath).IsOk()) {
@@ -477,8 +473,7 @@ bool ServerConfigManager::CheckBusinessHttpsParam()
     return checkRes;
 }
 
-bool ServerConfigManager::CheckManagementHttpsParam()
-{
+bool ServerConfigManager::CheckManagementHttpsParam() {
     bool checkRes = true;
     std::string homePath;
     if (!GetHomePath(homePath).IsOk()) {
@@ -499,7 +494,9 @@ bool ServerConfigManager::CheckManagementHttpsParam()
             checkRes &= false;
         }
         std::string managementTlsCrlPath = homePath + serverConfig_.managementTlsCrlPath;
-        checkRes = ParamChecker::CheckPath(managementTlsCrlPath, homePath, "ServerConfig.managementTlsCrlPath", false) && checkRes;
+        checkRes =
+            ParamChecker::CheckPath(managementTlsCrlPath, homePath, "ServerConfig.managementTlsCrlPath", false) &&
+            checkRes;
         for (const std::string &crlFilePath : serverConfig_.managementTlsCrlFiles) {
             std::string tlsCrlFilePath = managementTlsCrlPath + crlFilePath;
             if (!FileUtils::CheckFileExists(tlsCrlFilePath) || FileUtils::CheckDirectoryExists(tlsCrlFilePath)) {
@@ -537,42 +534,38 @@ bool ServerConfigManager::CheckManagementHttpsParam()
     return checkRes;
 }
 
-bool ServerConfigManager::CheckLayerwiseDisaggregatedConfig()
-{
+bool ServerConfigManager::CheckLayerwiseDisaggregatedConfig() {
     bool checkRes = true;
     if (serverConfig_.layerwiseDisaggregated) {
         if (serverConfig_.layerwiseDisaggregatedRoleType != "master" &&
             serverConfig_.layerwiseDisaggregatedRoleType != "slave") {
             checkRes = false;
         }
-        CHECK_CONFIG_VALIDATION(checkRes,
-                                CheckIp(serverConfig_.layerwiseDisaggregatedMasterIpAddress,
-                                "layerwiseDisaggregatedMasterIpAddress", false));
-        
-        for (auto &slaveIp: serverConfig_.layerwiseDisaggregatedSlaveIpAddress) {
-            CHECK_CONFIG_VALIDATION(checkRes,
-                                    CheckIp(slaveIp, "layerwiseDisaggregatedSlaveIpAddress", false));
+        CHECK_CONFIG_VALIDATION(checkRes, CheckIp(serverConfig_.layerwiseDisaggregatedMasterIpAddress,
+                                                  "layerwiseDisaggregatedMasterIpAddress", false));
+
+        for (auto &slaveIp : serverConfig_.layerwiseDisaggregatedSlaveIpAddress) {
+            CHECK_CONFIG_VALIDATION(checkRes, CheckIp(slaveIp, "layerwiseDisaggregatedSlaveIpAddress", false));
         }
 
-        CHECK_CONFIG_VALIDATION(checkRes, ParamChecker::CheckMaxMinValue<int32_t>(
-            serverConfig_.layerwiseDisaggregatedDataPort, 65535U, 1024U,
-            "serverConfig.layerwiseDisaggregatedDataPort"));
+        CHECK_CONFIG_VALIDATION(
+            checkRes, ParamChecker::CheckMaxMinValue<int32_t>(serverConfig_.layerwiseDisaggregatedDataPort, 65535U,
+                                                              1024U, "serverConfig.layerwiseDisaggregatedDataPort"));
 
-        for (auto &crtlPort: serverConfig_.layerwiseDisaggregatedCrtlPort) {
-            CHECK_CONFIG_VALIDATION(checkRes, ParamChecker::CheckMaxMinValue<int32_t>(
-            crtlPort, 65535U, 1024U, "serverConfig.layerwiseDisaggregatedCrtlPort"));
+        for (auto &crtlPort : serverConfig_.layerwiseDisaggregatedCrtlPort) {
+            CHECK_CONFIG_VALIDATION(
+                checkRes, ParamChecker::CheckMaxMinValue<int32_t>(crtlPort, 65535U, 1024U,
+                                                                  "serverConfig.layerwiseDisaggregatedCrtlPort"));
         }
     }
     return checkRes;
 }
 
-bool ServerConfigManager::CheckMetricsHttpsParam(std::string& homePath)
-{
+bool ServerConfigManager::CheckMetricsHttpsParam(std::string &homePath) {
     bool checkRes = true;
 
     std::string metricsTlsCert = homePath + serverConfig_.metricsTlsCert;
-    CHECK_CONFIG_VALIDATION(checkRes,
-                            ParamChecker::CheckPath(metricsTlsCert, homePath, "ServerConfig.metricsTlsCert"));
+    CHECK_CONFIG_VALIDATION(checkRes, ParamChecker::CheckPath(metricsTlsCert, homePath, "ServerConfig.metricsTlsCert"));
 
     // 吊销证书可为空
     uint32_t maxFileNumber = 3;
@@ -582,8 +575,8 @@ bool ServerConfigManager::CheckMetricsHttpsParam(std::string& homePath)
             checkRes = checkRes && false;
         }
         std::string metricsTlsCrlPath = homePath + serverConfig_.metricsTlsCrlPath;
-        checkRes = ParamChecker::CheckPath(
-            metricsTlsCrlPath, homePath, "ServerConfig.metricsTlsCrlPath", false) && checkRes;
+        checkRes =
+            ParamChecker::CheckPath(metricsTlsCrlPath, homePath, "ServerConfig.metricsTlsCrlPath", false) && checkRes;
         for (const std::string &crlFilePath : serverConfig_.metricsTlsCrlFiles) {
             std::string tlsCrlFilePath = metricsTlsCrlPath + crlFilePath;
             if (!FileUtils::CheckFileExists(tlsCrlFilePath) || FileUtils::CheckDirectoryExists(tlsCrlFilePath)) {
@@ -602,7 +595,7 @@ bool ServerConfigManager::CheckMetricsHttpsParam(std::string& homePath)
 
     std::string metricsTlsCaPath = homePath + serverConfig_.tlsCaPath;
     CHECK_CONFIG_VALIDATION(checkRes,
-        ParamChecker::CheckPath(metricsTlsCaPath, homePath, "ServerConfig.tlsCaPath", false));
+                            ParamChecker::CheckPath(metricsTlsCaPath, homePath, "ServerConfig.tlsCaPath", false));
     for (const std::string &metricsCaFilePath : serverConfig_.metricsTlsCaFile) {
         std::string metricsTlsCaFilePath = metricsTlsCaPath + metricsCaFilePath;
         if (!FileUtils::CheckFileExists(metricsTlsCaFilePath) ||
@@ -616,15 +609,13 @@ bool ServerConfigManager::CheckMetricsHttpsParam(std::string& homePath)
     }
 
     std::string metricsTlsPkPath = homePath + serverConfig_.metricsTlsPk;
-    CHECK_CONFIG_VALIDATION(checkRes,
-                            ParamChecker::CheckPath(metricsTlsPkPath, homePath, "ServerConfig.metricsTlsPk"));
+    CHECK_CONFIG_VALIDATION(checkRes, ParamChecker::CheckPath(metricsTlsPkPath, homePath, "ServerConfig.metricsTlsPk"));
     return checkRes;
 }
 
-bool ServerConfigManager::GetDecodeStatus() const  { return jsonDecodeSuccess_; }
+bool ServerConfigManager::GetDecodeStatus() const { return jsonDecodeSuccess_; }
 
-std::string ServerConfigManager::GetIPAddress(Json &serveJsonData)
-{
+std::string ServerConfigManager::GetIPAddress(Json &serveJsonData) {
     auto ip = EnvUtil::GetInstance().Get("MIES_CONTAINER_IP");
     if (!ip.empty()) {
         return ip;
@@ -633,8 +624,7 @@ std::string ServerConfigManager::GetIPAddress(Json &serveJsonData)
     }
 }
 
-std::string ServerConfigManager::GetManagementIPAddress(Json &serveJsonData)
-{
+std::string ServerConfigManager::GetManagementIPAddress(Json &serveJsonData) {
     auto ip = EnvUtil::GetInstance().Get("MIES_CONTAINER_MANAGEMENT_IP");
     if (!ip.empty()) {
         return ip;
@@ -645,8 +635,7 @@ std::string ServerConfigManager::GetManagementIPAddress(Json &serveJsonData)
     }
 }
 
-void ServerConfigManager::UpdateConfig()
-{
+void ServerConfigManager::UpdateConfig() {
     Json serverParamsJsonData;
     bool openAiSupportedvLLMLatest = true;
 
@@ -659,7 +648,8 @@ void ServerConfigManager::UpdateConfig()
         }
 
         if (serverConfig_.openAiSupportedvLLM != openAiSupportedvLLMLatest) {
-            std::cout << "ServerConfigManager::UpdateConfig openAiSupportedvLLM changed, from " << serverConfig_.openAiSupportedvLLM << " to " << openAiSupportedvLLMLatest << std::endl;
+            std::cout << "ServerConfigManager::UpdateConfig openAiSupportedvLLM changed, from "
+                      << serverConfig_.openAiSupportedvLLM << " to " << openAiSupportedvLLMLatest << std::endl;
             serverConfig_.openAiSupportedvLLM = openAiSupportedvLLMLatest;
         }
     }
@@ -667,35 +657,24 @@ void ServerConfigManager::UpdateConfig()
 
 const struct ServerConfig &ServerConfigManager::GetParam() { return serverConfig_; }
 
-void ServerConfigManager::SetPluginEnabled(bool enabled)
-{
-    serverConfig_.pluginEnabled = enabled;
-}
+void ServerConfigManager::SetPluginEnabled(bool enabled) { serverConfig_.pluginEnabled = enabled; }
 
-void ServerConfigManager::SetMtpEnabled(bool enabled)
-{
-    serverConfig_.mtpEnabled = enabled;
-}
+void ServerConfigManager::SetMtpEnabled(bool enabled) { serverConfig_.mtpEnabled = enabled; }
 
-void ServerConfigManager::SetDeepseekEnabled(bool enabled)
-{
-    serverConfig_.deepseekEnabled = enabled;
-}
+void ServerConfigManager::SetDeepseekEnabled(bool enabled) { serverConfig_.deepseekEnabled = enabled; }
 
-void ServerConfigManager::SetTokenTimeout(uint64_t tokenTimeout)
-{
-    std::cout << "ServerConfigManager::SetTokenTimeout tokenTimeout changed, from " <<
-    serverConfig_.tokenTimeout << " to " << tokenTimeout << std::endl;
+void ServerConfigManager::SetTokenTimeout(uint64_t tokenTimeout) {
+    std::cout << "ServerConfigManager::SetTokenTimeout tokenTimeout changed, from " << serverConfig_.tokenTimeout
+              << " to " << tokenTimeout << std::endl;
 
     serverConfig_.tokenTimeout = tokenTimeout;
 }
 
-void ServerConfigManager::SetE2eTimeout(uint64_t e2eTimeout)
-{
-    std::cout << "ServerConfigManager::SetE2eTimeout e2eTimeout changed, from " <<
-    serverConfig_.e2eTimeout << " to " << e2eTimeout << std::endl;
-    
+void ServerConfigManager::SetE2eTimeout(uint64_t e2eTimeout) {
+    std::cout << "ServerConfigManager::SetE2eTimeout e2eTimeout changed, from " << serverConfig_.e2eTimeout << " to "
+              << e2eTimeout << std::endl;
+
     serverConfig_.e2eTimeout = e2eTimeout;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

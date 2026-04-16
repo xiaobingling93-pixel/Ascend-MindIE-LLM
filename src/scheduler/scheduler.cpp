@@ -9,20 +9,20 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "scheduler.h"
 
-#include <climits>
-#include <stdexcept>
 #include <algorithm>
+#include <climits>
 #include <numeric>
+#include <stdexcept>
 
-#include "policy/policy_factory.h"
 #include "log.h"
-#include "request_response/request_id.h"
 #include "msServiceProfiler/msServiceProfiler.h"
-#include "pre_scheduler.h"
+#include "policy/policy_factory.h"
 #include "policy/stage_policy/edge_cloud_policy.h"
+#include "pre_scheduler.h"
+#include "request_response/request_id.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -32,12 +32,11 @@ namespace mindie_llm {
 constexpr bool USE_PREFIX_CACHE_WITH_PLACE_HOLDER = false;
 constexpr size_t PREFILL_SCHEDULER_SLEEP_INTERVAL = 1;
 constexpr int PREPARE_DATA_EXPANSION_FACTOR = 2;
-constexpr int TIME_WINDOW_INTERVAL = 1000; // 统计1s之内的的QPS
-constexpr int BUCKET_TIME_INTERVAL = 20;   // 每个bukcet的时间间隔是20ms
+constexpr int TIME_WINDOW_INTERVAL = 1000;  // 统计1s之内的的QPS
+constexpr int BUCKET_TIME_INTERVAL = 20;    // 每个bukcet的时间间隔是20ms
 
 namespace {
-BlockSpaceManagerSPtr CreateBlockManagerFromSchedulerConfig(const SchedulerConfig &cfg, size_t localDPRank)
-{
+BlockSpaceManagerSPtr CreateBlockManagerFromSchedulerConfig(const SchedulerConfig &cfg, size_t localDPRank) {
     if (cfg.spSize * cfg.cpSize > 1 && cfg.kvCacheDescs.size() > 1) {
         throw std::invalid_argument("Composite block manager is not supported when sp/cp is enabled.");
     }
@@ -59,18 +58,18 @@ BlockSpaceManagerSPtr CreateBlockManagerFromSchedulerConfig(const SchedulerConfi
                                                             std::move(blockConf), localDPRank);
     } else if (cfg.kvCacheDescs.size() == 1) {
         auto desc = cfg.kvCacheDescs[0];
-        BlockManagerConfig blockConf = {static_cast<size_t>(desc.blockSize) *
-                                            static_cast<size_t>(desc.compressionRatio),
-                                        cfg.cpuBlockNum,
-                                        static_cast<uint32_t>(desc.npuBlockNum),
-                                        0,
-                                        cfg.speculationGamma,
-                                        cfg.enablePrefixCache,
-                                        cfg.spSize * cfg.cpSize,
-                                        1,
-                                        cfg.enableKvPool,
-                                        cfg.kvPoolConfig.backend,
-                                        cfg.kvPoolConfig.configPath};
+        BlockManagerConfig blockConf = {
+            static_cast<size_t>(desc.blockSize) * static_cast<size_t>(desc.compressionRatio),
+            cfg.cpuBlockNum,
+            static_cast<uint32_t>(desc.npuBlockNum),
+            0,
+            cfg.speculationGamma,
+            cfg.enablePrefixCache,
+            cfg.spSize * cfg.cpSize,
+            1,
+            cfg.enableKvPool,
+            cfg.kvPoolConfig.backend,
+            cfg.kvPoolConfig.configPath};
         blockConf.cacheType = static_cast<KvCacheType>(desc.cacheType);
         return BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType::SELFATTNBLOCKMANAGER,
                                                             std::move(blockConf), localDPRank);
@@ -79,13 +78,14 @@ BlockSpaceManagerSPtr CreateBlockManagerFromSchedulerConfig(const SchedulerConfi
     throw std::invalid_argument("Multiple kvCacheDescs are not supported by current BlockManagerFactory.");
 }
 
-} // namespace
+}  // namespace
 
 Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                      std::shared_ptr<LatencyPredictor> predictor, Role pdRole, size_t localDPRank)
-    : schedulerConfig_(schedulerConfig), predictor_(predictor), localDPRank_(localDPRank),
-      qpsTracker(TIME_WINDOW_INTERVAL, BUCKET_TIME_INTERVAL)
-{
+    : schedulerConfig_(schedulerConfig),
+      predictor_(predictor),
+      localDPRank_(localDPRank),
+      qpsTracker(TIME_WINDOW_INTERVAL, BUCKET_TIME_INTERVAL) {
     BlockManagerConfig blockConf = {schedulerConfig->cacheBlockSize,
                                     schedulerConfig->cpuBlockNum,
                                     schedulerConfig->npuBlockNum,
@@ -118,10 +118,10 @@ Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
     }
     // create inference scheduling policy and kv transfer scheduling policy according to role
     // If role is P only or D only, polices will be created again.
-    SetRole(pdRole); // 默认是非PD分离的。因为非PD分离场景，Server不会调用SetRole方法。
+    SetRole(pdRole);  // 默认是非PD分离的。因为非PD分离场景，Server不会调用SetRole方法。
 
-    uint32_t asyncScheduleRound = schedulerConfig_->layerwiseDisaggregated ?
-                                schedulerConfig_->maxDispatchBatchNum : MAX_ASYNC_SCHEDULE_TIMES;
+    uint32_t asyncScheduleRound =
+        schedulerConfig_->layerwiseDisaggregated ? schedulerConfig_->maxDispatchBatchNum : MAX_ASYNC_SCHEDULE_TIMES;
 
     if (schedulerConfig_->activateAsyncInference) {
         maxScheduledBatch_ = asyncScheduleRound + 1;
@@ -134,8 +134,7 @@ Scheduler::Scheduler(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
     MINDIE_LLM_LOG_INFO("Scheduler init success!");
 }
 
-void Scheduler::SetRole(Role role)
-{
+void Scheduler::SetRole(Role role) {
     // 1. set Role must called before accept Request
     if (serving_) {
         throw std::runtime_error("set roles cannot be called after accept request.");
@@ -155,13 +154,12 @@ void Scheduler::SetRole(Role role)
     PROF(INFO, AddMetaInfo("Role", static_cast<uint8_t>(role_)));
 }
 
-void Scheduler::AddSeqGroup(SequenceGroupSPtr &seqGroup)
-{
+void Scheduler::AddSeqGroup(SequenceGroupSPtr &seqGroup) {
     // 1. check request id (虚推请求跳过重复检查，因为大EP场景下多个rank会同时添加同一个虚推请求)
     bool isSimulateInference = seqGroup->IsSimulateRequest();
     if (isSimulateInference) {
         MINDIE_LLM_LOG_DEBUG("[SimulateInference] Simulate inference request entering AddSeqGroup, requestId="
-                            << seqGroup->requestId << ", seqId=" << seqGroup->firstSeq->seqId_);
+                             << seqGroup->requestId << ", seqId=" << seqGroup->firstSeq->seqId_);
     }
     if (!isSimulateInference && LiveInferContext::GetInstance(localDPRank_)->GetSeqGroup(seqGroup->requestId)) {
         throw std::runtime_error("the requestId exist, requestId=" + seqGroup->requestId);
@@ -191,8 +189,7 @@ void Scheduler::AddSeqGroup(SequenceGroupSPtr &seqGroup)
     serving_ = true;
 }
 
-void Scheduler::EnqueueSimulateInferenceRequest(SequenceGroupSPtr &seqGroup)
-{
+void Scheduler::EnqueueSimulateInferenceRequest(SequenceGroupSPtr &seqGroup) {
     // 虚推请求根据节点角色选择入队位置：
     // - D节点/FlexD节点/PnD节点/FlexPnD节点：直接进入running队列
     // - P节点/FlexP节点：进入waiting队列，走正常prefill流程，maxOutputLen会使虚推直接返回不进入D节点
@@ -203,17 +200,16 @@ void Scheduler::EnqueueSimulateInferenceRequest(SequenceGroupSPtr &seqGroup)
         running_.PushBack(seqGroup);
         PROF(prof.Metric("QueueSize", running_.Size()).Attr("status", "running").Event("Enqueue"));
         MINDIE_LLM_LOG_DEBUG("[SimulateInference] D/PnD node: special seqId enter running queue directly, seqId="
-                            << seqGroup->firstSeq->seqId_ << ", role=" << static_cast<int>(role_));
+                             << seqGroup->firstSeq->seqId_ << ", role=" << static_cast<int>(role_));
     } else {
         waiting_.PushBack(seqGroup);
         PROF(prof.Metric("QueueSize", waiting_.Size()).Attr("status", "waiting").Event("Enqueue"));
         MINDIE_LLM_LOG_DEBUG("[SimulateInference] P node: special seqId enter waiting queue, seqId="
-                            << seqGroup->firstSeq->seqId_ << ", role=" << static_cast<int>(role_));
+                             << seqGroup->firstSeq->seqId_ << ", role=" << static_cast<int>(role_));
     }
 }
 
-void Scheduler::RecordMetricsStatics(SchedulerOutputs &schedulerOut, SequenceGroupMetaDatas &seqGroupMetadata)
-{
+void Scheduler::RecordMetricsStatics(SchedulerOutputs &schedulerOut, SequenceGroupMetaDatas &seqGroupMetadata) {
     schedulerMetricsStatics_.freeNpuBlockNum_ = blockManager_->GetNumFreeNpuBlocks();
     schedulerMetricsStatics_.freeCpuBlockNum_ = blockManager_->GetNumFreeCpuBlocks();
     schedulerMetricsStatics_.waitingRequestNum_ = waiting_.Size() + transferringMap_.Size();
@@ -255,8 +251,7 @@ void Scheduler::RecordMetricsStatics(SchedulerOutputs &schedulerOut, SequenceGro
     }
 }
 
-void Scheduler::WaitingAvoidDummyBatch(PDPriorityType priority, bool needSync)
-{
+void Scheduler::WaitingAvoidDummyBatch(PDPriorityType priority, bool needSync) {
     // 不需要同步 或 不做prefill时，不需要wait
     if (!needSync || priority != PDPriorityType::PREFILL_FIRST) {
         return;
@@ -280,8 +275,7 @@ void Scheduler::WaitingAvoidDummyBatch(PDPriorityType priority, bool needSync)
     }
 }
 
-std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool needSync)
-{
+std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool needSync) {
     PDPriorityType pdPriorityType = DecidePDPriority(needSync);
     if (role_ == Role::P) {
         WaitingAvoidDummyBatch(pdPriorityType, needSync);
@@ -292,8 +286,8 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
     }
 
     LwdPDelayType pDelayType = LwdPDelayType::INVALID;
-    if (schedulerConfig_->layerwiseDisaggregated &&
-            schedulerConfig_->dpSize == 1 && pdPriorityType == PDPriorityType::PREFILL_FIRST) {
+    if (schedulerConfig_->layerwiseDisaggregated && schedulerConfig_->dpSize == 1 &&
+        pdPriorityType == PDPriorityType::PREFILL_FIRST) {
         pDelayType = LayerwiseDecidePDelay();
         if (pDelayType == LwdPDelayType::PREFILL_TO_DECODE) {
             pdPriorityType = PDPriorityType::DECODE_FIRST;
@@ -316,7 +310,7 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
     // 2. apply policy
     // return different collection for different policies
     ISeqGroupCollectionSPtr data;
-    if (static_cast<int32_t>(role_) <= 2) { // 小于 2， role为 PnD, P, D
+    if (static_cast<int32_t>(role_) <= 2) {  // 小于 2， role为 PnD, P, D
         data = PrepCandidatesForPolicy(pdPriorityType, budget);
     } else {
         data = PrepCandidatesForFlex(pdPriorityType, budget);
@@ -340,17 +334,17 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
 
     // 本轮调度结束，mark供下一轮调度使用
     blockManager_->MarkBlocksAsComputed();
-    
+
     if ((!schedulerOut.IsEmpty() && schedulerOut.forwardMode_ == ForwardMode::PREFILL) ||
         (!schedulerOut.IsEmpty() && iterTimes_++ % LOG_INTERVAL_COUNT == 0) ||
         iterTimes_++ % LOG_EMPTY_BATCH_INTERVAL_COUNT == 0) {
         MINDIE_LLM_LOG_INFO_REQUEST("[Scheduler|Schedule-scheduling] DP RankId: "
-                            << dpRankId_ << ". After Backfill, running size:" << running_.Size()
-                            << "; waiting size: " << waiting_.Size() << "; swapped size:" << swapped_.Size()
-                            << "; batch size:" << schedulerOut.scheduledSeqGroups_.size()
-                            << "; transferring size:" << transferringMap_.Size()
-                            << "; schedule forwardMode:" << static_cast<int>(schedulerOut.forwardMode_)
-                            << "; PD PriorityType:" << static_cast<int>(pdPriorityType));
+                                    << dpRankId_ << ". After Backfill, running size:" << running_.Size()
+                                    << "; waiting size: " << waiting_.Size() << "; swapped size:" << swapped_.Size()
+                                    << "; batch size:" << schedulerOut.scheduledSeqGroups_.size()
+                                    << "; transferring size:" << transferringMap_.Size()
+                                    << "; schedule forwardMode:" << static_cast<int>(schedulerOut.forwardMode_)
+                                    << "; PD PriorityType:" << static_cast<int>(pdPriorityType));
     }
 
     // 5.获取cpu和npu的空闲块个数，用于构造metric统计信息
@@ -371,8 +365,7 @@ std::pair<SequenceGroupMetaDatas, SchedulerOutputs> Scheduler::Schedule(bool nee
     return {seqGroupMetadata, schedulerOut};
 }
 
-std::unordered_set<SequenceId> Scheduler::ReleaseKvPulledBlocks()
-{
+std::unordered_set<SequenceId> Scheduler::ReleaseKvPulledBlocks() {
     // kvCachePulledSeqIds_ and transferringMap_ are erased only here. otherwise there will be concurrent bug
     std::unordered_set<SequenceId> pulledSeqIds;
     while (!kvCachePulledSeqIds_.Empty()) {
@@ -383,7 +376,7 @@ std::unordered_set<SequenceId> Scheduler::ReleaseKvPulledBlocks()
             MINDIE_LLM_LOG_WARN("Try to release kv, but kv has released before. seqid:" << seqId);
         }
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Release KV] DP RankId: "
-                            << dpRankId_ << ". KV blocks of seqId: " << seqId << " are released.");
+                                    << dpRankId_ << ". KV blocks of seqId: " << seqId << " are released.");
         blockManager_->Free(seqId);
         transferringMap_.Erase(seqId);
         LiveInferContext::GetInstance(localDPRank_)->Remove(seqId);
@@ -394,8 +387,7 @@ std::unordered_set<SequenceId> Scheduler::ReleaseKvPulledBlocks()
 }
 
 // Decode needs to schedule kv pull, P 's kv transfer scheduling is only for kv block free
-std::pair<SequenceGroupMetaDatas, SchedulerKVTransferOutput> Scheduler::ScheduleTransfer()
-{
+std::pair<SequenceGroupMetaDatas, SchedulerKVTransferOutput> Scheduler::ScheduleTransfer() {
     if (role_ == Role::P || role_ == Role::FlexP) {
         std::unordered_set<SequenceId> pulledSeqIds = ReleaseKvPulledBlocks();
         return {SequenceGroupMetaDatas(), SchedulerKVTransferOutput({pulledSeqIds, {}})};
@@ -441,8 +433,7 @@ std::pair<SequenceGroupMetaDatas, SchedulerKVTransferOutput> Scheduler::Schedule
     return {seqGroupMetadata, transferOut};
 }
 
-void Scheduler::PrepareNextSchedule(std::vector<ScheduledSequenceGroupSPtr> &scheduledSeqGroups)
-{
+void Scheduler::PrepareNextSchedule(std::vector<ScheduledSequenceGroupSPtr> &scheduledSeqGroups) {
     AccumulateComputedTokens(scheduledSeqGroups);
     AddNextTokenPlaceHolder(scheduledSeqGroups);
 }
@@ -452,8 +443,7 @@ size_t Scheduler::GetUnFinishedSeqGroups() { return waiting_.Size() + running_.S
 /** batch调度希望调度尽量多的batch
  *  size的请求。因此会等maxQueueDelayMicroseconds时间再取调度waiting，让请求在waiting累积一些
  */
-bool Scheduler::ShouldImmediatePrefill()
-{
+bool Scheduler::ShouldImmediatePrefill() {
     auto now = std::chrono::high_resolution_clock::now();
     if (waiting_.Empty()) {
         return false;
@@ -471,19 +461,19 @@ bool Scheduler::ShouldImmediatePrefill()
     return reached;
 }
 
-PDPriorityType Scheduler::LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t reserveBlockNum4Decode)
-{
+PDPriorityType Scheduler::LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t reserveBlockNum4Decode) {
     PDPriorityType priority = PDPriorityType::PREFILL_FIRST;
-    MINDIE_LLM_LOG_DEBUG("[layerwiseDisaggregated|scheduler] "<<"lastScheduleEmpty_: "
-        << lastScheduleEmpty_ << ", running_.Empty(): " << running_.Empty() << ", swapped_.Empty(): "
-        << swapped_.Empty() << ", ShouldImmediatePrefill(): " << ShouldImmediatePrefill()
-        << ", freeBlocksNum < reserveBlockNum4Decode: " << (freeBlocksNum < reserveBlockNum4Decode));
+    MINDIE_LLM_LOG_DEBUG("[layerwiseDisaggregated|scheduler] "
+                         << "lastScheduleEmpty_: " << lastScheduleEmpty_ << ", running_.Empty(): " << running_.Empty()
+                         << ", swapped_.Empty(): " << swapped_.Empty()
+                         << ", ShouldImmediatePrefill(): " << ShouldImmediatePrefill()
+                         << ", freeBlocksNum < reserveBlockNum4Decode: " << (freeBlocksNum < reserveBlockNum4Decode));
 
     std::shared_ptr<EdgeCloudPolicy> lwdPolicy = std::static_pointer_cast<EdgeCloudPolicy>(stagePolicy_);
-    if (((lastScheduleEmpty_ && !running_.Empty()) || !swapped_.Empty() ||
-        freeBlocksNum < reserveBlockNum4Decode) && (lwdPolicy->GetDecodeBatchCnt() == 0)) {
+    if (((lastScheduleEmpty_ && !running_.Empty()) || !swapped_.Empty() || freeBlocksNum < reserveBlockNum4Decode) &&
+        (lwdPolicy->GetDecodeBatchCnt() == 0)) {
         MINDIE_LLM_LOG_DEBUG("[layerwiseDisaggregated|scheduler] "
-            <<"last batch empty, no decode is processing, force schedule decode!");
+                             << "last batch empty, no decode is processing, force schedule decode!");
         priority = PDPriorityType::DECODE_FIRST;
     } else {
         priority = stagePolicy_->Apply(waiting_, running_, swapped_);
@@ -491,21 +481,20 @@ PDPriorityType Scheduler::LayerwiseDecidePDPriority(size_t freeBlocksNum, size_t
     return priority;
 }
 
-LwdPDelayType Scheduler::LayerwiseDecidePDelay()
-{
+LwdPDelayType Scheduler::LayerwiseDecidePDelay() {
     static bool isDelayEnable = true;
     int32_t maxRequestIntervalTime = 2500;
     int32_t minRequestIntervalTime = 2000;
     static int32_t requestIntervalOverThresholdCount = 0;
     static int32_t requestIntervalUnderThresholdCount = 0;
     // 开启Lwd特性前提下，本函数决定本轮是否延迟下发Prefill请求，以及若延迟下发采用的处理策略
-    if (isDelayEnable && schedulerConfig_->batchPnum == 2 && waiting_.Size() > 0) { // 2为最大的P batch数量
+    if (isDelayEnable && schedulerConfig_->batchPnum == 2 && waiting_.Size() > 0) {  // 2为最大的P batch数量
         auto currentTime = std::chrono::high_resolution_clock::now();
         int32_t pWaitTime = -1;
         if (pDelayTime != INVALID_TIME) {
             pWaitTime = static_cast<int32_t>(duration_cast<milliseconds>(currentTime - pDelayTime).count());
         }
-        int32_t maxPWaitTime = 1000; // 最大等待1000ms
+        int32_t maxPWaitTime = 1000;  // 最大等待1000ms
         if (waiting_.Front()->requestGap_ > 0) {
             bool isGapOverIntervalTime = waiting_.Front()->requestGap_ > maxRequestIntervalTime;
             requestIntervalOverThresholdCount += isGapOverIntervalTime ? 1 : 0;
@@ -536,7 +525,7 @@ LwdPDelayType Scheduler::LayerwiseDecidePDelay()
     } else {
         if (!isDelayEnable && waiting_.Size() > 0 && waiting_.Front()->requestGap_ <= minRequestIntervalTime) {
             requestIntervalUnderThresholdCount++;
-            if (requestIntervalUnderThresholdCount >= 3) { // 累计3次请求到达间隔不超过2s, 开启延迟下发
+            if (requestIntervalUnderThresholdCount >= 3) {  // 累计3次请求到达间隔不超过2s, 开启延迟下发
                 requestIntervalOverThresholdCount = 0;
                 isDelayEnable = true;
             }
@@ -547,8 +536,7 @@ LwdPDelayType Scheduler::LayerwiseDecidePDelay()
 }
 
 // decide what to schedule in this round ,  prefill or decode
-PDPriorityType Scheduler::DecidePDPriority(bool needSync)
-{
+PDPriorityType Scheduler::DecidePDPriority(bool needSync) {
     PDPriorityType priority = PDPriorityType::PREFILL_FIRST;
     switch (role_) {
         case Role::PnD:
@@ -582,17 +570,21 @@ PDPriorityType Scheduler::DecidePDPriority(bool needSync)
             break;
         }
         case Role::FlexP:
-        case Role::P: priority = PDPriorityType::PREFILL_FIRST; break;
+        case Role::P:
+            priority = PDPriorityType::PREFILL_FIRST;
+            break;
         case Role::FlexD:
-        case Role::D: priority = PDPriorityType::DECODE_FIRST; break;
-        default: throw std::runtime_error("Not a supportted role. role=" + std::to_string(static_cast<uint8_t>(role_)));
+        case Role::D:
+            priority = PDPriorityType::DECODE_FIRST;
+            break;
+        default:
+            throw std::runtime_error("Not a supportted role. role=" + std::to_string(static_cast<uint8_t>(role_)));
     }
 
     return priority;
 }
 
-ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForFlex(PDPriorityType pdPriorityType, SchedulingBudget &budget)
-{
+ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForFlex(PDPriorityType pdPriorityType, SchedulingBudget &budget) {
     // 构造本轮可能要调度sequence group
     ISeqGroupCollectionSPtr seqGrpCollection = std::make_shared<SeqGroupCollection>(pdPriorityType);
 
@@ -626,8 +618,7 @@ ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForFlex(PDPriorityType pdPriori
     return seqGrpCollection;
 }
 
-ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForPolicy(PDPriorityType pdPriorityType, SchedulingBudget &budget)
-{
+ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForPolicy(PDPriorityType pdPriorityType, SchedulingBudget &budget) {
     // 构造本轮可能要调度sequence group
     ISeqGroupCollectionSPtr seqGrpCollection = std::make_shared<SeqGroupCollection>(pdPriorityType);
 
@@ -665,14 +656,13 @@ ISeqGroupCollectionSPtr Scheduler::PrepCandidatesForPolicy(PDPriorityType pdPrio
 }
 
 // only D role needs to schedule kv pulling, P role doesn't. P only needs to handle transfer events
-std::shared_ptr<SeqGroupCollection> Scheduler::PrepCandidatesForKvTransferPolicy()
-{
+std::shared_ptr<SeqGroupCollection> Scheduler::PrepCandidatesForKvTransferPolicy() {
     ISeqGroupCollectionSPtr seqGrpCollection = std::make_shared<SeqGroupCollection>();
 
     size_t maxPrefillNumForCurIter = schedulerConfig_->maxPrefillBatchSize * 2;
     // prepare pull-kv candidates. since pull-kv needs similiar blocks as prefilling, the max candidates number is
     // same.
-    if (static_cast<int32_t>(role_) <= 2) { // 小于 2， role为 PnD, P, D
+    if (static_cast<int32_t>(role_) <= 2) {  // 小于 2， role为 PnD, P, D
         Dequeue(waiting_, seqGrpCollection->waiting_, maxPrefillNumForCurIter);
     } else {
         DequeueForFlex(waiting_, seqGrpCollection->waiting_, Role::FlexD, maxPrefillNumForCurIter);
@@ -680,8 +670,7 @@ std::shared_ptr<SeqGroupCollection> Scheduler::PrepCandidatesForKvTransferPolicy
     return seqGrpCollection;
 }
 
-void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
-{
+void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut) {
     // 1. update waiting request
     if (role_ == Role::PnD || role_ == Role::FlexPnD) {
         for (SequenceGroupSPtr &seqGroup : policyOut.preemptedSeqGroups_) {
@@ -691,8 +680,7 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
                     << seqGroup->requestId << ") will be aborted!");
                 abortedParallelSeqGroups_.push_back(seqGroup);
             }
-            layerwiseMixin_.LwdSetRecomputeArrTime(schedulerConfig_->layerwiseDisaggregated, seqGroup,
-                waiting_.Back());
+            layerwiseMixin_.LwdSetRecomputeArrTime(schedulerConfig_->layerwiseDisaggregated, seqGroup, waiting_.Back());
         }
         // P节点不存在recompute情况；D节点Recompute需要转到P节点做
         Enqueue(waiting_, policyOut.preemptedSeqGroups_);
@@ -700,7 +688,7 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
 
     // 2. update new running request
     std::sort(policyOut.decodeSeqGroups_.begin(), policyOut.decodeSeqGroups_.end(),
-              [](const ScheduledSequenceGroupSPtr& a, const ScheduledSequenceGroupSPtr& b) {
+              [](const ScheduledSequenceGroupSPtr &a, const ScheduledSequenceGroupSPtr &b) {
                   return a->seqGroup_->firstSeq->seqId_ < b->seqGroup_->firstSeq->seqId_;
               });
     Enqueue(running_, policyOut.decodeSeqGroups_);
@@ -714,7 +702,7 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
                 transferringMap_.Insert(seqGroupSptr->seqGroup_->firstSeq->seqId_, seqGroupSptr->seqGroup_);
             }
         }
-    } else { // other cases, prefill --> running
+    } else {  // other cases, prefill --> running
         Enqueue(running_, policyOut.prefillSeqGroups_);
     }
 
@@ -723,16 +711,22 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
 
     // 4. update remaining data to different deque
     std::sort(policyOut.withdrewSeqGroups_.begin(), policyOut.withdrewSeqGroups_.end(),
-              [](const SequenceGroupSPtr& a, const SequenceGroupSPtr& b) {
+              [](const SequenceGroupSPtr &a, const SequenceGroupSPtr &b) {
                   return a->firstSeq->seqId_ < b->firstSeq->seqId_;
               });
     while (!policyOut.withdrewSeqGroups_.empty()) {
         /* withdrewSeqGroups_ 按照入队时间正序排序，所以要从队尾出放回原队列的队首，保证原队列按照入队时间排队 */
         SequenceGroupSPtr seqGroup = policyOut.withdrewSeqGroups_.back();
         switch (seqGroup->firstSeq->status_) {
-            case SequenceStatus::WAITING: waiting_.PushFront(seqGroup); break;
-            case SequenceStatus::RUNNING: running_.PushFront(seqGroup); break;
-            case SequenceStatus::SWAPPED: swapped_.PushFront(seqGroup); break;
+            case SequenceStatus::WAITING:
+                waiting_.PushFront(seqGroup);
+                break;
+            case SequenceStatus::RUNNING:
+                running_.PushFront(seqGroup);
+                break;
+            case SequenceStatus::SWAPPED:
+                swapped_.PushFront(seqGroup);
+                break;
             case SequenceStatus::FINISH_ABORTED:
                 if (!seqGroup->sampling->enableParallelSampling) {
                     throw std::runtime_error("error sequence status in remainSeqsGroups of PolictOut.");
@@ -741,7 +735,8 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
                 running_.PushFront(seqGroup);
                 break;
 
-            default: throw std::runtime_error("error sequence status in remainSeqsGroups of PolictOut.");
+            default:
+                throw std::runtime_error("error sequence status in remainSeqsGroups of PolictOut.");
         }
         policyOut.withdrewSeqGroups_.pop_back();
     }
@@ -752,8 +747,7 @@ void Scheduler::BackfillConcurrentQueue(PolicyOutput &policyOut)
  * 如果mtp的推理没有命中，则前面调度轮次申请的mtp个数的空间没有被使用。为了防止mtp持续不命中导致的kv空间浪费，做如下处理
  *     place holder的最大个数为: 异步调度轮次 * (1+mtp)
  */
-size_t Scheduler::CalculatePlaceHolderNum(ScheduledSequenceGroupSPtr seqGrpSPtr) const
-{
+size_t Scheduler::CalculatePlaceHolderNum(ScheduledSequenceGroupSPtr seqGrpSPtr) const {
     // 统计当前已经有的place holder个数
     std::vector<TokenId> &outPutTokenIds = seqGrpSPtr->seqGroup_->seqs_.at(0)->data_.outputTokenIds;
     size_t placeholderCount = TrailingPlaceholderTokenCount(outPutTokenIds);
@@ -775,16 +769,16 @@ size_t Scheduler::CalculatePlaceHolderNum(ScheduledSequenceGroupSPtr seqGrpSPtr)
     }
 }
 
-void Scheduler::BackfillConcurrentQueue(KVTransferPolicyOutput &policyOut)
-{
+void Scheduler::BackfillConcurrentQueue(KVTransferPolicyOutput &policyOut) {
     // add withdrewSeqGroups to different deque
     for (auto it = policyOut.withdrewSeqGroups.rbegin(); it != policyOut.withdrewSeqGroups.rend(); ++it) {
         /* withdrewSeqGroups 按照入队时间正序排序，所以要从队尾出放回原队列的队首，保证原队列按照入队时间排队 */
         switch ((*it)->firstSeq->status_) {
-            case SequenceStatus::WAITING: // waiting to pull kv(in D node)
+            case SequenceStatus::WAITING:  // waiting to pull kv(in D node)
                 waiting_.PushFront(*it);
                 break;
-            default: throw std::runtime_error("error sequence status in withdrewSeqGroups of KVTransferPolicyOutput.");
+            default:
+                throw std::runtime_error("error sequence status in withdrewSeqGroups of KVTransferPolicyOutput.");
         }
     }
 
@@ -799,8 +793,7 @@ void Scheduler::BackfillConcurrentQueue(KVTransferPolicyOutput &policyOut)
  * 1）插入Token id占位符。最多异步调度2个outstanding的batch，第二个batch要将前一个的batch的output token写成占位符-1
  * TBC: a sequence group may contain more than one sequence
  */
-void Scheduler::AddNextTokenPlaceHolder(std::vector<ScheduledSequenceGroupSPtr> &scheduledSeqGrps) const
-{
+void Scheduler::AddNextTokenPlaceHolder(std::vector<ScheduledSequenceGroupSPtr> &scheduledSeqGrps) const {
     for (auto scheduledSeqGrpSPtr : scheduledSeqGrps) {
         // ChunkedPrefill的前几块不能加占位符，最后一个chunk才可以加
         if ((schedulerConfig_->enableChunkedPrefill) && (!scheduledSeqGrpSPtr->seqGroup_->isLastChunk_)) {
@@ -828,21 +821,19 @@ void Scheduler::AddNextTokenPlaceHolder(std::vector<ScheduledSequenceGroupSPtr> 
  * 使用异步调度，在入running队列前，将上一轮的“结果”预先更新
  * 1）累计numNewComputedTokens, 这样已经计算的tokens不会被再次计算kv， 而是使用cache里的kv
  */
-void Scheduler::AccumulateComputedTokens(std::vector<ScheduledSequenceGroupSPtr> &seqGrps) const
-{
+void Scheduler::AccumulateComputedTokens(std::vector<ScheduledSequenceGroupSPtr> &seqGrps) const {
     for (auto seqGrpSptr : seqGrps) {
         // 使用异步调度，直接更新numNewComputedTokens
         seqGrpSptr->seqGroup_->UpdateNumComputedTokens(seqGrpSptr->tokenChunkSize_);
     }
 }
 
-void Scheduler::UpdatePromptAndOutputTokenIds(SequenceSPtr seq)
-{
+void Scheduler::UpdatePromptAndOutputTokenIds(SequenceSPtr seq) {
     if (schedulerConfig_->enableChunkedPrefill) {
         // 重计算请求重新被调度之前，刷新promptTokenIds和outputTokenIds
         if (seq->IsPrefill() && seq->data_.outputTokenIds.size() > 0) {
-            seq->data_.promptTokenIds.insert(seq->data_.promptTokenIds.end(),
-                seq->data_.outputTokenIds.begin(), seq->data_.outputTokenIds.end());
+            seq->data_.promptTokenIds.insert(seq->data_.promptTokenIds.end(), seq->data_.outputTokenIds.begin(),
+                                             seq->data_.outputTokenIds.end());
             seq->data_.outputTokenIds.clear();
         }
     }
@@ -851,8 +842,7 @@ void Scheduler::UpdatePromptAndOutputTokenIds(SequenceSPtr seq)
 /**
  * 从Response tokenid map里拿到真实的tokenid，将占位符更新为正确的tokenid
  */
-void Scheduler::ReplacePlaceHolderWithToken(SequenceGroupSPtr seqGrpSPtr)
-{
+void Scheduler::ReplacePlaceHolderWithToken(SequenceGroupSPtr seqGrpSPtr) {
     for (auto seq : seqGrpSPtr->GetSequences()) {
         if (schedulerConfig_->enableChunkedPrefill && !seqGrpSPtr->isLastChunk_) {
             // ChunkedPrefill的前几块不能加占位符，最后一个chunk才可以加
@@ -915,14 +905,13 @@ void Scheduler::ReplacePlaceHolderWithToken(SequenceGroupSPtr seqGrpSPtr)
     }
 }
 
-SchedulerOutputs Scheduler::ConvertToSchedulerOutput(const SchedulingBudget &budget, PolicyOutput &policyOut)
-{
+SchedulerOutputs Scheduler::ConvertToSchedulerOutput(const SchedulingBudget &budget, PolicyOutput &policyOut) {
     SchedulerOutputs schedulerOut;
 
     schedulerOut.numPrefillGroups_ = policyOut.numPrefillGroups;
     schedulerOut.numBatchedTokens_ = budget.numBatchedTokens_ + budget.numCachedTokens_;
     schedulerOut.numPreempted_ = policyOut.numPreempted;
-    schedulerOut.runningQueueSize_ = running_.Size(); // don't know what's this for.s
+    schedulerOut.runningQueueSize_ = running_.Size();  // don't know what's this for.s
 
     schedulerOut.blocksToSwapIn_ = std::move(policyOut.blocksToSwapIn_);
     schedulerOut.blocksToSwapOut_ = std::move(policyOut.blocksToSwapOut_);
@@ -960,8 +949,7 @@ SchedulerOutputs Scheduler::ConvertToSchedulerOutput(const SchedulingBudget &bud
     return schedulerOut;
 }
 
-SchedulerKVTransferOutput Scheduler::ConvertToSchedulerTransferOutput(KVTransferPolicyOutput &policyOut) const
-{
+SchedulerKVTransferOutput Scheduler::ConvertToSchedulerTransferOutput(KVTransferPolicyOutput &policyOut) const {
     SchedulerKVTransferOutput transferOut;
 
     Assert(role_ == Role::D || role_ == Role::FlexD);
@@ -972,8 +960,7 @@ SchedulerKVTransferOutput Scheduler::ConvertToSchedulerTransferOutput(KVTransfer
 
 std::vector<BlockId> Scheduler::SetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta,
                                                                SequenceGroupSPtr seqGrpSPtr, SequenceId seqId,
-                                                               ForwardMode forwardMode) const
-{
+                                                               ForwardMode forwardMode) const {
     std::vector<BlockId> blockIds;
     std::vector<std::vector<BlockId>> allRankBlocks;
     blockManager_->GetRankedBlockIds(seqId, allRankBlocks);
@@ -1031,8 +1018,7 @@ std::vector<BlockId> Scheduler::SetSpCpParamAndReturnAllBlocks(SequenceGroupMeta
 
 std::vector<BlockId> Scheduler::LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta,
                                                                   SequenceGroupSPtr seqGrpSPtr, SequenceId seqId,
-                                                                  ForwardMode forwardMode) const
-{
+                                                                  ForwardMode forwardMode) const {
     std::vector<BlockId> blockIds;
     std::vector<std::vector<BlockId>> allRankBlocks;
     blockManager_->LwdGetCloudRankedBlockIds(seqId, allRankBlocks);
@@ -1055,8 +1041,7 @@ std::vector<BlockId> Scheduler::LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupM
     return blockIds;
 }
 
-std::vector<BlockIds> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const
-{
+std::vector<BlockIds> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const {
     std::vector<BlockIds> blockIds;
     blockIds = blockManager_->GetBlockIds(seqId);
     if (role_ == Role::P || role_ == Role::FlexP) {
@@ -1066,8 +1051,7 @@ std::vector<BlockIds> Scheduler::GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, Sequ
     return blockIds;
 }
 
-void Scheduler::SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) const
-{
+void Scheduler::SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) const {
     size_t calEndPos = seq->GetNumComputedTokens() + meta.tokenChunkSize_;
     bool isReqPrefill = (seq->GetNumComputedTokens() >= seq->data_.promptTokenIds.size()) ? false : true;
     bool isReqLastChunk = (calEndPos >= seq->data_.promptTokenIds.size()) ? true : false;
@@ -1086,8 +1070,7 @@ void Scheduler::SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) c
 }
 
 void Scheduler::SetBasicMetadata(SequenceGroupMetaData &metaData, const SequenceGroupSPtr seqGroup,
-                                 ScheduledSequenceGroupSPtr scheduledGrp) const
-{
+                                 ScheduledSequenceGroupSPtr scheduledGrp) const {
     metaData.requestId_ = seqGroup->requestId;
     metaData.serverid_ = seqGroup->metrics_.inferReqId_;
     metaData.samplingParams_ = seqGroup->sampling;
@@ -1113,8 +1096,7 @@ void Scheduler::SetBasicMetadata(SequenceGroupMetaData &metaData, const Sequence
     }
 }
 
-SequenceGroupMetaDatas Scheduler::InitSequenceGroupMetaDatas(const SchedulerOutputs &schedulerOut) const
-{
+SequenceGroupMetaDatas Scheduler::InitSequenceGroupMetaDatas(const SchedulerOutputs &schedulerOut) const {
     SequenceGroupMetaDatas metadatas;
     metadatas.metaList.resize(schedulerOut.scheduledSeqGroups_.size());
     metadatas.seqLenList.resize(1);
@@ -1123,8 +1105,7 @@ SequenceGroupMetaDatas Scheduler::InitSequenceGroupMetaDatas(const SchedulerOutp
     return metadatas;
 }
 
-SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerOutputs &schedulerOut)
-{
+SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerOutputs &schedulerOut) {
     SequenceGroupMetaDatas metadatas = InitSequenceGroupMetaDatas(schedulerOut);
     std::vector<SequenceGroupMetaData> &metaList = metadatas.metaList;
 
@@ -1153,11 +1134,11 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
             } else if (schedulerConfig_->spSize * schedulerConfig_->cpSize <= 1) {
                 blockIds = GetAllBlocks(seqGroup, seq->seqId_);
             } else {
-                blockIds = {SetSpCpParamAndReturnAllBlocks(metaList[i],
-                    seqGroup, seq->seqId_, schedulerOut.forwardMode_)};
+                blockIds = {
+                    SetSpCpParamAndReturnAllBlocks(metaList[i], seqGroup, seq->seqId_, schedulerOut.forwardMode_)};
                 if (schedulerConfig_->layerwiseDisaggregated) {
-                    lwdCloudBlockIds = LwdSetSpCpParamAndReturnAllBlocks(metaList[i],
-                        seqGroup, seq->seqId_, schedulerOut.forwardMode_);
+                    lwdCloudBlockIds = LwdSetSpCpParamAndReturnAllBlocks(metaList[i], seqGroup, seq->seqId_,
+                                                                         schedulerOut.forwardMode_);
                 }
             }
             std::vector<BlockIds> perSeqBlockTables = blockIds;
@@ -1173,11 +1154,11 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
             metaList[i].blockIds_.resize(targetMgrCount);
             for (size_t m = 0; m < perSeqBlockTables.size(); ++m) {
                 metaList[i].blockIds_[m].reserve(metaList[i].blockIds_[m].size() + perSeqBlockTables[m].size());
-                metaList[i].blockIds_[m].insert(metaList[i].blockIds_[m].end(),
-                                                perSeqBlockTables[m].begin(), perSeqBlockTables[m].end());
+                metaList[i].blockIds_[m].insert(metaList[i].blockIds_[m].end(), perSeqBlockTables[m].begin(),
+                                                perSeqBlockTables[m].end());
             }
-            metaList[i].lwdCloudBlockIds_.insert(metaList[i].lwdCloudBlockIds_.end(),
-                lwdCloudBlockIds.begin(), lwdCloudBlockIds.end());
+            metaList[i].lwdCloudBlockIds_.insert(metaList[i].lwdCloudBlockIds_.end(), lwdCloudBlockIds.begin(),
+                                                 lwdCloudBlockIds.end());
 
             if (schedulerOut.forwardMode_ == ForwardMode::MIXED ||
                 (role_ == Role::P && schedulerConfig_->enableChunkedPrefill)) {
@@ -1203,7 +1184,8 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
 
         // 对于 PREFILL/MIXED 模式，计算 computed blocks 信息
         bool isSimulateSeq = seqGroup->IsSimulateRequest();
-        bool needComputeBlocks = (schedulerOut.forwardMode_ == ForwardMode::PREFILL) ||
+        bool needComputeBlocks =
+            (schedulerOut.forwardMode_ == ForwardMode::PREFILL) ||
             (schedulerOut.forwardMode_ == ForwardMode::MIXED && !metaList[i].isReqPrefill_.empty());
         if (needComputeBlocks) {
             CollectOrAggregateComputedBlocks(metaList, i, runningSeqSPtrs, isSimulateSeq);
@@ -1213,8 +1195,8 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
 
         metadatas.seqLenList[0][i] = 1;
         if (schedulerOut.forwardMode_ == ForwardMode::PREFILL) {
-            metadatas.seqLenList[0][i] = static_cast<int64_t>(metaList[i].promptLens_[0] - \
-                metaList[i].remoteComputedLens_.back() * schedulerConfig_->cacheBlockSize);
+            metadatas.seqLenList[0][i] = static_cast<int64_t>(
+                metaList[i].promptLens_[0] - metaList[i].remoteComputedLens_.back() * schedulerConfig_->cacheBlockSize);
         }
     }
 
@@ -1222,8 +1204,7 @@ SequenceGroupMetaDatas Scheduler::GenerateSequenceGroupMetadata(const SchedulerO
 }
 
 void Scheduler::CollectOrAggregateComputedBlocks(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
-    const std::vector<SequenceSPtr> &runningSeqSPtrs, bool isSimulateSeq)
-{
+                                                 const std::vector<SequenceSPtr> &runningSeqSPtrs, bool isSimulateSeq) {
     // 虚推请求不参与 PrefixCache，直接填充默认值0
     if (isSimulateSeq) {
         metaList[metaIndex].computedLens_.push_back(0);
@@ -1240,13 +1221,12 @@ void Scheduler::CollectOrAggregateComputedBlocks(std::vector<SequenceGroupMetaDa
 }
 
 void Scheduler::CollectComputedBlocksInfo(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
-    const std::vector<SequenceSPtr> &runningSeqSPtrs)
-{
+                                          const std::vector<SequenceSPtr> &runningSeqSPtrs) {
     std::vector<BlockId> computedBlocks = blockManager_->GetCommonComputedBlockIds(runningSeqSPtrs);
     std::vector<BlockId> remoteComputedBlocks;
     if (schedulerConfig_->enableKvPool) {
-        remoteComputedBlocks = blockManager_->GetRemoteComputedBlockIds(runningSeqSPtrs,
-            computedBlocks.size(), schedulerConfig_->tpSize, schedulerConfig_->modelName);
+        remoteComputedBlocks = blockManager_->GetRemoteComputedBlockIds(
+            runningSeqSPtrs, computedBlocks.size(), schedulerConfig_->tpSize, schedulerConfig_->modelName);
     } else {
         remoteComputedBlocks = computedBlocks;
     }
@@ -1255,26 +1235,24 @@ void Scheduler::CollectComputedBlocksInfo(std::vector<SequenceGroupMetaData> &me
 }
 
 void Scheduler::AggregateComputedBlocksInfo(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
-    const std::vector<SequenceSPtr> &runningSeqSPtrs)
-{
+                                            const std::vector<SequenceSPtr> &runningSeqSPtrs) {
     std::vector<size_t> computedBlocksNum = blockManager_->GetAllrankComputedBlockNum(runningSeqSPtrs);
 
     std::vector<size_t> remoteComputedBlocksNum;
     if (schedulerConfig_->enableKvPool) {
-        remoteComputedBlocksNum = blockManager_->GetAllRankRemoteComputedBlockIds(runningSeqSPtrs,
-            computedBlocksNum, schedulerConfig_->modelName);
+        remoteComputedBlocksNum = blockManager_->GetAllRankRemoteComputedBlockIds(runningSeqSPtrs, computedBlocksNum,
+                                                                                  schedulerConfig_->modelName);
     } else {
         remoteComputedBlocksNum = computedBlocksNum;
     }
 
-    metaList[metaIndex].computedLens_.insert(metaList[metaIndex].computedLens_.end(),
-        computedBlocksNum.begin(), computedBlocksNum.end());
+    metaList[metaIndex].computedLens_.insert(metaList[metaIndex].computedLens_.end(), computedBlocksNum.begin(),
+                                             computedBlocksNum.end());
     metaList[metaIndex].remoteComputedLens_.insert(metaList[metaIndex].remoteComputedLens_.end(),
-        remoteComputedBlocksNum.begin(), remoteComputedBlocksNum.end());
+                                                   remoteComputedBlocksNum.begin(), remoteComputedBlocksNum.end());
 }
 
-SequenceGroupMetaDatas Scheduler::GenSeqGroupMetadata(const SchedulerKVTransferOutput &schedulerOut) const
-{
+SequenceGroupMetaDatas Scheduler::GenSeqGroupMetadata(const SchedulerKVTransferOutput &schedulerOut) const {
     SequenceGroupMetaDatas metadatas;
     auto &scheduleSeqGroups = schedulerOut.pullSeqGroups;
     std::vector<SequenceGroupMetaData> &metaList = metadatas.metaList;
@@ -1305,10 +1283,10 @@ SequenceGroupMetaDatas Scheduler::GenSeqGroupMetadata(const SchedulerKVTransferO
 
             metaList[i].srcBlockIds_.resize(seqGroup->pBlockTable.size());
             for (size_t j = 0; j < seqGroup->pBlockTable.size(); ++j) {
-                metaList[i].srcBlockIds_[j].reserve(
-                    metaList[i].srcBlockIds_[j].size() + seqGroup->pBlockTable[j].size());
-                metaList[i].srcBlockIds_[j].insert(metaList[i].srcBlockIds_[j].end(),
-                                                   seqGroup->pBlockTable[j].begin(), seqGroup->pBlockTable[j].end());
+                metaList[i].srcBlockIds_[j].reserve(metaList[i].srcBlockIds_[j].size() +
+                                                    seqGroup->pBlockTable[j].size());
+                metaList[i].srcBlockIds_[j].insert(metaList[i].srcBlockIds_[j].end(), seqGroup->pBlockTable[j].begin(),
+                                                   seqGroup->pBlockTable[j].end());
             }
         }
 
@@ -1319,10 +1297,10 @@ SequenceGroupMetaDatas Scheduler::GenSeqGroupMetadata(const SchedulerKVTransferO
     return metadatas;
 }
 
-template <typename T> void Scheduler::PopAndSave_(ConcurrentDeque<T> &src, std::unordered_set<T> &dst) const
-{
+template <typename T>
+void Scheduler::PopAndSave_(ConcurrentDeque<T> &src, std::unordered_set<T> &dst) const {
     while (!src.Empty()) {
-        T resId = T{}; // if Request is int, it is not initialized.
+        T resId = T{};  // if Request is int, it is not initialized.
         src.PopFront(resId);
         if (dst.count(resId) != 0) {
             MINDIE_LLM_LOG_INFO_REQUEST("Request(id:" << resId << ") is already in the finished/aborted queue.");
@@ -1337,10 +1315,10 @@ template <typename T> void Scheduler::PopAndSave_(ConcurrentDeque<T> &src, std::
  * 请求结束不需要D节点执行，不需要给service上送IBISSCHEDULER_PUBLISH_COMPLETED的Response。KV的清理在P节点内完成。
  * 例如：maxIterTimes配置为1，只需要推理1个token，请求就完成。
  */
-template <typename T> void Scheduler::LifeEndKVCleanup(std::unordered_set<T> &lifeEndSet)
-{
+template <typename T>
+void Scheduler::LifeEndKVCleanup(std::unordered_set<T> &lifeEndSet) {
     // P节点做完prefill之后，不再入队。对于做完prefill生命周期就结束的请求，要回收kv
-    if (role_ != Role::P || static_cast<int32_t>(role_) > 2) { // 2 表示 role 为 FlexD, FlexP, FlexPnD
+    if (role_ != Role::P || static_cast<int32_t>(role_) > 2) {  // 2 表示 role 为 FlexD, FlexP, FlexPnD
         return;
     }
     auto setSize = lifeEndSet.size();
@@ -1354,7 +1332,7 @@ template <typename T> void Scheduler::LifeEndKVCleanup(std::unordered_set<T> &li
             continue;
         }
         // flex 场景下，此处由于跟主线程可能不同步，需要校验当前请求是否是 flexp 类型
-        if (static_cast<int32_t>(role_) > 2 && // role为 FlexD, FlexP, FlexPnD
+        if (static_cast<int32_t>(role_) > 2 &&  // role为 FlexD, FlexP, FlexPnD
             LiveInferContext::GetInstance(localDPRank_)->GetInferInstanceFlexRole4Req(seqGrpSPtr->requestId) ==
                 Role::FlexP) {
             if (seqGrpSPtr->pInstanceId != localDPRank_) {
@@ -1368,24 +1346,21 @@ template <typename T> void Scheduler::LifeEndKVCleanup(std::unordered_set<T> &li
         this->kvCachePulledSeqIds_.PushBack(seqGrpSPtr->firstSeq->seqId_);
         it = lifeEndSet.erase(it);
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Life End, add to release-kv queue] Add to pulled. requestId: "
-                            << seqGrpSPtr->metrics_.inferReqId_
-                            << "; seqId: " << seqGrpSPtr->firstSeq->seqId_);
+                                    << seqGrpSPtr->metrics_.inferReqId_ << "; seqId: " << seqGrpSPtr->firstSeq->seqId_);
         processNum++;
     }
 }
 
 void Scheduler::NotifyMeKvPulledSeqIds(SequenceId seqId) { this->kvCachePulledSeqIds_.PushBack(seqId); }
 
-std::unordered_set<SequenceId> &Scheduler::FetchFinishedSeqIds(ConcurrentDeque<SequenceId> &finishedSeqIds)
-{
-    PopAndSave_(finishedSeqIds, this->finishedSeqIds_); // dst is unordered set
+std::unordered_set<SequenceId> &Scheduler::FetchFinishedSeqIds(ConcurrentDeque<SequenceId> &finishedSeqIds) {
+    PopAndSave_(finishedSeqIds, this->finishedSeqIds_);  // dst is unordered set
     LifeEndKVCleanup(this->finishedSeqIds_);
     return finishedSeqIds_;
 }
 
-std::unordered_set<SequenceId> &Scheduler::FetchExceptionSeqIds(ConcurrentDeque<SequenceId> &exceptionSeqIds)
-{
-    PopAndSave_(exceptionSeqIds, this->exceptionSeqIds_); // dst is unordered set
+std::unordered_set<SequenceId> &Scheduler::FetchExceptionSeqIds(ConcurrentDeque<SequenceId> &exceptionSeqIds) {
+    PopAndSave_(exceptionSeqIds, this->exceptionSeqIds_);  // dst is unordered set
     LifeEndKVCleanup(this->exceptionSeqIds_);
     return exceptionSeqIds_;
 }
@@ -1393,15 +1368,13 @@ std::unordered_set<SequenceId> &Scheduler::FetchExceptionSeqIds(ConcurrentDeque<
 /**
  * 将新的aborted请求加入到abortedReqIds_队列，老的已经转换到sequence id的aborted请求返回给engine做资源清理。
  */
-std::unordered_set<RequestId> &Scheduler::FetchAbortedReqIds(ConcurrentDeque<RequestId> &abortedReqIds)
-{
-    PopAndSave_(abortedReqIds, this->abortedReqIds_); // dst is unordered set
+std::unordered_set<RequestId> &Scheduler::FetchAbortedReqIds(ConcurrentDeque<RequestId> &abortedReqIds) {
+    PopAndSave_(abortedReqIds, this->abortedReqIds_);  // dst is unordered set
     LifeEndKVCleanup(this->abortedReqIds_);
     return abortedReqIds_;
 }
 
-void Scheduler::KVPulledReqEnterRunningQueue(ConcurrentDeque<RequestId> &pulledReqIds)
-{
+void Scheduler::KVPulledReqEnterRunningQueue(ConcurrentDeque<RequestId> &pulledReqIds) {
     RequestId reqId{};
     while (!pulledReqIds.Empty()) {
         bool isSucc = pulledReqIds.PopFront(reqId);
@@ -1419,17 +1392,15 @@ void Scheduler::KVPulledReqEnterRunningQueue(ConcurrentDeque<RequestId> &pulledR
         PROF(prof.Metric("QueueSize", running_.Size()).Attr("status", "running").Event("Enqueue"));
         transferringMap_.Erase(seqGrpSPtr->firstSeq->seqId_);
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Enter running queue] DP RankId: "
-                            << dpRankId_ << ". Pull kv ended, enter running queue. requestId: "
-                            << seqGrpSPtr->metrics_.inferReqId_
-                            << "; seqId: " << seqGrpSPtr->firstSeq->seqId_
-                            << "; running size:" << running_.Size() << "; waiting size: " << waiting_.Size()
-                            << "; swapped size:" << swapped_.Size()
-                            << "; transferring size:" << transferringMap_.Size());
+                                    << dpRankId_ << ". Pull kv ended, enter running queue. requestId: "
+                                    << seqGrpSPtr->metrics_.inferReqId_ << "; seqId: " << seqGrpSPtr->firstSeq->seqId_
+                                    << "; running size:" << running_.Size() << "; waiting size: " << waiting_.Size()
+                                    << "; swapped size:" << swapped_.Size()
+                                    << "; transferring size:" << transferringMap_.Size());
     }
 }
 
-void Scheduler::FetchSeqGeneratedTokens(ConcurrentDeque<std::pair<SequenceId, TokenId>> &seqIdToOutputTokenQueue)
-{
+void Scheduler::FetchSeqGeneratedTokens(ConcurrentDeque<std::pair<SequenceId, TokenId>> &seqIdToOutputTokenQueue) {
     while (!seqIdToOutputTokenQueue.Empty()) {
         std::pair<SequenceId, TokenId> result;
         seqIdToOutputTokenQueue.PopFront(result);
@@ -1453,34 +1424,30 @@ void Scheduler::FetchSeqGeneratedTokens(ConcurrentDeque<std::pair<SequenceId, To
     }
 }
 
-void Scheduler::AddGeneratedToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId, TokenId token)
-{
+void Scheduler::AddGeneratedToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId, TokenId token) {
     predictedTokensBySeqId_[seqId].push_back(token);
     SequenceGroupSPtr seqGroup = contextSPtr->GetSeqGroup(seqId);
     if (seqGroup == nullptr) {
         seqGroup = contextSPtr->GetSeqGroupFromSeqRootMap(seqId);
     }
-    if (seqGroup != nullptr && seqGroup->sampling != nullptr &&
-        seqGroup->sampling->responseFormat.has_value()) {
+    if (seqGroup != nullptr && seqGroup->sampling != nullptr && seqGroup->sampling->responseFormat.has_value()) {
         seqGroup->prefillReplayTokenIds_.push_back(token);
     }
 }
 
-bool Scheduler::LayerwiseDiscardToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId)
-{
-    if (schedulerConfig_->layerwiseDisaggregated && !schedulerConfig_->enableChunkedPrefill
-        && contextSPtr->GetSeqGroup(seqId) != nullptr
-        && contextSPtr->GetSeqGroup(seqId)->firstSeq->data_.layerwiseDiscard_) {
+bool Scheduler::LayerwiseDiscardToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId) {
+    if (schedulerConfig_->layerwiseDisaggregated && !schedulerConfig_->enableChunkedPrefill &&
+        contextSPtr->GetSeqGroup(seqId) != nullptr &&
+        contextSPtr->GetSeqGroup(seqId)->firstSeq->data_.layerwiseDiscard_) {
         // 边云协同场景特殊情况需要丢弃
         contextSPtr->GetSeqGroup(seqId)->firstSeq->data_.layerwiseDiscard_ = false;
-        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|scheduler] "<<"seq id= " << seqId << ", is discarded");
+        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|scheduler] " << "seq id= " << seqId << ", is discarded");
         return true;
     }
     return false;
 }
 
-bool Scheduler::isDiscardOutputToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId)
-{
+bool Scheduler::isDiscardOutputToken(LiveInferContextSPtr &contextSPtr, SequenceId seqId) {
     if (!schedulerConfig_->enableChunkedPrefill) {
         // 不开chunkedprefill时，不会丢弃token，返回false
         return false;
@@ -1497,8 +1464,7 @@ bool Scheduler::isDiscardOutputToken(LiveInferContextSPtr &contextSPtr, Sequence
 /**
  * 获取Sequence grp的状态信息（是否被abort/是否response返回已经结束）
  */
-SequenceStatus Scheduler::FinalizeSeqGrpStatus(SequenceGroupSPtr seqGroup)
-{
+SequenceStatus Scheduler::FinalizeSeqGrpStatus(SequenceGroupSPtr seqGroup) {
     // 用户下发abort，生命周期要结束
     if ((abortedReqIds_.count(seqGroup->requestId) > 0)) {
         return SequenceStatus::FINISH_ABORTED;
@@ -1522,10 +1488,8 @@ SequenceStatus Scheduler::FinalizeSeqGrpStatus(SequenceGroupSPtr seqGroup)
         bool inException = exceptionSeqIds_.count(seqGroup->seqs_[0]->seqId_) > 0;
         if (inFinished || inException) {
             MINDIE_LLM_LOG_INFO("[SimulateInference] P node skip status check. "
-                                << "seqId=" << seqGroup->seqs_[0]->seqId_
-                                << ", inFinishedSeqIds=" << inFinished
-                                << ", inExceptionSeqIds=" << inException
-                                << ", requestId=" << seqGroup->requestId);
+                                << "seqId=" << seqGroup->seqs_[0]->seqId_ << ", inFinishedSeqIds=" << inFinished
+                                << ", inExceptionSeqIds=" << inException << ", requestId=" << seqGroup->requestId);
         }
         // P节点跳过检查，直接返回RUNNING
         return SequenceStatus::RUNNING;
@@ -1541,8 +1505,7 @@ SequenceStatus Scheduler::FinalizeSeqGrpStatus(SequenceGroupSPtr seqGroup)
     return SequenceStatus::RUNNING;
 }
 
-void Scheduler::ClearSeq(SequenceId seqId)
-{
+void Scheduler::ClearSeq(SequenceId seqId) {
     exceptionSeqIds_.erase(seqId);
     finishedSeqIds_.erase(seqId);
     // 生命周期结束，则将残留的tokenid清理掉
@@ -1552,34 +1515,30 @@ void Scheduler::ClearSeq(SequenceId seqId)
     blockManager_->Free(seqId);
 }
 
-void Scheduler::ClearSeqGrp(SequenceGroupSPtr seqGroup, SequenceStatus finalStatus)
-{
+void Scheduler::ClearSeqGrp(SequenceGroupSPtr seqGroup, SequenceStatus finalStatus) {
     // sequence group处于终止态，则删除各个容器中的资源（有可能被aborted的同时Response的返回也是终止态）
     LiveInferContext::GetInstance(localDPRank_)->Remove(seqGroup->requestId);
     MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Life End] Request life endup. DP RankId: "
-                        << dpRankId_
-                        << ". requestId: " << seqGroup->metrics_.inferReqId_
-                        << "; seqId: " << seqGroup->firstSeq->seqId_
-                        << "; final status:" << static_cast<int>(finalStatus));
+                                << dpRankId_ << ". requestId: " << seqGroup->metrics_.inferReqId_ << "; seqId: "
+                                << seqGroup->firstSeq->seqId_ << "; final status:" << static_cast<int>(finalStatus));
     abortedReqIds_.erase(seqGroup->requestId);
     for (auto &seq : seqGroup->GetFirstSequence()) {
         ClearSeq(seq->seqId_);
         seq->status_ = finalStatus;
     }
     PROF(INFO, Domain("KVCache")
-                    .Resource(seqGroup->requestId)
-                    .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
-                    .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
-                    .MetricScope("dp", blockManager_->GetLocalDPRank())
-                    .Event("Free"));
+                   .Resource(seqGroup->requestId)
+                   .Metric("deviceBlock", blockManager_->GetNumFreeNpuBlocks())
+                   .Metric("hostBlock", blockManager_->GetNumFreeCpuBlocks())
+                   .MetricScope("dp", blockManager_->GetLocalDPRank())
+                   .Event("Free"));
 }
 
 /**
 并行采样，对于没有被选中的seqId2ParallelSeqGroup_中的seqgrp，需要释放对应的资源
 seqId2ParallelSeqGroup_ 只在这个函数删除，其他地方不允许做删除操作
  */
-void Scheduler::ParallelSeqGroupLifeEnd(SequenceGroupSPtr seqGroup)
-{
+void Scheduler::ParallelSeqGroupLifeEnd(SequenceGroupSPtr seqGroup) {
     std::vector<SequenceId> parallelSeqIds = seqGroup->seqId2ParallelSeqGroup_.KeySet();
     std::vector<SequenceId> seqIdsToClear{};
     bool isAbortedRequest = abortedReqIds_.count(seqGroup->requestId) > 0;
@@ -1613,8 +1572,7 @@ void Scheduler::ParallelSeqGroupLifeEnd(SequenceGroupSPtr seqGroup)
 
 // if life ended, wrap up the seqgroup into bin, and release blocks occupied
 // return true if life ended, otherwise false
-bool Scheduler::LifeEndedWrapup_(SequenceGroupSPtr &seqGroup)
-{
+bool Scheduler::LifeEndedWrapup_(SequenceGroupSPtr &seqGroup) {
     // 处理beam search或者并行采样的parallel的seqgrp的资源回收
     if (seqGroup->sampling->enableParallelSampling) {
         ParallelSeqGroupLifeEnd(seqGroup);
@@ -1641,8 +1599,7 @@ bool Scheduler::LifeEndedWrapup_(SequenceGroupSPtr &seqGroup)
 // dequeue concurrent queue, and check if it is finished or aborted
 // when seqgroup life ended, wrap up it.
 size_t Scheduler::Dequeue(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, std::deque<SequenceGroupSPtr> &dstDeque,
-                          const size_t maxNum)
-{
+                          const size_t maxNum) {
     size_t actualNum = 0;
 
     // repeat until empty or pop enough
@@ -1663,8 +1620,7 @@ size_t Scheduler::Dequeue(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, std::deq
 }
 
 size_t Scheduler::DequeueWaiting(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, std::deque<SequenceGroupSPtr> &dstDeque,
-                                 const size_t maxNum)
-{
+                                 const size_t maxNum) {
     size_t actualNum = 0;
     std::deque<SequenceGroupSPtr> recomputeReqs;
 
@@ -1694,8 +1650,7 @@ size_t Scheduler::DequeueWaiting(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, s
 }
 
 void Scheduler::Enqueue(ConcurrentDeque<SequenceGroupSPtr> &dstQueue, std::vector<SequenceGroupSPtr> &seqGroups,
-                        bool front) const
-{
+                        bool front) const {
     if (seqGroups.empty()) {
         return;
     }
@@ -1713,8 +1668,7 @@ void Scheduler::Enqueue(ConcurrentDeque<SequenceGroupSPtr> &dstQueue, std::vecto
 }
 
 void Scheduler::Enqueue(ConcurrentDeque<SequenceGroupSPtr> &dstQueue,
-                        std::vector<std::shared_ptr<ScheduledSequenceGroup>> &scheduleSeqGroups, bool front) const
-{
+                        std::vector<std::shared_ptr<ScheduledSequenceGroup>> &scheduleSeqGroups, bool front) const {
     // 1. check seqGroup size
     if (scheduleSeqGroups.empty()) {
         return;
@@ -1733,8 +1687,7 @@ void Scheduler::Enqueue(ConcurrentDeque<SequenceGroupSPtr> &dstQueue,
 }
 
 SchedulerPtr MakeScheduler(SchedulerConfigSPtr schedulerConfig, std::shared_ptr<LatencyPredictor> latencypredictor,
-                           Role pdRole, size_t localDPRank)
-{
+                           Role pdRole, size_t localDPRank) {
     return std::make_unique<Scheduler>(schedulerConfig, latencypredictor, pdRole, localDPRank);
 }
 
@@ -1742,8 +1695,7 @@ void Scheduler::MarkLastScheduleEmpty() { lastScheduleEmpty_ = true; }
 
 void Scheduler::ClearLastScheduleEmpty() { lastScheduleEmpty_ = false; }
 
-void Scheduler::ClearQueueAndSendAbortedResponse(ConcurrentDeque<SequenceGroupSPtr> &srcQueue)
-{
+void Scheduler::ClearQueueAndSendAbortedResponse(ConcurrentDeque<SequenceGroupSPtr> &srcQueue) {
     while (!srcQueue.Empty()) {
         SequenceGroupSPtr sgPtr = nullptr;
         srcQueue.PopFront(sgPtr);
@@ -1752,8 +1704,7 @@ void Scheduler::ClearQueueAndSendAbortedResponse(ConcurrentDeque<SequenceGroupSP
     }
 }
 
-void Scheduler::StopRunningRequest()
-{
+void Scheduler::StopRunningRequest() {
     ClearQueueAndSendAbortedResponse(waiting_);
 
     // Clear transferring map
@@ -1773,15 +1724,13 @@ void Scheduler::StopRunningRequest()
         "[Scheduler] Cleared all running, swapped, waiting and transferring requests (status=FINISH_ABORTED).]");
 }
 
-std::unordered_set<SequenceId> Scheduler::ClearAndReturnTerminatedSeqIds()
-{
+std::unordered_set<SequenceId> Scheduler::ClearAndReturnTerminatedSeqIds() {
     std::unordered_set<SequenceId> seqIds = abortedSequenceIds_;
     abortedSequenceIds_.clear();
     return seqIds;
 }
 
-SchedulerMetric Scheduler::CollectSchedulerMetric()
-{
+SchedulerMetric Scheduler::CollectSchedulerMetric() {
     SchedulerMetric schedulerMetric{};
     uint32_t cspSize = schedulerConfig_->spSize * schedulerConfig_->cpSize;
     schedulerMetric.blockInfo.totalCpuBlockNum_ = schedulerConfig_->cpuBlockNum * cspSize;
@@ -1799,19 +1748,21 @@ SchedulerMetric Scheduler::CollectSchedulerMetric()
     return schedulerMetric;
 }
 
-bool MatchesFilter(const SequenceGroupSPtr &sg, Role role)
-{
+bool MatchesFilter(const SequenceGroupSPtr &sg, Role role) {
     switch (role) {
-        case Role::FlexP: return !sg->isDecode_ && !sg->isFlexLocal_;
-        case Role::FlexD: return sg->isDecode_ && !sg->isFlexLocal_;
-        case Role::FlexPnD: return sg->isFlexLocal_;
-        default: return false;
+        case Role::FlexP:
+            return !sg->isDecode_ && !sg->isFlexLocal_;
+        case Role::FlexD:
+            return sg->isDecode_ && !sg->isFlexLocal_;
+        case Role::FlexPnD:
+            return sg->isFlexLocal_;
+        default:
+            return false;
     }
 }
 
 size_t Scheduler::DequeueForFlex(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, std::deque<SequenceGroupSPtr> &dstDeque,
-                                 Role role, const size_t maxNum)
-{
+                                 Role role, const size_t maxNum) {
     size_t actualNum = 0;
     size_t queueSize = srcQueue.Size();
     size_t processSeqNum = 0;
@@ -1838,20 +1789,17 @@ size_t Scheduler::DequeueForFlex(ConcurrentDeque<SequenceGroupSPtr> &srcQueue, s
     return actualNum;
 }
 
-void Scheduler::SetPrefillPercentage(uint32_t prefillPercentage)
-{
+void Scheduler::SetPrefillPercentage(uint32_t prefillPercentage) {
     stagePolicy_->SetPrefillPercentage(prefillPercentage);
 }
-Role Scheduler::SwitchRole()
-{
+Role Scheduler::SwitchRole() {
     role_ = stagePolicy_->GetFlexRole(waiting_, running_, swapped_);
     return role_;
 }
 
 std::shared_ptr<StagePolicy> Scheduler::GetStagePolicy() { return stagePolicy_; }
 
-void Scheduler::CollectAndClearAbortedParallelSeqGroups()
-{
+void Scheduler::CollectAndClearAbortedParallelSeqGroups() {
     for (SequenceGroupSPtr &seqGroup : abortedParallelSeqGroups_) {
         RequestId reqId = seqGroup->requestId;
         if (!abortedReqIds_.insert(reqId).second) {
@@ -1863,4 +1811,4 @@ void Scheduler::CollectAndClearAbortedParallelSeqGroups()
 
 std::vector<SequenceGroupSPtr> &Scheduler::GetAbortedParallelSeqGroups() { return abortedParallelSeqGroups_; }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

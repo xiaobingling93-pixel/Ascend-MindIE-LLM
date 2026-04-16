@@ -11,9 +11,10 @@
  */
 
 #include "dynamic_batch_recorder.h"
-#include "log.h"
+
 #include "dynamic_batch_size.h"
 #include "latency_predictor/latency_predictor.h"
+#include "log.h"
 
 namespace mindie_llm {
 
@@ -23,8 +24,7 @@ std::mutex DynamicBatchRecorder::mutex_;
 
 DynamicBatchRecorder::DynamicBatchRecorder(size_t localDPRank) : localDPRank_(localDPRank) {}
 
-DynamicBatchRecorder &DynamicBatchRecorder::GetInstance(size_t localDPRank)
-{
+DynamicBatchRecorder &DynamicBatchRecorder::GetInstance(size_t localDPRank) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = instances_.find(localDPRank);
     if (it == instances_.end()) {
@@ -38,46 +38,30 @@ DynamicBatchRecorder &DynamicBatchRecorder::GetInstance(size_t localDPRank)
     return *(it->second);
 }
 
-void DynamicBatchRecorder::SetLatencyPredictor(const std::shared_ptr<LatencyPredictor> &predictor)
-{
+void DynamicBatchRecorder::SetLatencyPredictor(const std::shared_ptr<LatencyPredictor> &predictor) {
     predictor_ = predictor;
     MINDIE_LLM_LOG_DEBUG("[DynamicBatchRecorder] Set LatencyPredictor for DP rank: " << localDPRank_);
 }
 
-std::shared_ptr<LatencyPredictor> DynamicBatchRecorder::GetLatencyPredictor() const
-{
-    return predictor_;
-}
+std::shared_ptr<LatencyPredictor> DynamicBatchRecorder::GetLatencyPredictor() const { return predictor_; }
 
-void DynamicBatchRecorder::SetDecodeBatchSizeTracker(const std::shared_ptr<DecodeBatchSizeTracker> &tracker)
-{
+void DynamicBatchRecorder::SetDecodeBatchSizeTracker(const std::shared_ptr<DecodeBatchSizeTracker> &tracker) {
     decodeBatchSizeTracker_ = tracker;
     MINDIE_LLM_LOG_DEBUG("[DynamicBatchRecorder] Set DecodeBatchSizeTracker for DP rank: " << localDPRank_);
 }
 
-std::shared_ptr<DecodeBatchSizeTracker> DynamicBatchRecorder::GetDecodeBatchSizeTracker() const
-{
+std::shared_ptr<DecodeBatchSizeTracker> DynamicBatchRecorder::GetDecodeBatchSizeTracker() const {
     return decodeBatchSizeTracker_;
 }
 
-size_t DynamicBatchRecorder::GetLocalDPRank() const
-{
-    return localDPRank_;
-}
+size_t DynamicBatchRecorder::GetLocalDPRank() const { return localDPRank_; }
 
-void DynamicBatchRecorder::SetRunningSize(size_t runningSize)
-{
-    runningSize_ = runningSize;
-}
+void DynamicBatchRecorder::SetRunningSize(size_t runningSize) { runningSize_ = runningSize; }
 
-size_t DynamicBatchRecorder::GetRunningSize() const
-{
-    return runningSize_;
-}
+size_t DynamicBatchRecorder::GetRunningSize() const { return runningSize_; }
 
-size_t DynamicBatchRecorder::AggregateAllFromAllDPs(size_t forwardNum, double &maxDecodeLatency,
-                                                    uint64_t &maxBatchSize, size_t &maxDecodeRequestNum)
-{
+size_t DynamicBatchRecorder::AggregateAllFromAllDPs(size_t forwardNum, double &maxDecodeLatency, uint64_t &maxBatchSize,
+                                                    size_t &maxDecodeRequestNum) {
     maxDecodeLatency = 0.0;
     maxBatchSize = 0;
     maxDecodeRequestNum = 0;
@@ -97,9 +81,9 @@ size_t DynamicBatchRecorder::AggregateAllFromAllDPs(size_t forwardNum, double &m
         uint64_t dpBatchSize = tracker->GetRecentAvgBatchSize(forwardNum);
         size_t dpRunningSize = recorder->runningSize_;
 
-        MINDIE_LLM_LOG_INFO_REQUEST("[DynamicBatchRecorder|Aggregate] DP" << pair.first  <<
-            ": latency=" << dpLatency << "ms, batchSize=" << dpBatchSize << ", " <<
-            "runningSize=" << dpRunningSize);
+        MINDIE_LLM_LOG_INFO_REQUEST("[DynamicBatchRecorder|Aggregate] DP" << pair.first << ": latency=" << dpLatency
+                                                                          << "ms, batchSize=" << dpBatchSize << ", "
+                                                                          << "runningSize=" << dpRunningSize);
 
         if (dpLatency > maxDecodeLatency) {
             maxDecodeLatency = dpLatency;
@@ -113,11 +97,11 @@ size_t DynamicBatchRecorder::AggregateAllFromAllDPs(size_t forwardNum, double &m
         ++validDPCount;
     }
 
-    MINDIE_LLM_LOG_INFO_REQUEST("[DynamicBatchRecorder|Aggregate] Final aggregated (max) values: " <<
-        "latency=" << maxDecodeLatency << "ms, batchSize=" << maxBatchSize << ", " <<
-        "decodeRequestNum=" << maxDecodeRequestNum << ", validDPCount=" << validDPCount);
+    MINDIE_LLM_LOG_INFO_REQUEST("[DynamicBatchRecorder|Aggregate] Final aggregated (max) values: "
+                                << "latency=" << maxDecodeLatency << "ms, batchSize=" << maxBatchSize << ", "
+                                << "decodeRequestNum=" << maxDecodeRequestNum << ", validDPCount=" << validDPCount);
 
     return validDPCount;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

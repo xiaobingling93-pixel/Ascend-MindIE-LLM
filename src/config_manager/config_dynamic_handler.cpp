@@ -9,37 +9,34 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <thread>
-#include <string>
-#include <iostream>
-#include <cstdlib>
-#include <chrono>
+#include "config_dynamic_handler.h"
+
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <iostream>
 #include <nlohmann/json.hpp>
+#include <string>
+#include <thread>
+
 #include "common_util.h"
 #include "param_checker.h"
-#include "config_dynamic_handler.h"
 
 namespace mindie_llm {
 
-DynamicConfigHandler::~DynamicConfigHandler()
-{
-    Stop();
-}
+DynamicConfigHandler::~DynamicConfigHandler() { Stop(); }
 
-DynamicConfigHandler& DynamicConfigHandler::GetInstance()
-{
+DynamicConfigHandler& DynamicConfigHandler::GetInstance() {
     static DynamicConfigHandler instance;
     return instance;
 }
 
-void DynamicConfigHandler::Start() const
-{
+void DynamicConfigHandler::Start() const {
     std::thread t([]() {
         while (GetInstance().isRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5000));
             std::lock_guard<std::mutex> locker(GetInstance().vectorMutex);
-            for (auto &configTuple: GetInstance().callBackFunctions) {
+            for (auto& configTuple : GetInstance().callBackFunctions) {
                 if (GetInstance().isTriggered(configTuple.first)) {
                     configTuple.second();
                 }
@@ -49,13 +46,9 @@ void DynamicConfigHandler::Start() const
     t.detach();
 }
 
-void DynamicConfigHandler::Stop() const
-{
-    GetInstance().isRunning = false;
-}
+void DynamicConfigHandler::Stop() const { GetInstance().isRunning = false; }
 
-std::vector<std::string> DynamicConfigHandler::splitString(const std::string& s, const char delimiter) const
-{
+std::vector<std::string> DynamicConfigHandler::splitString(const std::string& s, const char delimiter) const {
     std::vector<std::string> ans;
     if (s.empty()) {
         return ans;
@@ -64,7 +57,7 @@ std::vector<std::string> DynamicConfigHandler::splitString(const std::string& s,
     for (std::size_t i = 0; i < s.length();) {
         std::size_t pos = s.find(delimiter, i);
         if (pos != std::string::npos) {
-            if (pos == i) { // 跳过多个连续的分隔符
+            if (pos == i) {  // 跳过多个连续的分隔符
                 i = pos + 1;
                 continue;
             } else {
@@ -81,18 +74,16 @@ std::vector<std::string> DynamicConfigHandler::splitString(const std::string& s,
     return ans;
 }
 
-std::string DynamicConfigHandler::getConfigFilePath() const
-{
-    const char *miesInstallPath = std::getenv("MINDIE_LLM_HOME_PATH");
+std::string DynamicConfigHandler::getConfigFilePath() const {
+    const char* miesInstallPath = std::getenv("MINDIE_LLM_HOME_PATH");
     if (miesInstallPath != nullptr) {
         return std::string(miesInstallPath) + "/conf/config.json";
     }
     return "../conf/config.json";
 }
 
-bool DynamicConfigHandler::CheckSystemConfig(const std::string &jsonPath, nlohmann::json &inputJsonData,
-    std::string paramType) const
-{
+bool DynamicConfigHandler::CheckSystemConfig(const std::string& jsonPath, nlohmann::json& inputJsonData,
+                                             std::string paramType) const {
     std::string homePath;
     if (!GetHomePath(homePath).IsOk()) {
         std::cout << "Failed to get home path." << std::endl;
@@ -106,8 +97,7 @@ bool DynamicConfigHandler::CheckSystemConfig(const std::string &jsonPath, nlohma
     return ParamChecker::ReadJsonFile(jsonPath, baseDir, inputJsonData, paramType);
 }
 
-bool DynamicConfigHandler::isTriggered(const std::string pathExpression) const
-{
+bool DynamicConfigHandler::isTriggered(const std::string pathExpression) const {
     try {
         std::string configFilePath = getConfigFilePath();
         nlohmann::json configJson;
@@ -132,4 +122,4 @@ bool DynamicConfigHandler::isTriggered(const std::string pathExpression) const
     return true;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

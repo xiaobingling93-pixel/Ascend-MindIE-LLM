@@ -12,7 +12,6 @@
 # See the Mulan PSL v2 for more details.
 
 import torch
-import torch_npu
 
 from mindie_llm.utils.log.logging import logger
 from mindie_llm.runtime.config.huggingface_config import BaseRopeScaling
@@ -53,7 +52,7 @@ def _create_default_rope(
     Returns:
         Initialized RotaryEmbedding instance.
     """
-    
+
     return RotaryEmbedding(
         head_size,
         rotary_dim,
@@ -99,7 +98,7 @@ def _create_yarn_rope(
     Returns:
         Initialized YarnScalingRotaryEmbedding instance.
     """
-    original_max_position = getattr(rope_config, 'original_max_position_embeddings', max_position)
+    original_max_position = getattr(rope_config, "original_max_position_embeddings", max_position)
     return YarnScalingRotaryEmbedding(
         head_size,
         rotary_dim,
@@ -107,13 +106,13 @@ def _create_yarn_rope(
         base,
         is_neox_style,
         dtype,
-        factor=getattr(rope_config, 'factor', 1.0),
-        extrapolation_factor=getattr(rope_config, 'extrapolation_factor', 1.0),
-        beta_fast=getattr(rope_config, 'beta_fast', 32),
-        beta_slow=getattr(rope_config, 'beta_slow', 1),
-        mscale=getattr(rope_config, 'mscale', 1.0),
-        apply_yarn_scaling=getattr(rope_config, 'apply_yarn_scaling', True),
-        truncate=getattr(rope_config, 'truncate', True),
+        factor=getattr(rope_config, "factor", 1.0),
+        extrapolation_factor=getattr(rope_config, "extrapolation_factor", 1.0),
+        beta_fast=getattr(rope_config, "beta_fast", 32),
+        beta_slow=getattr(rope_config, "beta_slow", 1),
+        mscale=getattr(rope_config, "mscale", 1.0),
+        apply_yarn_scaling=getattr(rope_config, "apply_yarn_scaling", True),
+        truncate=getattr(rope_config, "truncate", True),
     )
 
 
@@ -150,18 +149,18 @@ def _create_deepseek_scaling_rope(
     Returns:
         Initialized DeepseekV3YarnRotaryEmbedding instance.
     """
-    original_max_position = getattr(rope_config, 'original_max_position_embeddings', max_position)
+    original_max_position = getattr(rope_config, "original_max_position_embeddings", max_position)
     return DeepseekV3YarnRotaryEmbedding(
         rotary_dim,
         original_max_position,
         base,
         is_neox_style=is_neox_style,
         dtype=dtype,
-        factor=getattr(rope_config, 'factor', 1.0),
-        beta_fast=getattr(rope_config, 'beta_fast', 32),
-        beta_slow=getattr(rope_config, 'beta_slow', 1),
-        mscale=getattr(rope_config, 'mscale', 1.0),
-        mscale_all_dim=getattr(rope_config, 'mscale_all_dim', None),
+        factor=getattr(rope_config, "factor", 1.0),
+        beta_fast=getattr(rope_config, "beta_fast", 32),
+        beta_slow=getattr(rope_config, "beta_slow", 1),
+        mscale=getattr(rope_config, "mscale", 1.0),
+        mscale_all_dim=getattr(rope_config, "mscale_all_dim", None),
     )
 
 
@@ -206,24 +205,21 @@ def get_rope(
     """
     if dtype is None:
         dtype = torch.get_default_dtype()
-    
-    rope_type = getattr(rope_config, 'rope_type', 'default')
+
+    rope_type = getattr(rope_config, "rope_type", "default")
     base = rope_config.rope_theta
-    
+
     factory_func = get_rope_factory(rope_type)
-    
+
     if factory_func is None:
-        _msg = (
-            f"Unknown RoPE scaling type '{rope_type}'. "
-            f"Available types: {', '.join(get_registered_rope_types())}"
-        )
+        _msg = f"Unknown RoPE scaling type '{rope_type}'. Available types: {', '.join(get_registered_rope_types())}"
         logger.error(_msg)
         raise ValueError(_msg)
 
     partial_rotary_factor = getattr(rope_config, "partial_rotary_factor", 1.0)
     if partial_rotary_factor < 1.0:
         rotary_dim = int(rotary_dim * partial_rotary_factor)
-    
+
     return factory_func(
         head_size,
         rotary_dim,

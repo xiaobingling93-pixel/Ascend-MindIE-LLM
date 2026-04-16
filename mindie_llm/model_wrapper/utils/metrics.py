@@ -19,12 +19,12 @@ from mindie_llm.utils.file_utils import safe_open
 
 
 METRICS_PATH = "./"
-METRIC_TIME_SCALE = 1_000 # 定义常量以表示时间缩放因子
-EVENT_NAME = "name" # 事件名字
-EVENT_PH = "ph" # 事件开始或结束
-EVENT_PID = "pid" # 进程id
-EVENT_TID = "tid" # 线程id
-EVENT_TIME_STEP = "ts" # 微秒级时间戳
+METRIC_TIME_SCALE = 1_000  # 定义常量以表示时间缩放因子
+EVENT_NAME = "name"  # 事件名字
+EVENT_PH = "ph"  # 事件开始或结束
+EVENT_PID = "pid"  # 进程id
+EVENT_TID = "tid"  # 线程id
+EVENT_TIME_STEP = "ts"  # 微秒级时间戳
 
 
 def json_file_write(file_path: str, data: list[dict]):
@@ -77,26 +77,32 @@ class FileMetrics:
             batch_req_ids = details["batch_req_ids"]
             batch_seq_len = details["batch_seq_len"]
             batch_metric[EVENT_NAME] += f",input_length{[seq_len for seq_len in batch_seq_len]}"
-            request_metric = [{
-                EVENT_NAME: event_str + f",input_length[{seq_len}]",
-                EVENT_PH: flag,
-                EVENT_PID: self.pid,
-                EVENT_TID: str(req_id),
-                EVENT_TIME_STEP: ms_now
-            } for req_id, seq_len in zip(batch_req_ids, batch_seq_len)]
+            request_metric = [
+                {
+                    EVENT_NAME: event_str + f",input_length[{seq_len}]",
+                    EVENT_PH: flag,
+                    EVENT_PID: self.pid,
+                    EVENT_TID: str(req_id),
+                    EVENT_TIME_STEP: ms_now,
+                }
+                for req_id, seq_len in zip(batch_req_ids, batch_seq_len)
+            ]
         elif details["event"] == "pullkv":
             batch_req_ids = details["batch_req_ids"]
             batch_seq_len = details["batch_seq_len"]
             get_pull_size = details["get_pull_size"]
             blocks_gb_list = [get_pull_size(seq_len) for seq_len in batch_seq_len]
             batch_metric[EVENT_NAME] += f",total_blocks_Gb[{sum(blocks_gb_list)}]"
-            request_metric = [{
-                EVENT_NAME: event_str + f",blocks_Gb[{blocks_gb}]",
-                EVENT_PH: flag,
-                EVENT_PID: self.pid,
-                EVENT_TID: str(req_id),
-                EVENT_TIME_STEP: ms_now
-            } for req_id, blocks_gb in zip(batch_req_ids, blocks_gb_list)]
+            request_metric = [
+                {
+                    EVENT_NAME: event_str + f",blocks_Gb[{blocks_gb}]",
+                    EVENT_PH: flag,
+                    EVENT_PID: self.pid,
+                    EVENT_TID: str(req_id),
+                    EVENT_TIME_STEP: ms_now,
+                }
+                for req_id, blocks_gb in zip(batch_req_ids, blocks_gb_list)
+            ]
         else:
             request_metric = []
         self.metrics.append(batch_metric)
@@ -105,7 +111,7 @@ class FileMetrics:
     def output(self):
         if not self.metric_enable:
             return
-        logger.info("output metrics siz: %s", len(self.metrics))
+        logger.info("output metrics size: %s", len(self.metrics))
         file = self.path + "metrics." + str(self.pid) + ".json"
         try:
             if self.cursor != len(self.metrics):
@@ -125,6 +131,6 @@ class FileMetrics:
             logger.info(f"[ensure_metrics_path] '{abs_path}' exited.")
 
     def scheduled_output(self):
-        while (True):
+        while True:
             time.sleep(60)
             self.output()

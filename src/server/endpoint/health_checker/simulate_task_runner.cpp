@@ -11,10 +11,12 @@
  */
 
 #include "simulate_task_runner.h"
+
 #include <algorithm>
-#include "log.h"
+
 #include "dcmi_wrapper.h"
 #include "grpc_communicator.h"
+#include "log.h"
 
 namespace mindie_llm {
 
@@ -23,40 +25,37 @@ constexpr int NPU_SAMPLES = 3;
 constexpr int NPU_WINDOW_MS = 5000;
 constexpr int NPU_CHECK_COMPLETE_WAIT_SECONDS = 10;
 constexpr int SIMULATE_SKIP_AICORE_PERCENT = 50;
-constexpr int SIMULATE_SKIP_EVERY_N_LOOPS = 18; // 18 X 5S = 1.5min，一分半内至少执行一次虚推
+constexpr int SIMULATE_SKIP_EVERY_N_LOOPS = 18;  // 18 X 5S = 1.5min，一分半内至少执行一次虚推
 
-
-SimulateTaskRunner::SimulateTaskRunner()
-{
+SimulateTaskRunner::SimulateTaskRunner() {
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Instance created, waiting for Init.");
 }
 
 bool SimulateTaskRunner::Init(std::shared_ptr<ISimulateExecutor> executor,
                               const std::vector<std::pair<int, int>>& npuDeviceCardIds, int npuThreshold,
-                              RunMode runMode, int chipPerCard)
-{
+                              RunMode runMode, int chipPerCard) {
     if (isValid_) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateTaskRunner::Init: Already initialized");
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateTaskRunner::Init: Already initialized");
         return true;
     }
     if (!executor && runMode != RunMode::NPU_ONLY) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateTaskRunner::Init: executor must not be null");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateTaskRunner::Init: executor must not be null");
         return false;
     }
     if (npuDeviceCardIds.empty()) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateTaskRunner::Init: npuDeviceCardIds must not be empty");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateTaskRunner::Init: npuDeviceCardIds must not be empty");
         return false;
     }
     if (npuThreshold == 0) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateTaskRunner::Init: NPU health check threshold cannot be zero.");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateTaskRunner::Init: NPU health check threshold cannot be zero.");
         return false;
     }
 
@@ -68,29 +67,28 @@ bool SimulateTaskRunner::Init(std::shared_ptr<ISimulateExecutor> executor,
     isValid_ = true;
 
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner::Init: Initialized with "
-        << npuDeviceCardIds_.size() << " NPU DCMI target(s), runMode="
-        << static_cast<int>(runMode_) << ", chipPerCard(config)=" << chipPerCard_);
+                                               << npuDeviceCardIds_.size()
+                                               << " NPU DCMI target(s), runMode=" << static_cast<int>(runMode_)
+                                               << ", chipPerCard(config)=" << chipPerCard_);
     return true;
 }
 
-SimulateTaskRunner::~SimulateTaskRunner()
-{
+SimulateTaskRunner::~SimulateTaskRunner() {
     Stop();
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Instance destroyed.");
 }
 
-void SimulateTaskRunner::Start(uint32_t intervalSeconds)
-{
+void SimulateTaskRunner::Start(uint32_t intervalSeconds) {
     if (!isValid_) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateTaskRunner::Start: Not initialized, call Init() first.");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateTaskRunner::Start: Not initialized, call Init() first.");
         return;
     }
     if (running_.load()) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateTaskRunner: Task is already running.");
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateTaskRunner: Task is already running.");
         return;
     }
 
@@ -111,21 +109,15 @@ void SimulateTaskRunner::Start(uint32_t intervalSeconds)
     }
 
     // 启动 NPU 检测线程
-    npuCheckThread_ = std::thread([this]() {
-        NpuCheckLoop();
-    });
+    npuCheckThread_ = std::thread([this]() { NpuCheckLoop(); });
 
     // 启动任务线程
-    taskThread_ = std::thread([this]() {
-        TaskLoop();
-    });
+    taskThread_ = std::thread([this]() { TaskLoop(); });
 
-    ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-        "SimulateTaskRunner: Started with interval=" << intervalSeconds << "s");
+    ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Started with interval=" << intervalSeconds << "s");
 }
 
-void SimulateTaskRunner::Stop()
-{
+void SimulateTaskRunner::Stop() {
     if (!running_.load()) {
         return;
     }
@@ -163,12 +155,11 @@ void SimulateTaskRunner::Stop()
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Stopped.");
 }
 
-void SimulateTaskRunner::Pause()
-{
+void SimulateTaskRunner::Pause() {
     if (!running_.load()) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateTaskRunner: Cannot pause, task is not running.");
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateTaskRunner: Cannot pause, task is not running.");
         return;
     }
 
@@ -188,12 +179,11 @@ void SimulateTaskRunner::Pause()
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Paused.");
 }
 
-void SimulateTaskRunner::Resume()
-{
+void SimulateTaskRunner::Resume() {
     if (!running_.load()) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateTaskRunner: Cannot resume, task is not running.");
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateTaskRunner: Cannot resume, task is not running.");
         return;
     }
 
@@ -215,14 +205,12 @@ void SimulateTaskRunner::Resume()
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Resumed.");
 }
 
-SimulateHealthStatus SimulateTaskRunner::GetHealthStatus() const
-{
+SimulateHealthStatus SimulateTaskRunner::GetHealthStatus() const {
     std::shared_lock<std::shared_mutex> lock(statusMutex_);
     return healthStatus_;
 }
 
-void SimulateTaskRunner::TaskLoop()
-{
+void SimulateTaskRunner::TaskLoop() {
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Task loop started.");
 
     while (!stopRequested_.load()) {
@@ -255,7 +243,8 @@ void SimulateTaskRunner::TaskLoop()
                 result.status = SimulateResult::Status::BUSY;
                 result.message = "Timeout but AICore usage > " + std::to_string(npuThreshold_) + "%";
             } else if (slaveNpuReportTimeoutThisRound_.load()) {
-                ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
+                ULOG_WARN(
+                    SUBMODLE_NAME_HEALTHCHECKER,
                     GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
                     "SimulateTaskRunner: gRPC communication abnormal (slave NPU report exceeded freshness window). "
                     "Skip abnormal judgement in this health-check cycle.");
@@ -267,46 +256,42 @@ void SimulateTaskRunner::TaskLoop()
         UpdateHealthStatus(result);
         lastAicoreUtil_ = GetNpuUtilization();
         ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER,
-            "SimulateTaskRunner: Completed. status=" << static_cast<int>(result.status)
-            << ", message=" << result.message);
+                   "SimulateTaskRunner: Completed. status=" << static_cast<int>(result.status)
+                                                            << ", message=" << result.message);
     }
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: Task loop exited.");
 }
 
-bool SimulateTaskRunner::ShouldRunSimulate()
-{
+bool SimulateTaskRunner::ShouldRunSimulate() {
     if (lastAicoreUtil_ < SIMULATE_SKIP_AICORE_PERCENT) {
         loopsSinceSimulate_ = 0;
         return true;
     }
-    
+
     if (lastAicoreUtil_ >= SIMULATE_SKIP_AICORE_PERCENT) {
         if (++loopsSinceSimulate_ < SIMULATE_SKIP_EVERY_N_LOOPS) {
             return false;
         }
         loopsSinceSimulate_ = 0;
     }
-    
+
     return true;
 }
 
-void SimulateTaskRunner::UpdateHealthStatus(const SimulateResult& result)
-{
+void SimulateTaskRunner::UpdateHealthStatus(const SimulateResult& result) {
     std::unique_lock<std::shared_mutex> lock(statusMutex_);
     healthStatus_.lastStatus = result.status;
     healthStatus_.lastMessage = result.message;
     healthStatus_.lastUpdateTime = std::chrono::steady_clock::now();
 
-    if (result.status == SimulateResult::Status::SUCCESS ||
-        result.status == SimulateResult::Status::BUSY) {
+    if (result.status == SimulateResult::Status::SUCCESS || result.status == SimulateResult::Status::BUSY) {
         healthStatus_.successCount++;
     } else {
         healthStatus_.failureCount++;
     }
 }
 
-void SimulateTaskRunner::TriggerNpuCheck()
-{
+void SimulateTaskRunner::TriggerNpuCheck() {
     npuUtil_.store(-1);
     {
         std::lock_guard<std::mutex> locker(npuCheckMutex_);
@@ -315,8 +300,7 @@ void SimulateTaskRunner::TriggerNpuCheck()
     npuCheckCv_.notify_one();
 }
 
-void SimulateTaskRunner::WaitForNpuCheckComplete()
-{
+void SimulateTaskRunner::WaitForNpuCheckComplete() {
     if (npuUtil_.load() < 0) {
         auto lastTimePoint = std::chrono::steady_clock::now() + std::chrono::seconds(NPU_CHECK_COMPLETE_WAIT_SECONDS);
         std::unique_lock<std::mutex> locker(npuResultMutex_);
@@ -324,17 +308,14 @@ void SimulateTaskRunner::WaitForNpuCheckComplete()
     }
 }
 
-void SimulateTaskRunner::NpuCheckLoop()
-{
+void SimulateTaskRunner::NpuCheckLoop() {
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: NPU check loop started.");
     DCMIWrapper& dcmiWrapper = DCMIWrapper::GetInstance();
 
     while (!npuCheckStopRequested_.load()) {
         {
             std::unique_lock<std::mutex> locker(npuCheckMutex_);
-            npuCheckCv_.wait(locker, [this]() {
-                return npuCheckRequested_.load() || npuCheckStopRequested_.load();
-            });
+            npuCheckCv_.wait(locker, [this]() { return npuCheckRequested_.load() || npuCheckStopRequested_.load(); });
             npuCheckRequested_.store(false);
         }
 
@@ -352,18 +333,17 @@ void SimulateTaskRunner::NpuCheckLoop()
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: NPU check loop exited.");
 }
 
-void SimulateTaskRunner::CheckAicoreUtilization()
-{
-    DCMIWrapper &dcmiWrapper = DCMIWrapper::GetInstance();
+void SimulateTaskRunner::CheckAicoreUtilization() {
+    DCMIWrapper& dcmiWrapper = DCMIWrapper::GetInstance();
     unsigned int maxUtilAcrossCards = 0;
     const int sampleCount = NPU_SAMPLES;
 
-    auto getUtilizationFunc = dcmiWrapper.GetFunction<int (*)(int, int, int, unsigned int *)>(
-        "dcmi_get_device_utilization_rate");
+    auto getUtilizationFunc =
+        dcmiWrapper.GetFunction<int (*)(int, int, int, unsigned int*)>("dcmi_get_device_utilization_rate");
     if (!getUtilizationFunc) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateTaskRunner: Failed to get utilization function");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateTaskRunner: Failed to get utilization function");
         return;
     }
 
@@ -379,10 +359,9 @@ void SimulateTaskRunner::CheckAicoreUtilization()
             int ret = getUtilizationFunc(npuCardId, chipIdx, 2, &utilizationRate);
             if (ret != 0) {
                 ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-                    GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-                    "SimulateTaskRunner: DCMI get AICore failed, card=" << npuCardId
-                                                                         << ", chip=" << chipIdx
-                                                                         << ", error=" << ret);
+                           GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                           "SimulateTaskRunner: DCMI get AICore failed, card=" << npuCardId << ", chip=" << chipIdx
+                                                                               << ", error=" << ret);
                 continue;
             }
             maxUtilAcrossCards = std::max(maxUtilAcrossCards, utilizationRate);
@@ -397,8 +376,7 @@ void SimulateTaskRunner::CheckAicoreUtilization()
     ProcessAndReportNpuUtilization(static_cast<uint32_t>(maxUtilAcrossCards));
 }
 
-void SimulateTaskRunner::ProcessAndReportNpuUtilization(uint32_t localMax)
-{
+void SimulateTaskRunner::ProcessAndReportNpuUtilization(uint32_t localMax) {
     const bool isSlave = (runMode_ == RunMode::NPU_ONLY);
     auto grpc = GRPCCommunicator::TryGetInstance();
     const bool hasGrpc = (grpc != nullptr);
@@ -412,7 +390,7 @@ void SimulateTaskRunner::ProcessAndReportNpuUtilization(uint32_t localMax)
         npuUtil_.store(static_cast<int>(localMax));
         // Slave side: only print local NPU utilization each 5s window.
         ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-            "SimulateTaskRunner: slave local AICore usage(5s max)=" << localMax << '%');
+                  "SimulateTaskRunner: slave local AICore usage(5s max)=" << localMax << '%');
     } else {
         if (isMasterNode) {
             const uint32_t slaveMax = grpc->GetSlaveMaxNpuUtilizationPercent();
@@ -421,15 +399,13 @@ void SimulateTaskRunner::ProcessAndReportNpuUtilization(uint32_t localMax)
             clusterMax = std::max(localMax, slaveMax);
         }
         npuUtil_.store(static_cast<int>(clusterMax));
-        ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-            "SimulateTaskRunner: AICore usage local(max over cards)="
-            << localMax << "%, cluster(max with slaves if exist)="
-            << clusterMax << '%');
+        ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER, "SimulateTaskRunner: AICore usage local(max over cards)="
+                                                   << localMax << "%, cluster(max with slaves if exist)=" << clusterMax
+                                                   << '%');
     }
 
     std::unique_lock<std::mutex> locker(npuResultMutex_);
     npuResultCv_.notify_one();
 }
 
-} // namespace mindie_llm
-
+}  // namespace mindie_llm

@@ -59,8 +59,9 @@ class ErrorCode(str, Enum):
 
 class ErrorCodeException(RuntimeError):
     """Custom exception carrying ErrorCode for error code reporting."""
+
     def __init__(self, error_code: ErrorCode):
-        message = f'{error_code.name} fault happened, error code: {error_code.value}.'
+        message = f"{error_code.name} fault happened, error code: {error_code.value}."
         super().__init__(message)
         self.error_code = error_code
 
@@ -81,7 +82,7 @@ def convert_exception_to_error_code(exception_str: str):
 
 
 def is_force_stop_exception(exception: Exception) -> bool:
-    '''Check if the exception is a FORCE STOP exception.'''
+    """Check if the exception is a FORCE STOP exception."""
     if not isinstance(exception, RuntimeError):
         return False
     exception_str = str(exception).upper()

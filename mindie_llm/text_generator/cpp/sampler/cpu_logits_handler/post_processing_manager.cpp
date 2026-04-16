@@ -9,15 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
+#include "post_processing_manager.h"
+
+#include <absl/types/span.h>
+
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
-#include <absl/types/span.h>
+
 #include "check_utils.h"
 #include "log.h"
 #include "log_level_dynamic_handler.h"
-#include "post_processing_manager.h"
 
 namespace {
 
@@ -38,15 +41,14 @@ enum class ErrorType {
 };
 
 union VPtrUInt64 {
-    void* vPtrVal;
+    void *vPtrVal;
     uint64_t uInt64Val;
 
     explicit VPtrUInt64(uint64_t uInt64Val) : uInt64Val(uInt64Val) {}
 };
 
 template <typename T>
-T* GetPyArray(py::array_t<T> &pyArray, const int &dim0Size, const int &dim1Size = 0, const T &defVal = 0)
-{
+T *GetPyArray(py::array_t<T> &pyArray, const int &dim0Size, const int &dim1Size = 0, const T &defVal = 0) {
     if (dim0Size > MAX_BATCH_SIZE) {
         throw std::invalid_argument("The batch size is greater than the MAX_BATCH_SIZE.");
     }
@@ -62,8 +64,7 @@ T* GetPyArray(py::array_t<T> &pyArray, const int &dim0Size, const int &dim1Size 
     return arrPtr;
 }
 
-ErrorType GetMemSizeByDtype(const unsigned int &uBatchScoreSize, const std::string &dtype, size_t &h2dSize)
-{
+ErrorType GetMemSizeByDtype(const unsigned int &uBatchScoreSize, const std::string &dtype, size_t &h2dSize) {
     switch (mindie_llm::cpu_logits_handler::GetDtype(dtype)) {
         case mindie_llm::cpu_logits_handler::Dtype::FLOAT16:
             h2dSize = mindie_llm::CheckIntMulOverFlow(uBatchScoreSize, sizeof(int16_t));
@@ -83,44 +84,61 @@ ErrorType GetMemSizeByDtype(const unsigned int &uBatchScoreSize, const std::stri
     return ErrorType::SUCCESS;
 }
 
-ErrorType ScoreCpy(const unsigned int &uBatchScoreSize, const std::string &dtype,
-                   void *&hostAddrScore, void* const &deviceAddrScore)
-{
+ErrorType ScoreCpy(const unsigned int &uBatchScoreSize, const std::string &dtype, void *&hostAddrScore,
+                   void *const &deviceAddrScore) {
     size_t h2dSize = 0;
     ErrorType h2dSizeError = GetMemSizeByDtype(uBatchScoreSize, dtype, h2dSize);
-    if (h2dSizeError != ErrorType::SUCCESS) { return h2dSizeError; }
-    if (h2dSize == 0 || h2dSize > MAX_HOST_TO_DEVICE_SIZE) { return ErrorType::MALLOC_SIZE_ERROR; }
+    if (h2dSizeError != ErrorType::SUCCESS) {
+        return h2dSizeError;
+    }
+    if (h2dSize == 0 || h2dSize > MAX_HOST_TO_DEVICE_SIZE) {
+        return ErrorType::MALLOC_SIZE_ERROR;
+    }
     hostAddrScore = malloc(h2dSize);
-    if (hostAddrScore == nullptr) { return ErrorType::MALLOC_ERROR; }
+    if (hostAddrScore == nullptr) {
+        return ErrorType::MALLOC_ERROR;
+    }
     aclError ret = aclrtMemcpy(hostAddrScore, h2dSize, deviceAddrScore, h2dSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    if (ret != ACL_ERROR_NONE) { return ErrorType::MEMCPY_ERROR; }
+    if (ret != ACL_ERROR_NONE) {
+        return ErrorType::MEMCPY_ERROR;
+    }
     return ErrorType::SUCCESS;
 }
 
-ErrorType IndexCpy(const unsigned int &uBatchScoreSize, void *&hostAddrIndex, void* const &deviceAddrIndex)
-{
+ErrorType IndexCpy(const unsigned int &uBatchScoreSize, void *&hostAddrIndex, void *const &deviceAddrIndex) {
     size_t h2dSize = mindie_llm::CheckIntMulOverFlow(uBatchScoreSize, sizeof(int64_t));
-    if (h2dSize == 0 || h2dSize > MAX_HOST_TO_DEVICE_SIZE) { return ErrorType::MALLOC_SIZE_ERROR; }
+    if (h2dSize == 0 || h2dSize > MAX_HOST_TO_DEVICE_SIZE) {
+        return ErrorType::MALLOC_SIZE_ERROR;
+    }
     hostAddrIndex = malloc(h2dSize);
-    if (hostAddrIndex == nullptr) { return ErrorType::MALLOC_ERROR; }
+    if (hostAddrIndex == nullptr) {
+        return ErrorType::MALLOC_ERROR;
+    }
     aclError ret = aclrtMemcpy(hostAddrIndex, h2dSize, deviceAddrIndex, h2dSize, ACL_MEMCPY_DEVICE_TO_HOST);
-    if (ret != ACL_ERROR_NONE) { return ErrorType::MEMCPY_ERROR; }
+    if (ret != ACL_ERROR_NONE) {
+        return ErrorType::MEMCPY_ERROR;
+    }
     return ErrorType::SUCCESS;
 }
 
 ErrorType ScoreIndexCpy(int batchSize, int scoreSize, bool speedMode, std::string dtype, void *&hostAddrScore,
-                        void *&hostAddrIndex, void* const &deviceAddrScore, void* const &deviceAddrIndex)
-{
+                        void *&hostAddrIndex, void *const &deviceAddrScore, void *const &deviceAddrIndex) {
     try {
         int batchScoreSize = mindie_llm::CheckIntMulOverFlow(batchSize, scoreSize);
-        if (batchScoreSize < 0) { return ErrorType::MALLOC_SIZE_ERROR; }
+        if (batchScoreSize < 0) {
+            return ErrorType::MALLOC_SIZE_ERROR;
+        }
         unsigned int uBatchScoreSize = static_cast<unsigned int>(batchScoreSize);
         ErrorType scoreCpyError = ScoreCpy(uBatchScoreSize, dtype, hostAddrScore, deviceAddrScore);
-        if (scoreCpyError != ErrorType::SUCCESS) { return scoreCpyError; }
+        if (scoreCpyError != ErrorType::SUCCESS) {
+            return scoreCpyError;
+        }
 
         if (!speedMode) {
             ErrorType indexCpyError = IndexCpy(uBatchScoreSize, hostAddrIndex, deviceAddrIndex);
-            if (indexCpyError != ErrorType::SUCCESS) { return indexCpyError; }
+            if (indexCpyError != ErrorType::SUCCESS) {
+                return indexCpyError;
+            }
         }
     } catch (const std::overflow_error &e) {
         return ErrorType::OVERFLOW_ERROR;
@@ -132,10 +150,9 @@ ErrorType ScoreIndexCpy(int batchSize, int scoreSize, bool speedMode, std::strin
     return ErrorType::SUCCESS;
 }
 
-void RunFunc(void *arg)
-{
+void RunFunc(void *arg) {
     mindie_llm::cpu_logits_handler::PostProcessing *task =
-    static_cast<mindie_llm::cpu_logits_handler::PostProcessing *>(arg);
+        static_cast<mindie_llm::cpu_logits_handler::PostProcessing *>(arg);
     if (task == nullptr) {
         MINDIE_LLM_LOG_ERROR("Task is nullptr in RunFunc.");
         throw std::runtime_error("Task is nullptr in RunFunc.");
@@ -144,7 +161,7 @@ void RunFunc(void *arg)
 }
 
 class MemoryGuard {
-public:
+   public:
     explicit MemoryGuard(void *memoryPtr) : memoryPtr(memoryPtr) {};
 
     ~MemoryGuard() {
@@ -159,11 +176,10 @@ public:
 
 }  // namespace
 
-void PostProcessingManager::Init()
-{
+void PostProcessingManager::Init() {
     spdlog::init_thread_pool(mindie_llm::LOGGER_QUEUE_SIZE, mindie_llm::LOGGER_THREAD_NUM);
     mindie_llm::Log::CreateInstance(mindie_llm::LoggerType::MINDIE_LLM);
-    mindie_llm::LogLevelDynamicHandler::Init(5000); // 每5秒检查动态日志配置
+    mindie_llm::LogLevelDynamicHandler::Init(5000);  // 每5秒检查动态日志配置
     MINDIE_LLM_LOG_INFO("Get post processing manager");
     m_pool = new mindie_llm::cpu_logits_handler::ThreadPool(threadNum);
     m_pool->Init();
@@ -173,8 +189,7 @@ void PostProcessingManager::Init()
     }
 }
 
-PostProcessingManager::~PostProcessingManager()
-{
+PostProcessingManager::~PostProcessingManager() {
     // spdlog thread pool has been destroyed. Use std::cout.
     std::cout << "Destroy post processing manager" << std::endl;
     if (m_pool != nullptr) {
@@ -188,11 +203,12 @@ PostProcessingManager::~PostProcessingManager()
     aclFinalize();
 }
 
-std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextTokenChooser(py::array_t<int> requestIds,
-    uint64_t scoresAddr, uint64_t indexAddr, int batchSize, int scoreSize, int maxLogprobs, std::string dtype,
-    bool speedMode, bool useApproxIn)
-{
-    if (threadNum < 1) { throw std::invalid_argument("The number of tasks is less than 1."); }
+std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextTokenChooser(
+    py::array_t<int> requestIds, uint64_t scoresAddr, uint64_t indexAddr, int batchSize, int scoreSize, int maxLogprobs,
+    std::string dtype, bool speedMode, bool useApproxIn) {
+    if (threadNum < 1) {
+        throw std::invalid_argument("The number of tasks is less than 1.");
+    }
     int batchThread = batchSize / threadNum;
     int mod = batchSize % threadNum;
     auto task = std::make_unique<mindie_llm::cpu_logits_handler::PostProcessing[]>(threadNum);
@@ -213,7 +229,7 @@ std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextToken
     if (requestIdsPtr == nullptr) {
         throw std::invalid_argument("The requestIdsPtr casted from requestIds is nullptr.");
     }
-    
+
     int requestIdsSize = requestIdsBuf.shape[0];
     UpdateRandomValue(batchSize, requestIdsPtr, requestIdsSize);
 
@@ -224,7 +240,9 @@ std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextToken
     MemoryGuard hostAddrIndexGuard = MemoryGuard(nullptr);
     ErrorType cpyError = ScoreIndexCpy(batchSize, scoreSize, speedMode, dtype, hostAddrScoreGuard.memoryPtr,
                                        hostAddrIndexGuard.memoryPtr, deviceScore.vPtrVal, deviceIndex.vPtrVal);
-    if (cpyError != ErrorType::SUCCESS) { throw std::runtime_error("sampling error: score copying failed."); }
+    if (cpyError != ErrorType::SUCCESS) {
+        throw std::runtime_error("sampling error: score copying failed.");
+    }
 
     try {
         uint16_t *scores16Ptr = (uint16_t *)(hostAddrScoreGuard.memoryPtr);
@@ -244,8 +262,8 @@ std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextToken
             absl::Span<int> requestIdsSpan = absl::MakeSpan(requestIdsPtr + size, perbatchThread);
             task[i].Init(&dictConf, requestIdsSpan, scores16Ptr + sizeOffset, scores32Ptr + sizeOffset,
                          indexPtr + sizeOffset, scoreSize, rPtr + size * (maxLogprobs + 1),
-                         logprobsPtr + size * (maxLogprobs + 1), perbatchThread, maxLogprobs, dtype,
-                         speedMode, useApproxIn);
+                         logprobsPtr + size * (maxLogprobs + 1), perbatchThread, maxLogprobs, dtype, speedMode,
+                         useApproxIn);
             void *arg = static_cast<mindie_llm::cpu_logits_handler::PostProcessing *>(&task[i]);
             m_pool->AddTask(mindie_llm::cpu_logits_handler::Task(RunFunc, arg));
             size += perbatchThread;
@@ -262,9 +280,8 @@ std::pair<py::array_t<int>, py::array_t<float>> PostProcessingManager::NextToken
 }
 
 void PostProcessingManager::SetBatchConfigs(py::array_t<int> requestIds, py::array_t<int> topK, py::array_t<float> topP,
-    py::array_t<bool> sample, py::array_t<int> numLogprobs, py::array_t<unsigned long long> seed,
-    std::string sampleMethod)
-{
+                                            py::array_t<bool> sample, py::array_t<int> numLogprobs,
+                                            py::array_t<unsigned long long> seed, std::string sampleMethod) {
     MINDIE_LLM_LOG_INFO("sampling method is " << sampleMethod);
     auto size = requestIds.size();
     if ((size != topK.size()) || (size != topP.size()) || (size != sample.size()) || (size != seed.size())) {
@@ -287,26 +304,25 @@ void PostProcessingManager::SetBatchConfigs(py::array_t<int> requestIds, py::arr
     py::buffer_info seedBuff = seed.request();
     unsigned long long *seedPtr = static_cast<unsigned long long *>(seedBuff.ptr);
     py::buffer_info requestIdsBuff = requestIds.request();
-    int* requestIdsPtr = static_cast<int *>(requestIdsBuff.ptr);
+    int *requestIdsPtr = static_cast<int *>(requestIdsBuff.ptr);
 
     for (long int i = 0; i < size; i++) {
         int key = *(requestIdsPtr + i);
         auto it = dictConf.find(key);
         if (it != dictConf.end()) {
-            it->second = mindie_llm::cpu_logits_handler::Configure(topKPtr[i],
-            topPPtr[i], samplePtr[i], logprobsPtr[i], seedPtr[i], sampleMethod);
+            it->second = mindie_llm::cpu_logits_handler::Configure(topKPtr[i], topPPtr[i], samplePtr[i], logprobsPtr[i],
+                                                                   seedPtr[i], sampleMethod);
         } else {
-            dictConf.emplace(key, mindie_llm::cpu_logits_handler::Configure(topKPtr[i],
-            topPPtr[i], samplePtr[i], logprobsPtr[i], seedPtr[i], sampleMethod));
+            dictConf.emplace(key, mindie_llm::cpu_logits_handler::Configure(topKPtr[i], topPPtr[i], samplePtr[i],
+                                                                            logprobsPtr[i], seedPtr[i], sampleMethod));
         }
     }
 }
 
-void PostProcessingManager::DeleteConf(py::array_t<int> requestIdsD)
-{
+void PostProcessingManager::DeleteConf(py::array_t<int> requestIdsD) {
     auto size = requestIdsD.size();
     py::buffer_info requestIdsDBuff = requestIdsD.request();
-    int* requestIdsDPtr = static_cast<int *>(requestIdsDBuff.ptr);
+    int *requestIdsDPtr = static_cast<int *>(requestIdsDBuff.ptr);
 
     for (long int i = 0; i < size; i++) {
         dictConf.erase(requestIdsDPtr[i]);
@@ -314,8 +330,7 @@ void PostProcessingManager::DeleteConf(py::array_t<int> requestIdsD)
     }
 }
 
-void PostProcessingManager::UpdateRandomValue(int batchSize, int *requestIdsPtr, int requestIdsSize)
-{
+void PostProcessingManager::UpdateRandomValue(int batchSize, int *requestIdsPtr, int requestIdsSize) {
     std::unordered_set<int> closedReqIds;
     int loopSize = std::min(batchSize, requestIdsSize);
     for (int i = 0; i < loopSize; i++) {

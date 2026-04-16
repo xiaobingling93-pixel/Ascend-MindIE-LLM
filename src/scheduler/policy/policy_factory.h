@@ -13,13 +13,13 @@
 #ifndef POLICY_FACTORY_H
 #define POLICY_FACTORY_H
 
+#include "latency_predictor/latency_predictor.h"
 #include "policy.h"
 #include "stage_policy/stage_policy.h"
-#include "latency_predictor/latency_predictor.h"
 
 namespace mindie_llm {
 class PolicyFactory {
-public:
+   public:
     static std::shared_ptr<Policy> CreatePolicy(Role role, std::shared_ptr<SchedulerConfig> &schedulerConfig,
                                                 BlockSpaceManagerSPtr &blockManager, PDPriorityType pdPriorityType);
 
@@ -31,6 +31,6 @@ public:
                                                           std::shared_ptr<LatencyPredictor> predictor,
                                                           std::shared_ptr<BlockSpaceManager> blockManager, Role role);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

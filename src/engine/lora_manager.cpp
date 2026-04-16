@@ -10,7 +10,9 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "lora_manager.h"
+
 #include <sstream>
+
 #include "basic_types.h"
 #include "log.h"
 
@@ -25,11 +27,10 @@ std::unordered_map<model_execute_data::LoraOperationStatus, LoraStatus> loraOpSt
     {model_execute_data::LoraOperationStatus::INVALID_LORA_ID, LoraStatus::INVALID_LORA_ID},
     {model_execute_data::LoraOperationStatus::INVALID_LORA_PATH, LoraStatus::INVALID_LORA_PATH},
     {model_execute_data::LoraOperationStatus::INVALID_LORA_RANK, LoraStatus::INVALID_LORA_RANK},
-    {model_execute_data::LoraOperationStatus::UNSUPPORT_CMD, LoraStatus::UNSUPPORT_CMD}
-};
+    {model_execute_data::LoraOperationStatus::UNSUPPORT_CMD, LoraStatus::UNSUPPORT_CMD}};
 
-LoraOperationRequest BuildLoraOperationRequest(const LoraParamSPtr LoraOperationRequestData, const model_execute_data::LoraOperationType loraType)
-{
+LoraOperationRequest BuildLoraOperationRequest(const LoraParamSPtr LoraOperationRequestData,
+                                               const model_execute_data::LoraOperationType loraType) {
     LoraOperationRequest loraOperationRequest;
     loraOperationRequest.set_master_model(LoraOperationRequestData->masterModel);
     loraOperationRequest.set_lora_name(LoraOperationRequestData->loraName);
@@ -39,14 +40,12 @@ LoraOperationRequest BuildLoraOperationRequest(const LoraParamSPtr LoraOperation
     return loraOperationRequest;
 }
 
-model_execute_data::LoraOperationStatus ParseResponse(const LoraOperationResponse &response)
-{
+model_execute_data::LoraOperationStatus ParseResponse(const LoraOperationResponse &response) {
     model_execute_data::LoraOperationStatus loraResult = response.lora_op_status();
     return loraResult;
 }
 
-std::string GetLoraMessage(LoraStatus lora_result, const std::string &loraName, const std::string &loraPath)
-{
+std::string GetLoraMessage(LoraStatus lora_result, const std::string &loraName, const std::string &loraPath) {
     std::stringstream ss;
     switch (lora_result) {
         case LoraStatus::LOAD_SUCCESS:
@@ -62,19 +61,21 @@ std::string GetLoraMessage(LoraStatus lora_result, const std::string &loraName, 
             ss << "Call to load LoRA method failed: The LoRA adapter '" << loraName << "' is invalid.";
             break;
         case LoraStatus::INVALID_LORA_PATH:
-            ss << "Call to load LoRA method failed: Loading LoRA '" << loraName << "' failed: "
-                          "No adapter found for '" << loraPath << "'.";
+            ss << "Call to load LoRA method failed: Loading LoRA '" << loraName
+               << "' failed: "
+                  "No adapter found for '"
+               << loraPath << "'.";
             break;
         case LoraStatus::INVALID_LORA_RANK:
             ss << "Call to load LoRA method failed: LoRA rank is greater than max_lora_rank.";
             break;
         case LoraStatus::SLOTS_FULL:
             ss << "Call to load LoRA method failed:"
-                          "The number of LoRA adapters exceeds 'max_loras', and none are currently unloading.";
+                  "The number of LoRA adapters exceeds 'max_loras', and none are currently unloading.";
             break;
         case LoraStatus::SLOTS_FULL_WITH_UNLOADING:
             ss << "Call to load LoRA method failed: "
-                          "The number of LoRA adapters exceeds 'max_loras', some adapters are currently being unloaded.";
+                  "The number of LoRA adapters exceeds 'max_loras', some adapters are currently being unloaded.";
             break;
         case LoraStatus::UNLOAD_SUCCESS:
             ss << "Success: LoRA adapter '" << loraName << "' removed successfully.";
@@ -84,7 +85,7 @@ std::string GetLoraMessage(LoraStatus lora_result, const std::string &loraName, 
             break;
         case LoraStatus::UNSUPPORT_CMD:
             ss << "Call to load LoRA method failed: The LoRA command only supports Python graph, "
-                          "please check the model graph type.";
+                  "please check the model graph type.";
             break;
         default:
             ss << "Unknown LoRA status.";
@@ -93,11 +94,10 @@ std::string GetLoraMessage(LoraStatus lora_result, const std::string &loraName, 
     return ss.str();
 }
 
-void LoraManager::InitLoadedLoras(const std::vector<ModelParam> &modelParamVec)
-{
-    for (const auto& singleModelParam : modelParamVec) {
+void LoraManager::InitLoadedLoras(const std::vector<ModelParam> &modelParamVec) {
+    for (const auto &singleModelParam : modelParamVec) {
         std::string masterModel = singleModelParam.modelName;
-        for (const auto& it : singleModelParam.loraModules) {
+        for (const auto &it : singleModelParam.loraModules) {
             LoraParamSPtr loraParam = std::make_shared<LoraParam>(LoraParam{it.first, it.second, masterModel});
             loaded_.Insert(loraParam->loraName, loraParam);
         }
@@ -105,8 +105,7 @@ void LoraManager::InitLoadedLoras(const std::vector<ModelParam> &modelParamVec)
     return;
 }
 
-void LoraManager::Initialize(std::vector<IExecutorSPtr> executors, uint32_t maxLoras)
-{
+void LoraManager::Initialize(std::vector<IExecutorSPtr> executors, uint32_t maxLoras) {
     std::call_once(initFlag_, [&] {
         instances_.resize(executors.size());
         for (size_t i = 0; i < executors.size(); ++i) {
@@ -115,8 +114,7 @@ void LoraManager::Initialize(std::vector<IExecutorSPtr> executors, uint32_t maxL
     });
 }
 
-LlmLoraPtr LoraManager::GetInstance(size_t localDPRank)
-{
+LlmLoraPtr LoraManager::GetInstance(size_t localDPRank) {
     if (!instances_.at(localDPRank)) {
         MINDIE_LLM_LOG_ERROR("[LoraManager::GetInstance] LoraManager not initialized");
         return nullptr;
@@ -126,8 +124,7 @@ LlmLoraPtr LoraManager::GetInstance(size_t localDPRank)
 
 LoraManager::LoraManager(IExecutorSPtr executor, uint32_t maxLoras) : executor_(executor), maxLoras_(maxLoras) {}
 
-LoraStatus LoraManager::GetLoraStatus(const LoraParamSPtr loraInfo, bool &loraIsInvalid)
-{
+LoraStatus LoraManager::GetLoraStatus(const LoraParamSPtr loraInfo, bool &loraIsInvalid) {
     // 校验加载时传入的lora信息
     std::string loraName = loraInfo->loraName;
     std::string loraPath = loraInfo->loraPath;
@@ -156,8 +153,7 @@ LoraStatus LoraManager::GetLoraStatus(const LoraParamSPtr loraInfo, bool &loraIs
     return ret;
 }
 
-Status LoraManager::Load(const LoraParamSPtr loraInfo)
-{
+Status LoraManager::Load(const LoraParamSPtr loraInfo) {
     bool loraIsInvalid = true;
     std::string loraMessage;
     LoraStatus loraStatus = this->GetLoraStatus(loraInfo, loraIsInvalid);
@@ -185,14 +181,14 @@ Status LoraManager::Load(const LoraParamSPtr loraInfo)
     return Status(Error::Code::OK, loraMessage);
 }
 
-Status LoraManager::StartToUnload(const std::string &loraName)
-{
+Status LoraManager::StartToUnload(const std::string &loraName) {
     std::string loraMessage;
     // lora name校验
     std::string loraPath = "";
     if (loaded_.Count(loraName) == 0 || wait2Unloaded_.Count(loraName) != 0) {
         loraMessage = GetLoraMessage(LoraStatus::LORA_NOT_FOUND, loraName, loraPath);
-        MINDIE_LLM_LOG_INFO("[LoraManager::StartToUnload] Failed to unload LoRA: LoRA has not been loaded or is waiting to unload.");
+        MINDIE_LLM_LOG_INFO(
+            "[LoraManager::StartToUnload] Failed to unload LoRA: LoRA has not been loaded or is waiting to unload.");
         return Status(Error::Code::OK, loraMessage);
     }
     LoraParamSPtr wait2unloadloraparam;
@@ -205,12 +201,11 @@ Status LoraManager::StartToUnload(const std::string &loraName)
     return Status(Error::Code::OK, loraMessage);
 }
 
-Status LoraManager::GetLoadedLoras(std::vector<LoraParamSPtr> &loraInfo)
-{
+Status LoraManager::GetLoadedLoras(std::vector<LoraParamSPtr> &loraInfo) {
     // 可用的是加载的-等待卸载的
     std::vector<LoraParamSPtr> available;
     std::vector<LoraParamSPtr> loadList = loaded_.Values();
-    for (const auto& singleParam :  loadList) {
+    for (const auto &singleParam : loadList) {
         if (wait2Unloaded_.Count(singleParam->loraName) == 0) {
             available.push_back(singleParam);
         }
@@ -220,13 +215,12 @@ Status LoraManager::GetLoadedLoras(std::vector<LoraParamSPtr> &loraInfo)
 }
 
 // engine调用卸载Lora
-void LoraManager::TryUnLoadWaiting()
-{
+void LoraManager::TryUnLoadWaiting() {
     std::vector<LoraParamSPtr> wait2UnloadedList = wait2Unloaded_.Values();
     for (const auto &unloadLoraParam : wait2UnloadedList) {
         if (loraIdRef_.Count(unloadLoraParam->loraName) == 0 || loraIdRef_.Get(unloadLoraParam->loraName) == 0) {
-            LoraOperationRequest lorarequest = BuildLoraOperationRequest(unloadLoraParam,
-                                                                         model_execute_data::LoraOperationType::UNLOAD);
+            LoraOperationRequest lorarequest =
+                BuildLoraOperationRequest(unloadLoraParam, model_execute_data::LoraOperationType::UNLOAD);
             bool succ = executor_->ExecutLoraRequest(lorarequest);
             if (!succ) {
                 MINDIE_LLM_LOG_ERROR("Call ExecuteUnloadLora failed.");
@@ -235,15 +229,13 @@ void LoraManager::TryUnLoadWaiting()
             // 卸载成功删除lora
             wait2Unloaded_.Erase(unloadLoraParam->loraName);
             loaded_.Erase(unloadLoraParam->loraName);
-            MINDIE_LLM_LOG_INFO("[LoraManager::UnLoad] " << unloadLoraParam->loraName <<
-                                " is successfully unload");
+            MINDIE_LLM_LOG_INFO("[LoraManager::UnLoad] " << unloadLoraParam->loraName << " is successfully unload");
         }
     }
 }
 
 // sequence使用，如果loraId不可用则将sequence的loraId设置为None
-bool LoraManager::ValidateLoraId(const std::optional<std::string> &loraId)
-{
+bool LoraManager::ValidateLoraId(const std::optional<std::string> &loraId) {
     if (loraId.has_value()) {
         std::string loraIdValue = loraId.value();
         if (wait2Unloaded_.Count(loraIdValue) == 0 && loaded_.Count(loraIdValue) != 0) {
@@ -255,8 +247,7 @@ bool LoraManager::ValidateLoraId(const std::optional<std::string> &loraId)
     return false;
 }
 
-void LoraManager::IncLoraRef(const std::optional<std::string> &loraId)
-{
+void LoraManager::IncLoraRef(const std::optional<std::string> &loraId) {
     if (loraId.has_value()) {
         std::string loraIdValue = loraId.value();
         if (loraIdValue != "" && loraIdValue != "None" && loaded_.Count(loraIdValue) != 0) {
@@ -265,8 +256,7 @@ void LoraManager::IncLoraRef(const std::optional<std::string> &loraId)
     }
 }
 
-void LoraManager::DecLoraRef(const std::optional<std::string> &loraId)
-{
+void LoraManager::DecLoraRef(const std::optional<std::string> &loraId) {
     if (loraId.has_value()) {
         std::string loraIdValue = loraId.value();
         if (loraIdValue != "" && loraIdValue != "None") {
@@ -279,4 +269,4 @@ void LoraManager::DecLoraRef(const std::optional<std::string> &loraId)
         }
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

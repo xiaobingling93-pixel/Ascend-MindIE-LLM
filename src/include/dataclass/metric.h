@@ -13,8 +13,8 @@
 #ifndef DATACLASS_METRIC_H
 #define DATACLASS_METRIC_H
 
-#include <string>
 #include <atomic>
+#include <string>
 
 namespace mindie_llm {
 
@@ -28,18 +28,18 @@ struct BlockMetric {
 
 // 请求队列的快照
 struct ReqStatistic {
-    uint64_t remainPrefillSlots_{0};  // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
-    uint64_t remainPrefillTokens_{0}; // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
-    uint64_t remainBlocks_{0};        // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
-    uint64_t dpRemainBlocks_{0};      // TBC_待明确DP实现方案后再考虑怎么落地
+    uint64_t remainPrefillSlots_{0};   // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
+    uint64_t remainPrefillTokens_{0};  // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
+    uint64_t remainBlocks_{0};         // TBC_为了快手自己做调度，当前没有用， 裁决是否要去掉
+    uint64_t dpRemainBlocks_{0};       // TBC_待明确DP实现方案后再考虑怎么落地
 
     uint64_t waitingRequestNum_{0};
     uint64_t runningRequestNum_{0};
     uint64_t swappedRequestNum_{0};
 
     uint64_t cumulativePreemptCount_{0};
-    uint64_t allRadixMatchNum_{0};    // 统计所有请求的 prefill prompt token 总数
-    uint64_t npuRadixMatchHitNum_{0}; // 统计所有请求的 prefix cache 命中的 token 总数
+    uint64_t allRadixMatchNum_{0};     // 统计所有请求的 prefill prompt token 总数
+    uint64_t npuRadixMatchHitNum_{0};  // 统计所有请求的 prefix cache 命中的 token 总数
 };
 
 struct SchedulerMetric {
@@ -53,6 +53,6 @@ struct EngineMetric {
     float decodeThroughput_{0.0};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // DATACLASS_METRIC_H
+#endif  // DATACLASS_METRIC_H

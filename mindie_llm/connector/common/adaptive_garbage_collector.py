@@ -16,11 +16,11 @@ from mindie_llm.utils.status import CoreThread
 
 
 class AdaptiveGarbageCollector:
-    '''
+    """
     monitor service status and perform adaptive garbage collection by adjusting its threshold
     service is busy/idle: increase/decrease threshold to suppress/allow Python gc
-    '''
-    
+    """
+
     _instance = None
     _lock = threading.Lock()
 
@@ -28,15 +28,15 @@ class AdaptiveGarbageCollector:
         self.running = False
         self.thread = None
         self.original_threshold = gc.get_threshold()
-        self.monitor_interval = kwargs.get('monitor_interval', 1)
+        self.monitor_interval = kwargs.get("monitor_interval", 1)
         # args for gc.set_threshold
-        self.gc_threshold_idle = kwargs.get('gc_threshold_idle', [20000, 20, 20])
-        self.gc_threshold_busy = kwargs.get('gc_threshold_busy', [50000, 50, 50])
+        self.gc_threshold_idle = kwargs.get("gc_threshold_idle", [20000, 20, 20])
+        self.gc_threshold_busy = kwargs.get("gc_threshold_busy", [50000, 50, 50])
         # monitor the increase of requests
         self._prev_req_count = 0
         self._cur_req_count = 0
         # deque pops front items automatically when len exceeds max size
-        self._window_size = kwargs.get('window_size', 8)
+        self._window_size = kwargs.get("window_size", 8)
         self._sliding_window = deque(maxlen=self._window_size)
         logger.info(f"Adaptive GC initialized. Instance arguments: {kwargs}")
 
@@ -63,31 +63,31 @@ class AdaptiveGarbageCollector:
             self.thread.join()
         gc.set_threshold(*self.original_threshold)
         logger.info("Adaptive GC stopped and restored original GC threshold")
-        
+
     def request_counter_increase(self):
         self._cur_req_count += 1
-                
+
     def _system_is_busy(self):
         # modify this function according to what you monitor
         is_busy = len(self._sliding_window) and not all(value == 0 for value in self._sliding_window)
         return is_busy
-        
+
     def _set_gc_when_busy(self):
         gc.set_threshold(*self.gc_threshold_busy)
         logger.debug(f"System is busy, GC is set to a higher threshold: {self.gc_threshold_busy}")
-        
+
     def _set_gc_when_idle(self):
         gc.set_threshold(*self.gc_threshold_idle)
         logger.debug(f"System is idle, GC is set to a lower threshold: {self.gc_threshold_idle}")
-        
+
     def _monitor_loop(self):
         while self.running:
             new_req_count = self._cur_req_count - self._prev_req_count
             self._sliding_window.append(new_req_count)
             self._prev_req_count = self._cur_req_count
-            
+
             if self._system_is_busy():
                 self._set_gc_when_busy()
             else:
-                self._set_gc_when_idle()    
+                self._set_gc_when_idle()
             time.sleep(self.monitor_interval)

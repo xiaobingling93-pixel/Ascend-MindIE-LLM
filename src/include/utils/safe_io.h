@@ -14,8 +14,8 @@
 #define SAFE_IO_H
 
 #include <functional>
-#include "nlohmann/json.hpp"
 
+#include "nlohmann/json.hpp"
 #include "safe_result.h"
 
 namespace mindie_llm {
@@ -32,6 +32,6 @@ bool CheckJsonDepth(int depth, Json::parse_event_t ev);
 bool CheckJsonDepthWithLogger(int depth, Json::parse_event_t ev, std::function<void(void)> logger);
 bool CheckJsonDepthCallbackNoLogger(int depth, Json::parse_event_t ev, Json& obj);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -38,7 +38,7 @@ enum class SequenceStatus {
 
     FINISH_IGNORED,
 
-    FINISH_RECOMPUTE // PD分离场景做recompute，当前engine请求完成，由coordinate重新下发调度
+    FINISH_RECOMPUTE  // PD分离场景做recompute，当前engine请求完成，由coordinate重新下发调度
 };
 
 namespace sequence_status {
@@ -150,6 +150,6 @@ struct SequenceGroupoutput {
     std::vector<SequenceOutput> outputs;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

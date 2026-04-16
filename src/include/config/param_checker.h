@@ -12,13 +12,12 @@
 
 #ifndef PARAM_CHECKER_H
 #define PARAM_CHECKER_H
-#include <regex>
-#include <iostream>
-#include <string>
 #include <cstdint>
-#include <vector>
-
+#include <iostream>
 #include <nlohmann/json.hpp>
+#include <regex>
+#include <string>
+#include <vector>
 
 namespace mindie_llm {
 struct ParamSpec {
@@ -27,15 +26,15 @@ struct ParamSpec {
     bool compulsory;
 };
 
-#define CHECK_CONFIG_VALIDATION(checkRes, expr)                                                                        \
-    do {                                                                                                               \
-        if (!(expr)) {                                                                                                 \
-            (checkRes) = false;                                                                                        \
-        }                                                                                                              \
+#define CHECK_CONFIG_VALIDATION(checkRes, expr) \
+    do {                                        \
+        if (!(expr)) {                          \
+            (checkRes) = false;                 \
+        }                                       \
     } while (0)
 
 class ParamChecker {
-public:
+   public:
     /*
     @brief: 从json文件中读取configType对象到inputJsonData中
     */
@@ -64,9 +63,9 @@ public:
     */
     static uint32_t GetIntegerParamDefaultValue(nlohmann::json jsonData, const std::string &configName,
                                                 uint32_t defaultVal);
-    
+
     static int32_t GetTruncationParamDefaultValue(nlohmann::json jsonData, const std::string &configName,
-                                                uint32_t defaultVal);
+                                                  uint32_t defaultVal);
 
     static std::string GetStringParamValue(nlohmann::json jsonData, const std::string &configName,
                                            std::string defaultVal);
@@ -77,8 +76,7 @@ public:
     @brief: 校验输入inputValue的值是否在最大最小值区间内
     */
     template <typename Integer>
-    static bool CheckMaxMinValue(Integer inputValue, Integer maxValue, Integer minValue, const std::string &inputName)
-    {
+    static bool CheckMaxMinValue(Integer inputValue, Integer maxValue, Integer minValue, const std::string &inputName) {
         if (inputValue > maxValue) {
             std::cout << inputName << " [" << std::to_string(inputValue) << "] is out of bound ["
                       << std::to_string(maxValue) << "]" << std::endl;
@@ -132,5 +130,5 @@ public:
     */
     static bool CheckInferMode(const std::string &inferMode);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

@@ -9,20 +9,22 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_POST_PROCESSING_H
 #define MINDIE_LLM_POST_PROCESSING_H
 
-#include <random>
-#include <string>
-#include <sstream>
-#include <vector>
-#include <algorithm>
-#include <map>
-#include <chrono>
 #include <absl/types/span.h>
-#include "post_processing_profiler/profiler.h"
+
+#include <algorithm>
+#include <chrono>
+#include <map>
+#include <random>
+#include <sstream>
+#include <string>
+#include <vector>
+
 #include "log.h"
+#include "post_processing_profiler/profiler.h"
 
 namespace mindie_llm {
 namespace cpu_logits_handler {
@@ -38,8 +40,7 @@ enum class SamplerType {
     MULTINOMIAL,
 };
 
-inline SamplerType GetSamplerType(std::string inSamplerType)
-{
+inline SamplerType GetSamplerType(std::string inSamplerType) {
     if (inSamplerType == "exponential") {
         return SamplerType::EXPONENTIAL;
     } else if (inSamplerType == "multinomial") {
@@ -50,8 +51,7 @@ inline SamplerType GetSamplerType(std::string inSamplerType)
     }
 }
 
-inline Dtype GetDtype(std::string inDtype)
-{
+inline Dtype GetDtype(std::string inDtype) {
     if (inDtype == "float16" || inDtype == "fp16") {
         return Dtype::FLOAT16;
     } else if (inDtype == "bfloat16" || inDtype == "bf16") {
@@ -66,9 +66,12 @@ inline Dtype GetDtype(std::string inDtype)
 
 struct Configure {
     Configure(int topK, float topP, bool sample, int logprobs, unsigned long long seed, std::string sampleMethod)
-        : topK(topK), topP(topP), sample(sample), logprobs(logprobs), seed(seed),
-        sampleMethod(GetSamplerType(sampleMethod))
-    {
+        : topK(topK),
+          topP(topP),
+          sample(sample),
+          logprobs(logprobs),
+          seed(seed),
+          sampleMethod(GetSamplerType(sampleMethod)) {
         this->g.seed(seed);
     }
 
@@ -85,8 +88,7 @@ struct Configure {
 
     float randomValue = 1.0;
 
-    std::string GetConfig() const
-    {
+    std::string GetConfig() const {
         std::stringstream sstream;
         sstream << "Host Sampling Configure is: ";
         sstream << "top k [" << topK << "], ";
@@ -98,8 +100,7 @@ struct Configure {
         return sstream.str();
     }
 
-    void UpdateRandomValue()
-    {
+    void UpdateRandomValue() {
         if (sampleMethod == SamplerType::EXPONENTIAL) {
             randomValue = d(g);
         } else {
@@ -109,16 +110,16 @@ struct Configure {
 };
 
 class PostProcessing {
-public:
+   public:
     PostProcessing();
     ~PostProcessing();
 
     void Init(std::map<int, Configure> *dictConfIn, absl::Span<int> requestIdsIn, uint16_t *score16In, float *score32In,
-            uint64_t *indexIn, int scoreSizeIn, int *resultIn, float *logprobsIn, int batchSizeIn, int maxLogprobsIn,
-            std::string dTypeStr, bool speedModeIn, bool useApproxIn);
+              uint64_t *indexIn, int scoreSizeIn, int *resultIn, float *logprobsIn, int batchSizeIn, int maxLogprobsIn,
+              std::string dTypeStr, bool speedModeIn, bool useApproxIn);
     void Run();
 
-public:
+   public:
     Configure *conf;
     std::map<int, Configure> *dictConf;
     absl::Span<int> requestIds{};
@@ -132,7 +133,7 @@ public:
     int maxLogprobs;
     Dtype dtype = Dtype::FLOAT16;
 
-private:
+   private:
     void DoTopK();
     void DoTopP();
     void TopP();
@@ -148,7 +149,7 @@ private:
     void DecodeByDtype();
     void DecodeByDtypeElement(int i);
 
-private:
+   private:
     int scoreSizeReal;
     std::vector<std::pair<float, int>> scoreIndex;
     std::vector<std::pair<float, int>> softmaxIndex;
@@ -157,7 +158,7 @@ private:
     bool speedMode;
     bool useApprox;
 };
-} // namespace cpu_logits_handler
-} // namespace mindie_llm
+}  // namespace cpu_logits_handler
+}  // namespace mindie_llm
 
 #endif

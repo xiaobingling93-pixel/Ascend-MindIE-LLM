@@ -11,10 +11,6 @@
 # See the Mulan PSL v2 for more details.
 
 import queue
-import threading
-import traceback
-import os
-import time
 
 from mindie_llm.connector.common import send_model_execute_response
 from mindie_llm.connector.common.response_builder import ExecuteResponseBuilder
@@ -23,11 +19,14 @@ from mindie_llm.connector.request_router.router_impl import RouterImpl
 from mindie_llm.model_wrapper.utils.config import BaseConfig, DmiConfig
 from mindie_llm.utils.log.logging import logger
 from mindie_llm.utils.status import CoreThread
+
 try:
     from ms_service_profiler.profiler import prof_step
 except ImportError:
+
     def default_prof_step(stop_check=False):
         pass
+
     prof_step = default_prof_step
 
 
@@ -53,7 +52,7 @@ class RequestRouter:
         self.pdlink_queue = queue.Queue()
         self.command_queue = queue.Queue()
         self.query_queue = queue.Queue()
- 
+
         self.inference_related_thread = CoreThread(target=self.do_inference, name="inference")
         self.trans_related_thread = CoreThread(target=self.do_transfer, name="transfer")
         self.pdlink_related_thread = CoreThread(target=self.do_pdlink, name="link")
@@ -152,7 +151,7 @@ class RequestRouter:
                     f"[MIE04E13030A] Unknown link type {execute_request.execute_type}, "
                     f"Expected PD_LINK type is {ExecuteType.PD_LINK}."
                 )
-            
+
     def do_transfer(self):
         while True:
             execute_request: ExecuteRequest = self.transfer_queue.get()
@@ -164,9 +163,11 @@ class RequestRouter:
             elif execute_type == ExecuteType.MODEL_FINALIZE:
                 break
             else:
-                logger.error(f"[MIE04E13030A] Unknown transfer type {execute_type}, \
-                    Expected transfer_data type is {ExecuteType.KV_TRANSFER}")
-            
+                logger.error(
+                    f"[MIE04E13030A] Unknown transfer type {execute_type}, \
+                    Expected transfer_data type is {ExecuteType.KV_TRANSFER}"
+                )
+
     def do_command(self):
         """
         This func will be used for command related tasks, including LoRA_load/unload, etc.
@@ -183,10 +184,12 @@ class RequestRouter:
             elif execute_type == ExecuteType.MODEL_FINALIZE:
                 break
             else:
-                logger.error(f"[MIE04E13030A] Unknown command type {execute_type}, \
-                    Expected command type is {ExecuteType.LORA_OPERATION}")
+                logger.error(
+                    f"[MIE04E13030A] Unknown command type {execute_type}, \
+                    Expected command type is {ExecuteType.LORA_OPERATION}"
+                )
 
-    # 新增处理链路状态查询请求        
+    # 新增处理链路状态查询请求
     def do_query(self):
         while True:
             execute_request: ExecuteRequest = self.query_queue.get()
@@ -202,18 +205,24 @@ class RequestRouter:
                 )
 
     def accept(self, execute_request: ExecuteRequest):
-        if execute_request.execute_type == ExecuteType.MODEL_INFER or \
-            execute_request.execute_type == ExecuteType.START_COMMAND_EXEC or \
-            execute_request.execute_type == ExecuteType.RECOVER_COMMAND_EXEC:
+        if (
+            execute_request.execute_type == ExecuteType.MODEL_INFER
+            or execute_request.execute_type == ExecuteType.START_COMMAND_EXEC
+            or execute_request.execute_type == ExecuteType.RECOVER_COMMAND_EXEC
+        ):
             self.inference_queue.put(execute_request)
         elif execute_request.execute_type == ExecuteType.PD_LINK:
             self.pdlink_queue.put(execute_request)
-        elif execute_request.execute_type == ExecuteType.KV_TRANSFER or \
-            execute_request.execute_type == ExecuteType.CLEAR_COMMAND_EXEC:
+        elif (
+            execute_request.execute_type == ExecuteType.KV_TRANSFER
+            or execute_request.execute_type == ExecuteType.CLEAR_COMMAND_EXEC
+        ):
             self.transfer_queue.put(execute_request)
-        elif execute_request.execute_type == ExecuteType.LORA_OPERATION or \
-            execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC or \
-            execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC_ROCE:
+        elif (
+            execute_request.execute_type == ExecuteType.LORA_OPERATION
+            or execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC
+            or execute_request.execute_type == ExecuteType.PAUSE_COMMAND_EXEC_ROCE
+        ):
             self.command_queue.put(execute_request)
         # 新增：查询请求分发到 query_queue
         elif execute_request.execute_type == ExecuteType.PD_LINK_STATUS_QUERY:

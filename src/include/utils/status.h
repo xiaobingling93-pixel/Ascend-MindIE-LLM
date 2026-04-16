@@ -14,6 +14,7 @@
 #define MINDIE_LLM_STATUS_H
 
 #include <string>
+
 #include "error.h"
 
 namespace mindie_llm {
@@ -22,7 +23,7 @@ enum class NodeHealthStatus { READY, ABNORMAL };
 /// Status class
 /// This class is used to represent the error states and status information.
 class Status {
-public:
+   public:
     /// Construct a status from a code with no message.
     explicit Status(Error::Code code = Error::Code::OK) noexcept { error_ = Error(code); }
 
@@ -44,9 +45,9 @@ public:
     /// The equal operator is to compare two status objects and return true if they are equal.
     bool operator==(const Status &other) const { return error_.ErrorCode() == other.error_.ErrorCode(); }
 
-private:
-    Error error_; /// the error object.
+   private:
+    Error error_;  /// the error object.
 };
 
-} // namespace mindie_llm
-#endif // MINDIE_LLM_STATUS_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_STATUS_H

@@ -13,38 +13,38 @@
 #ifndef SAFE_LOG_H
 #define SAFE_LOG_H
 
-#include <string>
-#include <sstream>
-#include <fstream>
 #include <array>
+#include <atomic>
 #include <cstddef>
+#include <cstring>
+#include <fstream>
+#include <functional>
 #include <mutex>
+#include <sstream>
+#include <string>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <cstring>
-#include <functional>
 
-#include "string_utils.h"
 #include "safe_envvar.h"
 #include "safe_io.h"
+#include "string_utils.h"
 
 namespace mindie_llm {
 static const std::string ALL_COMPONENT = "__all__";
 
 // AUDIT: mindie_llm::LogLine mandatory logging.
-enum class LogSeverity: uint8_t { DEBUG, INFO, WARN, ERROR, CRITICAL, AUDIT, __COUNT__ };
+enum class LogSeverity : uint8_t { DEBUG, INFO, WARN, ERROR, CRITICAL, AUDIT, __COUNT__ };
 const std::array<std::string, static_cast<uint8_t>(LogSeverity::__COUNT__) - 1>& GetLogSeverityNameArray();
 const std::unordered_set<std::string>& GetAllLogSeverity();
 bool String2LogSeverity(const std::string& level, LogSeverity& out);
 
 // Logs of each type go into separate files.
-enum class LogType: uint8_t { GENERAL = 0, REQUEST, TOKEN, TOKENIZER, __COUNT__ };
+enum class LogType : uint8_t { GENERAL = 0, REQUEST, TOKEN, TOKENIZER, __COUNT__ };
 const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)>& GetLogTypeNameArray();
 bool String2LogType(const std::string& s, LogType& out);
 
 // Component enumeration object supporting independent control, with all component logs falling into same file by PID
-enum class LogComponent: uint8_t { LLM = 0, LLMMODELS, SERVER, __COUNT__ };
+enum class LogComponent : uint8_t { LLM = 0, LLMMODELS, SERVER, __COUNT__ };
 const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)>& GetComponentNameArray();
 const std::string& Component2String(LogComponent c);
 bool String2Component(const std::string& s, LogComponent& out);
@@ -73,18 +73,17 @@ struct LogSink {
 // ================= LogManager =================
 
 class LogManager {
-public:
+   public:
     static LogManager& GetInstance();
 
     bool IsPrintLog(LogComponent comp, LogSeverity level);
     void Push(LogComponent comp, LogType type, std::string&& formattedLog);
     ComponentConfig& GetComponentConfig(LogComponent comp);
 
-public:
-    template<class T, class Parser, class Setter>
+   public:
+    template <class T, class Parser, class Setter>
     void LoadByComponentByEnv(const char* envKey, const std::string& defaultVal,
-        const std::unordered_set<std::string>& validValues, Parser parser, Setter setter)
-    {
+                              const std::unordered_set<std::string>& validValues, Parser parser, Setter setter) {
         std::string val;
         Result r = EnvVar::GetInstance().Get(envKey, defaultVal, val);
         if (!r.IsOk()) {
@@ -93,10 +92,9 @@ public:
         LoadByComponentByString<T>(val, validValues, parser, setter);
     }
 
-    template<class T, class Parser, class Setter>
+    template <class T, class Parser, class Setter>
     void LoadByComponentByString(const std::string& val, const std::unordered_set<std::string>& validValues,
-        Parser parser, Setter setter)
-    {
+                                 Parser parser, Setter setter) {
         auto kv = ParseKeyValueString(val, validValues, ALL_COMPONENT, ';', ':');
         for (size_t i = 0; i < componentCfgs_.size(); ++i) {
             auto& cfg = componentCfgs_[i];
@@ -112,7 +110,7 @@ public:
         }
     }
 
-private:
+   private:
     LogManager();
     ~LogManager();
 
@@ -131,7 +129,7 @@ private:
     void RotateLogs(LogType type);
     void Stop();
 
-private:
+   private:
     std::atomic<bool> isRunning_{false};
     std::array<ComponentConfig, static_cast<size_t>(LogComponent::__COUNT__)> componentCfgs_;
     std::string logDir_;
@@ -147,15 +145,14 @@ private:
 // ================= Logger =================
 
 class Logger {
-public:
+   public:
     Logger() = default;
     explicit Logger(LogComponent comp, LogSeverity level);
 
     bool ShouldLog() const;
 
-    template<typename T>
-    Logger& operator<<(const T& v)
-    {
+    template <typename T>
+    Logger& operator<<(const T& v) {
         stream_ << v;
         return *this;
     }
@@ -163,7 +160,7 @@ public:
     void AssembleAndPush(LogType type, const char* file, size_t line, std::string& stack);
     void Reset();
 
-private:
+   private:
     LogComponent component_;
     LogSeverity level_;
     std::ostringstream stream_;
@@ -172,7 +169,7 @@ private:
 // ================= LogLine =================
 
 class LogLine {
-public:
+   public:
     LogLine(LogComponent comp, LogSeverity level, const char* file, size_t line);
     ~LogLine();
 
@@ -181,25 +178,23 @@ public:
     LogLine(LogLine&&) = delete;
     LogLine& operator=(LogLine&&) = delete;
 
-    template<typename T>
-    LogLine& operator<<(const T& v)
-    {
+    template <typename T>
+    LogLine& operator<<(const T& v) {
         if (enabled_) {
             logger_ << v;
         }
         return *this;
     }
 
-    LogLine& SetType(LogType t)
-    {
+    LogLine& SetType(LogType t) {
         type_ = t;
         return *this;
     }
 
-private:
+   private:
     std::string BuildStackTrace();
 
-private:
+   private:
     Logger& logger_;
     bool enabled_{false};
     LogType type_{LogType::GENERAL};
@@ -227,10 +222,10 @@ struct DynamicLogDiff {
 };
 
 class DynamicLogManager {
-public:
+   public:
     static DynamicLogManager& GetInstance();
 
-private:
+   private:
     DynamicLogManager();
     ~DynamicLogManager();
 
@@ -254,13 +249,13 @@ private:
     void UpdateValidTimeStamp(DynamicLogConfig& cfg);
     bool IsWithinValidRange(const DynamicLogConfig& cfg) const;
 
-private:
+   private:
     const std::string keyLogConfig = "LogConfig";
     const std::string keyLogSeverity = "dynamicLogLevel";
     const std::string keyTimeInterval = "dynamicLogLevelValidHours";
     const std::string keyTimeStamp = "dynamicLogLevelValidTime";
 
-private:
+   private:
     std::atomic<bool> isRunning_{false};
     std::thread monitorThread_;
     std::mutex mtx_;
@@ -277,7 +272,7 @@ private:
 
 void InitSystemLog();
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 // ================= Macro =================
 // llm log interface

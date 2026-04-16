@@ -9,19 +9,21 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <cmath>
-#include <cstddef>
-#include <iostream>
-#include <sstream>
-#include <stdexcept>
-#include <numeric>
+
+#include "post_processing.h"
+
 #include <algorithm>
 #include <cfloat>
-#include <map>
+#include <cmath>
+#include <cstddef>
 #include <deque>
+#include <iostream>
+#include <map>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+
 #include "check_utils.h"
-#include "post_processing.h"
 
 namespace {
 
@@ -35,8 +37,7 @@ union UInt32Float {
     explicit UInt32Float(float float32Value) : float32Value(float32Value) {}
 };
 
-inline float DecodeFp16(uint16_t float16Value)
-{
+inline float DecodeFp16(uint16_t float16Value) {
     uint32_t sign = float16Value >> 15;
     uint32_t exponent = (float16Value >> 10) & 0x1F;
     uint32_t fraction = (float16Value & 0x3FF);
@@ -62,8 +63,7 @@ inline float DecodeFp16(uint16_t float16Value)
     return uint32FloatValue.float32Value;
 }
 
-inline float DecodeBfp16(uint16_t float16Value)
-{
+inline float DecodeBfp16(uint16_t float16Value) {
     uint32_t sign = float16Value >> 15;
     uint32_t exponent = (float16Value >> 7) & 0xFF;
     uint32_t fraction = (float16Value & 0x7F);
@@ -74,21 +74,28 @@ inline float DecodeBfp16(uint16_t float16Value)
 
 }  // namespace
 
-mindie_llm::cpu_logits_handler::PostProcessing::PostProcessing() : conf(nullptr), dictConf(nullptr),
-    score16(nullptr), score32(nullptr), index(nullptr),
-    scoreSize(0), result(nullptr), logprobs(nullptr), batchSize(0), maxLogprobs(0),
-    dtype(mindie_llm::cpu_logits_handler::Dtype::FLOAT16), scoreSizeReal(0), speedMode(false), useApprox(false)
-{}
+mindie_llm::cpu_logits_handler::PostProcessing::PostProcessing()
+    : conf(nullptr),
+      dictConf(nullptr),
+      score16(nullptr),
+      score32(nullptr),
+      index(nullptr),
+      scoreSize(0),
+      result(nullptr),
+      logprobs(nullptr),
+      batchSize(0),
+      maxLogprobs(0),
+      dtype(mindie_llm::cpu_logits_handler::Dtype::FLOAT16),
+      scoreSizeReal(0),
+      speedMode(false),
+      useApprox(false) {}
 
-mindie_llm::cpu_logits_handler::PostProcessing::~PostProcessing()
-{}
+mindie_llm::cpu_logits_handler::PostProcessing::~PostProcessing() {}
 
 void mindie_llm::cpu_logits_handler::PostProcessing::Init(
-    std::map<int, mindie_llm::cpu_logits_handler::Configure> *dictConfIn,
-    absl::Span<int> requestIdsIn, uint16_t *score16In, float *score32In, uint64_t *indexIn,
-    int scoreSizeIn, int *resultIn, float *logprobsIn, int batchSizeIn, int maxLogprobsIn,
-    std::string dTypeStr, bool speedModeIn, bool useApproxIn)
-{
+    std::map<int, mindie_llm::cpu_logits_handler::Configure> *dictConfIn, absl::Span<int> requestIdsIn,
+    uint16_t *score16In, float *score32In, uint64_t *indexIn, int scoreSizeIn, int *resultIn, float *logprobsIn,
+    int batchSizeIn, int maxLogprobsIn, std::string dTypeStr, bool speedModeIn, bool useApproxIn) {
     if (scoreSizeIn < 1) {
         throw std::invalid_argument("The input score size is less than 1.");
     }
@@ -110,8 +117,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::Init(
     this->useApprox = useApproxIn;
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::Run()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::Run() {
     if (dictConf == nullptr) {
         throw std::invalid_argument("dictConf is null.");
     }
@@ -149,8 +155,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::Run()
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::DoTopK()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::DoTopK() {
     if (conf->topK > 0 && conf->topK < scoreSize) {
         DecodeBySize(conf->topK);
     } else {
@@ -158,8 +163,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::DoTopK()
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::DoTopP()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::DoTopP() {
     if (std::fabs(conf->topP - 1.0) > 1e-9 and useApprox) {
         MINDIE_LLM_LOG_DEBUG("Do TopApprox for param " << conf->topP);
         TopApprox();
@@ -169,9 +173,8 @@ void mindie_llm::cpu_logits_handler::PostProcessing::DoTopP()
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::WindowSlideApprox(const float &topP,
-    int &pNum, float &cumSum, int &windowSize, const int &scoreIndexSize)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::WindowSlideApprox(const float &topP, int &pNum, float &cumSum,
+                                                                       int &windowSize, const int &scoreIndexSize) {
     if (windowSize <= 0 || windowSize >= scoreIndexSize) {
         throw std::invalid_argument("The window size is less than 1 or greater than scoreIndexSize.");
     }
@@ -217,8 +220,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::WindowSlideApprox(const flo
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::TopApprox()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::TopApprox() {
     int scoreIndexSize = static_cast<int>(scoreIndex.size());
     for (int i = 0; i < scoreIndexSize; i++) {
         scoreIndex[i].second = i;
@@ -242,8 +244,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::TopApprox()
     scoreIndex.resize(pNum);
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::TopP()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::TopP() {
     SoftmaxNoModify(false);
     float topP = conf->topP;
     int pNum = 0;
@@ -264,8 +265,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::TopP()
     scoreIndex.resize(pNum);
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::Sampling(const int &numLogprobs)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::Sampling(const int &numLogprobs) {
     SoftmaxNoModify();
 
     if (conf->sampleMethod == mindie_llm::cpu_logits_handler::SamplerType::EXPONENTIAL) {
@@ -278,8 +278,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::Sampling(const int &numLogp
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::SoftmaxNoModify(bool indexSecond)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::SoftmaxNoModify(bool indexSecond) {
     double sumT = 0;
     double maxValue = -DBL_MAX;
     softmaxIndex.resize(scoreIndex.size());
@@ -298,8 +297,8 @@ void mindie_llm::cpu_logits_handler::PostProcessing::SoftmaxNoModify(bool indexS
         for (size_t i = 0; i < scoreIndex.size(); i++) {
             softmaxIndex[i].first = 1.0f / scoreIndex.size();
         }
-        MINDIE_LLM_LOG_DEBUG("The value of sumT is near zero in softmax operation. " <<
-                             "softmax value will be " << softmaxIndex[0].first);
+        MINDIE_LLM_LOG_DEBUG("The value of sumT is near zero in softmax operation. " << "softmax value will be "
+                                                                                     << softmaxIndex[0].first);
     } else {
         for (size_t i = 0; i < scoreIndex.size(); i++) {
             softmaxIndex[i].first /= sumT;
@@ -307,8 +306,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::SoftmaxNoModify(bool indexS
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::WriteTopResult(const int &numLogprobs)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::WriteTopResult(const int &numLogprobs) {
     if (!speedMode) {
         for (int i = 0; i < numLogprobs; ++i) {
             if (i < static_cast<int>(softmaxIndex.size())) {
@@ -327,8 +325,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::WriteTopResult(const int &n
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::RandomExpDistribution(const int &numLogprobs)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::RandomExpDistribution(const int &numLogprobs) {
     WriteTopResult(numLogprobs);
 
     for (size_t i = 0; i < softmaxIndex.size(); ++i) {
@@ -339,8 +336,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::RandomExpDistribution(const
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::ArgMax(bool sample, const int &numLogprobs)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::ArgMax(bool sample, const int &numLogprobs) {
     float maxValue;
     int maxIndex;
 
@@ -380,8 +376,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::ArgMax(bool sample, const i
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::MultinomialSample(const int &numLogprobs)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::MultinomialSample(const int &numLogprobs) {
     float sum = 0;
     std::vector<float> softmaxTmp;
     softmaxTmp.resize(softmaxIndex.size());
@@ -425,8 +420,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::MultinomialSample(const int
     WriteTopResult(numLogprobs);
 }
 
-inline void mindie_llm::cpu_logits_handler::PostProcessing::DecodeBySize(const int &size)
-{
+inline void mindie_llm::cpu_logits_handler::PostProcessing::DecodeBySize(const int &size) {
     if (size < 0 || size > MAX_SCORE_SIZE) {
         throw std::invalid_argument("Invalid score size: " + std::to_string(size));
     }
@@ -436,8 +430,7 @@ inline void mindie_llm::cpu_logits_handler::PostProcessing::DecodeBySize(const i
     DecodeByDtype();
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::DecodeByDtype()
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::DecodeByDtype() {
     switch (dtype) {
         case mindie_llm::cpu_logits_handler::Dtype::FLOAT16:
             for (int i = 0; i < scoreSizeReal; i++) {
@@ -464,8 +457,7 @@ void mindie_llm::cpu_logits_handler::PostProcessing::DecodeByDtype()
     }
 }
 
-void mindie_llm::cpu_logits_handler::PostProcessing::DecodeByDtypeElement(int i)
-{
+void mindie_llm::cpu_logits_handler::PostProcessing::DecodeByDtypeElement(int i) {
     switch (dtype) {
         case mindie_llm::cpu_logits_handler::Dtype::FLOAT16:
             scoreIndex[i].first = DecodeFp16(score16[i]);

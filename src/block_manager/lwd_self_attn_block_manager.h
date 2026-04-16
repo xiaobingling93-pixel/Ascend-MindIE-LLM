@@ -9,18 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
 #include <unordered_map>
+
 #include "basic_types.h"
 #include "block_manager_interface.h"
-#include "sequence.h"
 #include "block_table.h"
 #include "block_tracker.h"
 #include "cpu_npu_block_allocator.h"
 #include "mem_pool.h"
 #include "self_attn_block_manager.h"
+#include "sequence.h"
 namespace mindie_llm {
 
 /// 此模块为边云特性专用的block管理模块
@@ -33,7 +34,7 @@ namespace mindie_llm {
 /// \param speculativeSlots 预分配的slot，并行解码场景，会生成多个slot，kvCache存储到预分配的slot中
 /// \param enableCaching    是否开启prefix cache功能
 class LwdSelfAttnBlockManager : public SelfAttnBlockManager {
-public:
+   public:
     explicit LwdSelfAttnBlockManager(const BlockManagerConfig &config, size_t localDPRank = 0);
 
     void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank = 0) override;
@@ -60,9 +61,9 @@ public:
 
     std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const override;
 
-private:
+   private:
     BlockSpaceManagerSPtr lwdCloudBlockManager_;
 };
 using SelfAttnBlockManagerPtr = std::unique_ptr<SelfAttnBlockManager>;
 using SelfAttnBlockManagerSPtr = std::shared_ptr<SelfAttnBlockManager>;
-} // namespace mindie_llm
+}  // namespace mindie_llm

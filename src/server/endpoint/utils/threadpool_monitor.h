@@ -12,26 +12,27 @@
 
 #pragma once
 
-#include <cstring>
 #include <atomic>
 #include <condition_variable>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <iostream>
 #include <list>
+#include <map>
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
 #include <vector>
-#include <map>
-#include "httplib.h"
+
 #include "http_rest_resource.h"
+#include "httplib.h"
 
 using InferRequestIdType = uint32_t;
 
 namespace mindie_llm {
 class ThreadPoolMonitor final : public httplib::TaskQueue {
-public:
+   public:
     explicit ThreadPoolMonitor(size_t n, size_t mqr = 0);
     ~ThreadPoolMonitor() override;
 
@@ -41,7 +42,8 @@ public:
     void AddRequestToMonitor(std::shared_ptr<RequestContext> requestContext);
     void RemoveMonitorRequest(std::string reqid);
     void CheckAndRemoveClosedConnections();
-private:
+
+   private:
     void Monitor();
 
     struct Worker {
@@ -64,4 +66,4 @@ private:
     std::thread monitor_thread;
     std::shared_mutex monitor_map_mutex_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

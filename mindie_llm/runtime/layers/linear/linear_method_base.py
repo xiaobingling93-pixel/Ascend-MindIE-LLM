@@ -16,7 +16,6 @@ from mindie_llm.runtime.layers.quantization.quantization_method_base import Quan
 
 
 class LinearMethodBase(QuantizationMethodBase):
-
     @abstractmethod
     def create_weights(
         self,

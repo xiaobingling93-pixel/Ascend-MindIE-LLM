@@ -29,20 +29,19 @@ from mindie_llm.connector.common.model_execute_data_pb2 import ExecuteRequest, E
 from mindie_llm.connector.request_router.request_router import RequestRouter
 from mindie_llm.utils.layerwise.communication import LwdCommunicationManager
 from mindie_llm.utils.layerwise.share_memory import SharedMemoryManager
-from mindie_llm.utils.layerwise.request_metadata import LwdMetadata, lwd_metadata_manager
 from mindie_llm.utils.log.logging import logger
 from mindie_llm.utils.prof.profiler import span_start, span_end
 
 sys.path.append(str(Path(__file__).parent / "sync"))
 
 
-MASTER_ID = 0   # 接收通信, 广播决策, 创建共享内存的主rank号
-REQUEST_KEY_MAX = (1 << 31) - 2 # 从0开始, 到达最大值翻转为0
+MASTER_ID = 0  # 接收通信, 广播决策, 创建共享内存的主rank号
+REQUEST_KEY_MAX = (1 << 31) - 2  # 从0开始, 到达最大值翻转为0
 LONG_SEQ_LEN_MIN = 7500
 LONG_SEQ_LEN_MIN_DS_INT8 = 31000
 MULTI_NODES_LONG_SEQ_LEN_MIN_INT4 = 15000
-REQUEST_KEY_PREFILL = 'prefill'
-REQUEST_KEY_DECODE = 'decode'
+REQUEST_KEY_PREFILL = "prefill"
+REQUEST_KEY_DECODE = "decode"
 
 
 class LastExecType(IntEnum):
@@ -67,23 +66,23 @@ class DecisionType(IntEnum):
 class ModelType(IntEnum):
     QWEN = 0
     DEEP_SEEK = 1
-    
+
 
 @dataclass
-class DecisionMetadata():   # 兼容长短序列, 短序列就是一个chunk, 一个index
-    chunk_group_size: int = 1       # 云侧有几个chunk(云侧比边的少)
-    chunk_group_index: int = 0      # 云侧第几个chunk
-    chunk_index_size: int = 1       # 边侧几个小chunk等于云侧的一个group(chunk)
-    chunk_index_in_group: int = 0   # 边侧第几个小chunk
-    
-    
+class DecisionMetadata:  # 兼容长短序列, 短序列就是一个chunk, 一个index
+    chunk_group_size: int = 1  # 云侧有几个chunk(云侧比边的少)
+    chunk_group_index: int = 0  # 云侧第几个chunk
+    chunk_index_size: int = 1  # 边侧几个小chunk等于云侧的一个group(chunk)
+    chunk_index_in_group: int = 0  # 边侧第几个小chunk
+
+
 @dataclass
 class RequestInfo:
     request: ExecuteRequest
     layers_divi_num: int = -1
     prefill_dp_len: int = 0
     prefill_metadata_ready: bool = False
-    prefill_dp_max_seq_len: int = 0 # 多dp中的最大长度, 如果只有一个dp就是本身的长度
+    prefill_dp_max_seq_len: int = 0  # 多dp中的最大长度, 如果只有一个dp就是本身的长度
     dp_empty: bool = False
 
 
@@ -94,20 +93,20 @@ class RequestRouterLwd(RequestRouter):
 
         self.prefill_queue = queue.Queue()
         self.decode_queue = queue.Queue()
-        self.clean_up_queue = queue.Queue() 
+        self.clean_up_queue = queue.Queue()
         self.clean_eos_queue = queue.Queue()
 
         # Request map: key is 'prefill'/'decode', value is dict {request_id: request}
         self.request_map = {
             REQUEST_KEY_PREFILL: defaultdict(lambda: None),
-            REQUEST_KEY_DECODE: defaultdict(lambda: None)
+            REQUEST_KEY_DECODE: defaultdict(lambda: None),
         }
         self.request_map_prefill_key = 0
         self.request_map_decode_key = 0
 
         self.prefill_metadata_queue = deque()
         self.decode_metadata_queue = deque()
-        
+
         self.ctrl_comm = None
         self.data_comm = None
 
@@ -121,7 +120,7 @@ class RequestRouterLwd(RequestRouter):
 
         # 多机新增, 多dp的变量可适配单dp
         self.lwd_multi_nodes_enable = False
-        
+
         self.cp_size = 1
         self.moe_quantize = None
         self.batch_p_num = 1
@@ -137,7 +136,7 @@ class RequestRouterLwd(RequestRouter):
                 models_config_dict = json.loads(model_config_dict_json)
             except json.JSONDecodeError as e:
                 message = "The 'models' field does not conform to JSON format. Please check."
-                logger.warning(f'{message}, exception info: {e}')
+                logger.warning(f"{message}, exception info: {e}")
                 models_config_dict = None
 
         if models_config_dict is None:
@@ -160,9 +159,11 @@ class RequestRouterLwd(RequestRouter):
                 npu_smi_info = self.mem_manager.read_dict_memory(self.rank)
                 if npu_smi_info is not None:
                     edge_cloud_comm.set_peer_npu_smi_info(npu_smi_info)
-                    logger.info(f"[layerwiseDisaggregated] rank {self.rank} "
-                                f"edge_npu_smi_info {self.ctrl_comm.edge_npu_smi_info} "
-                                f"cloud_npu_smi_info {self.ctrl_comm.cloud_npu_smi_info}")
+                    logger.info(
+                        f"[layerwiseDisaggregated] rank {self.rank} "
+                        f"edge_npu_smi_info {self.ctrl_comm.edge_npu_smi_info} "
+                        f"cloud_npu_smi_info {self.ctrl_comm.cloud_npu_smi_info}"
+                    )
                     break
                 else:
                     time.sleep(0.5)
@@ -181,9 +182,7 @@ class RequestRouterLwd(RequestRouter):
             proto = ExecuteResponseBuilder.build_from_init_result(initialize_result)
             send_model_execute_response(proto)
         else:
-            initialize_result = {
-                "status": "error"
-            }
+            initialize_result = {"status": "error"}
             proto = ExecuteResponseBuilder.build_from_init_result(initialize_result)
             send_model_execute_response(proto)
             return
@@ -195,10 +194,10 @@ class RequestRouterLwd(RequestRouter):
         self.mem_manager = SharedMemoryManager(self.parent_pid)
         logger.info(f"[layerwiseDisaggregated] initliaze share mem ok rank:{self.rank}, parent_pid:{self.parent_pid}")
 
-        self.batch_p_num = 2 if model_config.get('lwdNextPHeadPrior', 'false') == 'true' else 1
+        self.batch_p_num = 2 if model_config.get("lwdNextPHeadPrior", "false") == "true" else 1
         models_config_dict = self.get_lwd_models_config_dict(model_config)
-        npu_device_ids = config.model_config.get('npu_device_ids', '0,1').split(',')
-        self.lwd_multi_nodes_enable = True if model_config.get('lwd_multi_nodes_enable', 'false') == 'true' else False
+        npu_device_ids = config.model_config.get("npu_device_ids", "0,1").split(",")
+        self.lwd_multi_nodes_enable = True if model_config.get("lwd_multi_nodes_enable", "false") == "true" else False
 
         is_producer = True if self.rank == MASTER_ID else False
         card_num = len(npu_device_ids)
@@ -206,18 +205,23 @@ class RequestRouterLwd(RequestRouter):
         self.process_sync_npu_smi_info(edge_cloud_comm)
 
         model_runner_config = self.router_impl.generator.model_wrapper.model_runner.config
-        self.moe_quantize = getattr(model_runner_config, 'moe_quantize', None)
+        self.moe_quantize = getattr(model_runner_config, "moe_quantize", None)
         self.prefill_chunk_instance = self.router_impl.generator.model_wrapper.model_runner.chunk_prefill_manager
         self.prefill_chunk_instance.initialize(self.lwd_multi_nodes_enable, self.cp_size)
 
-        #standard card
-        edge_is_standard_card = self.ctrl_comm.edge_npu_smi_info.get("communication_backend") == 'hccl' if \
-            self.ctrl_comm is not None and self.ctrl_comm.edge_npu_smi_info is not None else False
+        # standard card
+        edge_is_standard_card = (
+            self.ctrl_comm.edge_npu_smi_info.get("communication_backend") == "hccl"
+            if self.ctrl_comm is not None and self.ctrl_comm.edge_npu_smi_info is not None
+            else False
+        )
         if edge_is_standard_card:
             self.prefill_chunk_instance.initialize_standard_card()
 
-        logger.info(f"[layerwiseDisaggregated] mem_manager initliaze ok rank:{self.rank}, is_producer:{is_producer}, "
-            f"card_num:{card_num} lwd_multi_nodes_enable:{self.lwd_multi_nodes_enable} batch_p_num:{self.batch_p_num}")
+        logger.info(
+            f"[layerwiseDisaggregated] mem_manager initliaze ok rank:{self.rank}, is_producer:{is_producer}, "
+            f"card_num:{card_num} lwd_multi_nodes_enable:{self.lwd_multi_nodes_enable} batch_p_num:{self.batch_p_num}"
+        )
 
         self.initialize_diff(model_config, models_config_dict)
 
@@ -227,7 +231,7 @@ class RequestRouterLwd(RequestRouter):
 
     def get_long_seq_len_min(self):
         if self.prefill_chunk_instance.model_type == ModelType.DEEP_SEEK:
-            if self.moe_quantize == 'w4a8_dynamic':
+            if self.moe_quantize == "w4a8_dynamic":
                 if self.lwd_multi_nodes_enable:
                     return MULTI_NODES_LONG_SEQ_LEN_MIN_INT4
                 return LONG_SEQ_LEN_MIN
@@ -237,8 +241,13 @@ class RequestRouterLwd(RequestRouter):
         return LONG_SEQ_LEN_MIN
 
     def curr_no_request(self):
-        return self.prefill_queue.empty() and self.decode_queue.empty() and self.clean_up_queue.empty() and\
-            not self.request_map[REQUEST_KEY_PREFILL] and not self.request_map[REQUEST_KEY_DECODE]
+        return (
+            self.prefill_queue.empty()
+            and self.decode_queue.empty()
+            and self.clean_up_queue.empty()
+            and not self.request_map[REQUEST_KEY_PREFILL]
+            and not self.request_map[REQUEST_KEY_DECODE]
+        )
 
     def is_pd_inference_request(self, execute_type):
         return execute_type == ExecuteType.MODEL_INFER or execute_type == ExecuteType.MODEL_INFER_SECOND
@@ -278,7 +287,7 @@ class RequestRouterLwd(RequestRouter):
             self.do_other_request_now(execute_request)
         logger.info(f"[layerwiseDisaggregated] save other request execute_type: {execute_type} rank: {self.rank}.")
 
-    def set_pd_curr_request(self):   
+    def set_pd_curr_request(self):
         if not self.prefill_queue.empty():
             prefill_request = self.prefill_queue.get()
             prefill_request_info = RequestInfo(request=prefill_request)
@@ -297,13 +306,17 @@ class RequestRouterLwd(RequestRouter):
     def get_all_request(self):
         while not self.inference_queue.empty() or self.curr_no_request():
             if not self.clean_up_queue.empty():
-                logger.info(f"[layerwiseDisaggregated] curr has clean up request, wait to clean up before "
-                    f"get next request, rank{self.rank}.")
+                logger.info(
+                    f"[layerwiseDisaggregated] curr has clean up request, wait to clean up before "
+                    f"get next request, rank{self.rank}."
+                )
                 break
 
             if self.inference_queue.empty():
-                logger.info(f"[layerwiseDisaggregated] inference_queue is empty: {self.inference_queue.empty()}, "
-                    f"rank:{self.rank}.")
+                logger.info(
+                    f"[layerwiseDisaggregated] inference_queue is empty: {self.inference_queue.empty()}, "
+                    f"rank:{self.rank}."
+                )
             execute_request: ExecuteRequest = self.inference_queue.get()
             self.save_inference_request(execute_request)
         self.set_pd_curr_request()
@@ -342,14 +355,14 @@ class RequestRouterLwd(RequestRouter):
         return DecisionType.WAIT_COMM
 
     def execute_inference_request(self, decision_type: DecisionType, request_key=None):
-        func = self.process_func.get(decision_type) 
+        func = self.process_func.get(decision_type)
         if func:
             func(request_key)
         else:
             time.sleep(0.001)
 
     def recv_ctrl_msg(self):
-        self.recv_prefill() # 接收对方发来的prefill tcp控制信号
+        self.recv_prefill()  # 接收对方发来的prefill tcp控制信号
         self.recv_decode()  # 接收对方发来的decode tcp控制信号
 
     def master_rank_make_decision(self):
@@ -359,19 +372,21 @@ class RequestRouterLwd(RequestRouter):
     def print_do_inference_log(self, decision_type: DecisionType):
         prefill_metadata = self.prefill_metadata_queue[0][1] if self.prefill_metadata_queue else None
         decode_metadata = self.decode_metadata_queue[0][1] if self.decode_metadata_queue else None
-        logger.info(f"[layerwiseDisaggregated] decision_type:{decision_type.name}, "
+        logger.info(
+            f"[layerwiseDisaggregated] decision_type:{decision_type.name}, "
             f"has prefill:{prefill_metadata is not None}, prefill_comm_finish:{self.prefill_comm_finish}, "
             f"has decode:{decode_metadata is not None}, decode_comm_finish:{self.decode_comm_finish}, "
             f"clean_up_queue size:{self.clean_up_queue.qsize()}, "
-            f"clean_eos_queue size:{self.clean_eos_queue.qsize()}.")
-    
+            f"clean_eos_queue size:{self.clean_eos_queue.qsize()}."
+        )
+
     def do_inference(self):
         while True:
             prof = span_start("get_request")
-            self.get_all_request() # 将inference_queue里的所有请求, 存到新增的三个队列中, 用于调度
+            self.get_all_request()  # 将inference_queue里的所有请求, 存到新增的三个队列中, 用于调度
             span_end(prof)
 
-            self.recv_ctrl_msg()   # 接收对方发来的tcp控制信号
+            self.recv_ctrl_msg()  # 接收对方发来的tcp控制信号
             decision_type = DecisionType.WAIT_COMM
             if self.rank == MASTER_ID:
                 decision_type = self.master_rank_make_decision()
@@ -385,7 +400,7 @@ class RequestRouterLwd(RequestRouter):
                 decision_type = self.recv_decision_type()
                 request_key = self.arrange_exec_stage(decision_type)
                 span_end(prof)
-                
+
             self.execute_inference_request(decision_type, request_key)
 
     def do_clean_up(self, request_key=None):
@@ -440,7 +455,7 @@ class RequestRouterLwd(RequestRouter):
             return all_batch_dp_rank_ids.count(curr_dp_rank)
         else:
             return 1
-    
+
     def max_nested(self, lst):
         max_val = 0
         for item in lst:

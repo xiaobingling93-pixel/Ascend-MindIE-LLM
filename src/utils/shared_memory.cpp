@@ -12,10 +12,11 @@
 
 #include "shared_memory.h"
 
-#include <algorithm>
-#include <cstring>
 #include <sys/mman.h>
 #include <sys/statfs.h>
+
+#include <algorithm>
+#include <cstring>
 
 #include "file_utils.h"
 #include "log.h"
@@ -25,8 +26,7 @@ constexpr mode_t REQUIRED_PERMISSION = 0600;
 namespace mindie_llm {
 static constexpr uint32_t MEM_PAGE_SIZE = 4096U;
 
-SharedMemory::~SharedMemory()
-{
+SharedMemory::~SharedMemory() {
     if (mMapBuf != nullptr) {
         munmap(mMapBuf, mCurSize);
         mMapBuf = nullptr;
@@ -34,27 +34,26 @@ SharedMemory::~SharedMemory()
     if (mFd_ > 0) {
         close(mFd_);
         mFd_ = 0;
-        shm_unlink(this->mName.c_str()); // 移除共享内存, 其他进程无法访问
+        shm_unlink(this->mName.c_str());  // 移除共享内存, 其他进程无法访问
     }
     valid = false;
 }
 
-bool SharedMemorySizeCheck(const uint64_t &pendingMemoryAllocationSize)
-{
+bool SharedMemorySizeCheck(const uint64_t &pendingMemoryAllocationSize) {
     const std::string path = "/dev/shm";
- 
+
     // check path exists or not
     if (!FileUtils::CheckDirectoryExists(path)) {
         MINDIE_LLM_LOG_ERROR("Shared memory directory does not exist for path %s.", path);
         return false;
     }
- 
+
     // check path is a link or not
     if (FileUtils::IsSymlink(path)) {
         MINDIE_LLM_LOG_ERROR("Shared memory path is symlink for path %s.", path);
         return false;
     }
-    
+
     struct statfs buf;
     // get filesystem information by statfs function
     if (statfs(path.c_str(), &buf) == -1) {
@@ -66,15 +65,16 @@ bool SharedMemorySizeCheck(const uint64_t &pendingMemoryAllocationSize)
     uint64_t availSize = static_cast<uint64_t>(buf.f_bsize) * buf.f_bavail;
 
     if (availSize < pendingMemoryAllocationSize) {
-        MINDIE_LLM_LOG_ERROR("Shared memory available is not enough on the filesystem with "
-            " available size " << availSize << " and pending allocation size " << pendingMemoryAllocationSize);
+        MINDIE_LLM_LOG_ERROR(
+            "Shared memory available is not enough on the filesystem with "
+            " available size "
+            << availSize << " and pending allocation size " << pendingMemoryAllocationSize);
         return false;
     }
     return true;
 }
 
-bool SharedMemory::SharedMemoryNameChecker(const std::string &name)
-{
+bool SharedMemory::SharedMemoryNameChecker(const std::string &name) {
     if (name.empty() || name.length() > LLM_SHARED_MEMORY_MAX_NAME_LEN) {
         return false;
     }
@@ -88,8 +88,7 @@ bool SharedMemory::SharedMemoryNameChecker(const std::string &name)
     return true;
 }
 
-bool SharedMemory::SharedMemoryUIDAndPermissionChecker(FileDesc mFd)
-{
+bool SharedMemory::SharedMemoryUIDAndPermissionChecker(FileDesc mFd) {
     struct stat shm_stat;
     if (fstat(mFd, &shm_stat) != 0) {
         MINDIE_LLM_LOG_ERROR("Failed to fstat shared memory " << this->mName);
@@ -111,8 +110,7 @@ bool SharedMemory::SharedMemoryUIDAndPermissionChecker(FileDesc mFd)
     return true;
 }
 
-bool SharedMemory::Create(const std::string &name, uint32_t size)
-{
+bool SharedMemory::Create(const std::string &name, uint32_t size) {
     this->mName = name;
     this->mCurSize = size;
     if (!SharedMemorySizeCheck(size)) {
@@ -151,8 +149,7 @@ bool SharedMemory::Create(const std::string &name, uint32_t size)
     return true;
 }
 
-bool SharedMemory::Write(uint32_t dstOffset, const char *src, uint32_t size) const
-{
+bool SharedMemory::Write(uint32_t dstOffset, const char *src, uint32_t size) const {
     if (!valid) {
         MINDIE_LLM_LOG_ERROR("Shared memory allocation is invalid.");
         return false;
@@ -178,18 +175,9 @@ bool SharedMemory::Write(uint32_t dstOffset, const char *src, uint32_t size) con
     return true;
 }
 
-char *SharedMemory::GetBuf()
-{
-    return mMapBuf;
-}
+char *SharedMemory::GetBuf() { return mMapBuf; }
 
-char *SharedMemory::GetBufEnd() const
-{
-    return mMapBuf + mCurSize;
-}
+char *SharedMemory::GetBufEnd() const { return mMapBuf + mCurSize; }
 
-int SharedMemory::GetFd() const
-{
-    return mFd_;
-}
-} // namespace mindie_llm
+int SharedMemory::GetFd() const { return mFd_; }
+}  // namespace mindie_llm

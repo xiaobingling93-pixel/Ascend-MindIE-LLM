@@ -17,20 +17,21 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "status.h"
-#include "infer_tensor.h"
-#include "infer_callback.h"
+
 #include "callback.h"
+#include "infer_callback.h"
+#include "infer_tensor.h"
+#include "status.h"
 namespace mindie_llm {
 class InferRequestImpl {
-public:
+   public:
     explicit InferRequestImpl(InferRequestId requestId);
 
-    Status AddTensor(const std::string& tensorName, TensorPtr &tensor);
+    Status AddTensor(const std::string &tensorName, TensorPtr &tensor);
 
     void SetTensor(const std::string &tensorName, TensorPtr &tensor);
 
-    Status GetTensorByName(const std::string& tensorName, TensorPtr &tensor);
+    Status GetTensorByName(const std::string &tensorName, TensorPtr &tensor);
 
     Status DelTensorByName(const std::string &name);
 
@@ -86,7 +87,7 @@ public:
 
     std::vector<std::vector<int64_t>> GetSrcHmoTable() const;
 
-private:
+   private:
     InferRequestId requestId_;
 
     uint64_t maxOutputLen_ = 1024;
@@ -97,14 +98,14 @@ private:
     mindie_llm::SendResponseCallback4Request engineResponseCallback_{};
     TensorMap inputs_{};
 
-    mindie_llm::InferReqType reqType_{ mindie_llm::InferReqType::REQ_STAND_INFER };
+    mindie_llm::InferReqType reqType_{mindie_llm::InferReqType::REQ_STAND_INFER};
     bool isRecompute_ = false;
     std::string dTarget_;
     std::string prefillAddr_{0};
-    std::vector<std::vector<int64_t>> srcBlockTable_{}; // per block manager
+    std::vector<std::vector<int64_t>> srcBlockTable_{};  // per block manager
     std::vector<uint64_t> dpInstanceIds_{};
     std::vector<std::vector<int64_t>> srcHmoTable_{};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

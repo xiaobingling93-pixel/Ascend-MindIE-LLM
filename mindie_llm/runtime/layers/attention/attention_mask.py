@@ -11,7 +11,7 @@
 import torch
 
 
-class AttentionMask():
+class AttentionMask:
     def __init__(self):
         self.atten_splitfuse_mask = None
 

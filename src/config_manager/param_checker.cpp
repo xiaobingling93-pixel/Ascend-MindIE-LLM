@@ -11,9 +11,10 @@
  */
 
 #include <limits>
+
+#include "base_config_manager.h"
 #include "env_util.h"
 #include "file_utils.h"
-#include "base_config_manager.h"
 #include "log.h"
 
 using Json = nlohmann::json;
@@ -29,8 +30,7 @@ constexpr uint32_t MLFQ = 3U;
 constexpr uint32_t MAX_IPV4_LENGTH = 32;
 
 bool ParamChecker::ReadJsonFile(const std::string &jsonPath, std::string &baseDir, Json &inputJsonData,
-                                std::string configType)
-{
+                                std::string configType) {
     bool checkFlag = true;
     const std::string isCheck = EnvUtil::GetInstance().Get("MINDIE_CHECK_INPUTFILES_PERMISSION");
     if (isCheck == "0") {
@@ -73,26 +73,25 @@ bool ParamChecker::ReadJsonFile(const std::string &jsonPath, std::string &baseDi
     return true;
 }
 
-bool ParamChecker::IsWithinRange(std::string integerType, Json jsonValue)
-{
+bool ParamChecker::IsWithinRange(std::string integerType, Json jsonValue) {
     std::string value = jsonValue.dump();
     // The jsonValue maybe string or number. '"' will be added if it's string. Strip it before convert it to number
     if (value.size() > 0 && value.front() == '"' && value.back() == '"') {
-        value = value.substr(1, value.size() - 2); // 1 and 2 is used to remove '"' before and end of string
+        value = value.substr(1, value.size() - 2);  // 1 and 2 is used to remove '"' before and end of string
     }
     try {
         if (integerType == "int32_t") {
             long long num = std::stoll(value);
             return num >= std::numeric_limits<int32_t>::min() && num <= std::numeric_limits<int32_t>::max();
         } else if (integerType == "uint32_t") {
-            if (value.find('-') != std::string::npos) { // Check if it's negative
+            if (value.find('-') != std::string::npos) {  // Check if it's negative
                 std::cerr << "Negative value is invalid for uint32_t.\n";
                 return false;
             }
             unsigned long long num = std::stoull(value);
             return num <= std::numeric_limits<uint32_t>::max();
         } else if (integerType == "size_t") {
-            if (value.find('-') != std::string::npos) { // Check if it's negative
+            if (value.find('-') != std::string::npos) {  // Check if it's negative
                 std::cerr << "Negative value is invalid for size_t.\n";
                 return false;
             }
@@ -111,8 +110,7 @@ bool ParamChecker::IsWithinRange(std::string integerType, Json jsonValue)
     }
 }
 
-bool ParamChecker::CheckJsonArray(Json jsonData, const std::string &eleType, const std::string &integerType)
-{
+bool ParamChecker::CheckJsonArray(Json jsonData, const std::string &eleType, const std::string &integerType) {
     for (auto &ele : jsonData) {
         if (eleType == "string" && !ele.is_string()) {
             std::cout << "Type of element in json array does not match " << eleType << std::endl;
@@ -135,8 +133,7 @@ bool ParamChecker::CheckJsonArray(Json jsonData, const std::string &eleType, con
 }
 
 bool ParamChecker::GetJsonData(const std::string &configFile, std::string &baseDir, Json &jsonData,
-                               const bool &skipPermissionCheck)
-{
+                               const bool &skipPermissionCheck) {
     try {
         bool checkFlag = true;
         const std::string isCheck = EnvUtil::GetInstance().Get("MINDIE_CHECK_INPUTFILES_PERMISSION");
@@ -162,8 +159,7 @@ bool ParamChecker::GetJsonData(const std::string &configFile, std::string &baseD
     }
 }
 
-bool ParamChecker::CheckAndGetLoraJsonFile(std::string &baseDir, nlohmann::json &loraJsonData)
-{
+bool ParamChecker::CheckAndGetLoraJsonFile(std::string &baseDir, nlohmann::json &loraJsonData) {
     Json tmpLoraJson;
     std::string loraName;
     std::string loraPath;
@@ -175,7 +171,8 @@ bool ParamChecker::CheckAndGetLoraJsonFile(std::string &baseDir, nlohmann::json 
 
     std::string errMsg{};
     std::string regularPath;
-    if (!FileUtils::RegularFilePath(jsonPath, baseDir, errMsg, regularPath) || !FileUtils::IsFileValid(regularPath, errMsg)) {
+    if (!FileUtils::RegularFilePath(jsonPath, baseDir, errMsg, regularPath) ||
+        !FileUtils::IsFileValid(regularPath, errMsg)) {
         std::cout << errMsg << std::endl;
         return false;
     }
@@ -195,8 +192,7 @@ bool ParamChecker::CheckAndGetLoraJsonFile(std::string &baseDir, nlohmann::json 
 }
 
 uint32_t ParamChecker::GetIntegerParamDefaultValue(nlohmann::json jsonData, const std::string &configName,
-                                                   uint32_t defaultVal)
-{
+                                                   uint32_t defaultVal) {
     uint32_t targetParam = defaultVal;
     if (jsonData.contains(configName)) {
         if (jsonData[configName].is_number_integer()) {
@@ -217,8 +213,7 @@ uint32_t ParamChecker::GetIntegerParamDefaultValue(nlohmann::json jsonData, cons
 }
 
 int32_t ParamChecker::GetTruncationParamDefaultValue(nlohmann::json jsonData, const std::string &configName,
-                                                     uint32_t defaultVal)
-{
+                                                     uint32_t defaultVal) {
     int32_t targetParam = defaultVal;
     if (jsonData["ModelDeployConfig"][configName].is_boolean() && jsonData["ModelDeployConfig"][configName]) {
         targetParam = -1;
@@ -235,8 +230,7 @@ int32_t ParamChecker::GetTruncationParamDefaultValue(nlohmann::json jsonData, co
 }
 
 std::string ParamChecker::GetStringParamValue(nlohmann::json jsonData, const std::string &configName,
-                                              std::string defaultVal)
-{
+                                              std::string defaultVal) {
     std::string targetParam = defaultVal;
     if (jsonData.contains(configName) && jsonData[configName].is_string()) {
         targetParam = jsonData[configName];
@@ -244,8 +238,7 @@ std::string ParamChecker::GetStringParamValue(nlohmann::json jsonData, const std
     return targetParam;
 }
 
-bool ParamChecker::GetBoolParamValue(nlohmann::json jsonData, const std::string &configName, bool defaultVal)
-{
+bool ParamChecker::GetBoolParamValue(nlohmann::json jsonData, const std::string &configName, bool defaultVal) {
     bool targetParam = defaultVal;
     if (jsonData.contains(configName) && jsonData[configName].is_boolean()) {
         targetParam = jsonData[configName];
@@ -253,8 +246,7 @@ bool ParamChecker::GetBoolParamValue(nlohmann::json jsonData, const std::string 
     return targetParam;
 }
 
-bool ParamChecker::CheckNpuRange(Json jsonValue)
-{
+bool ParamChecker::CheckNpuRange(Json jsonValue) {
     try {
         for (const auto &setArray : jsonValue) {
             if (!setArray.is_array()) {
@@ -276,8 +268,7 @@ bool ParamChecker::CheckNpuRange(Json jsonValue)
     }
 }
 
-bool ParamChecker::IsArrayValid(const std::string &configName, Json jsonValue)
-{
+bool ParamChecker::IsArrayValid(const std::string &configName, Json jsonValue) {
     if (!jsonValue.is_array()) {
         std::cout << "The type of param " << configName << " should be array, but is " << jsonValue.type_name()
                   << std::endl;
@@ -289,19 +280,18 @@ bool ParamChecker::IsArrayValid(const std::string &configName, Json jsonValue)
     return true;
 }
 
-bool ParamChecker::CheckJsonParamType(Json &jsonData, std::vector<ParamSpec> &paramSpecs)
-{
+bool ParamChecker::CheckJsonParamType(Json &jsonData, std::vector<ParamSpec> &paramSpecs) {
     for (auto &paramSpec : paramSpecs) {
         Json param;
         if (jsonData.contains(paramSpec.name)) {
-            param = jsonData.at(paramSpec.name); // 存在就取
+            param = jsonData.at(paramSpec.name);  // 存在就取
         } else {
             if (paramSpec.compulsory) {
                 std::cout << "[ParamChecker::CheckJsonParamType] " << paramSpec.name << ": missing compulsory field"
                           << std::endl;
                 return false;
             } else {
-                continue; // 可选参数，不存在也没事
+                continue;  // 可选参数，不存在也没事
             }
         }
 
@@ -338,8 +328,7 @@ bool ParamChecker::CheckJsonParamType(Json &jsonData, std::vector<ParamSpec> &pa
 }
 
 bool ParamChecker::CheckPath(const std::string &path, std::string &baseDir, const std::string &inputName, bool flag,
-                             uint64_t maxFileSize)
-{
+                             uint64_t maxFileSize) {
     // 默认校验文件，否则校验目录
     std::regex reg(".{1,4096}");
     if (!std::regex_match(path, reg)) {
@@ -371,8 +360,7 @@ bool ParamChecker::CheckPath(const std::string &path, std::string &baseDir, cons
     return true;
 }
 
-bool ParamChecker::CheckPolicyValue(uint32_t inputValue, const std::string &inputName)
-{
+bool ParamChecker::CheckPolicyValue(uint32_t inputValue, const std::string &inputName) {
     if (inputValue != FCFS && inputValue != STATE && inputValue != PRIORITY && inputValue != MLFQ) {
         std::cout << inputName << " [" << std::to_string(inputValue)
                   << "] is outside the expected schedule policy range: 0, 1, 2, 3";
@@ -381,8 +369,7 @@ bool ParamChecker::CheckPolicyValue(uint32_t inputValue, const std::string &inpu
     return true;
 }
 
-bool ParamChecker::CheckMixPolicyValue(uint32_t inputValue, const std::string &inputName)
-{
+bool ParamChecker::CheckMixPolicyValue(uint32_t inputValue, const std::string &inputName) {
     if (inputValue != 0 && inputValue != 4U && inputValue != 5U && inputValue != 6U && inputValue != 7U) {
         MINDIE_LLM_LOG_ERROR("The " << inputName << " [" << inputValue << "] is outside the expected range: 0 or 4~7.");
         return false;
@@ -390,8 +377,7 @@ bool ParamChecker::CheckMixPolicyValue(uint32_t inputValue, const std::string &i
     return true;
 }
 
-bool ParamChecker::CheckEngineName(const std::string &engineName)
-{
+bool ParamChecker::CheckEngineName(const std::string &engineName) {
     if (engineName.size() > 50U) {
         std::cout << "The length of backendName exceeds 50." << std::endl;
         return false;
@@ -404,8 +390,7 @@ bool ParamChecker::CheckEngineName(const std::string &engineName)
     return true;
 }
 
-bool ParamChecker::CheckKvPoolBackend(const std::string &kvPoolBackend)
-{
+bool ParamChecker::CheckKvPoolBackend(const std::string &kvPoolBackend) {
     if (kvPoolBackend != "" && kvPoolBackend != "unifiedcache" && kvPoolBackend != "mooncake" &&
         kvPoolBackend != "memcache") {
         std::cout << "Unknow kv pool backend. And only [`unifiedcache`, `mooncake`, `memcache`, ``] is available!"
@@ -415,8 +400,7 @@ bool ParamChecker::CheckKvPoolBackend(const std::string &kvPoolBackend)
     return true;
 }
 
-bool ParamChecker::CheckKvPoolConfigPath(const std::string &kvPoolConfigPath)
-{
+bool ParamChecker::CheckKvPoolConfigPath(const std::string &kvPoolConfigPath) {
     if (kvPoolConfigPath.size() > 500U) {
         std::cout << "The length of kvPool Config Path exceeds 500." << std::endl;
         return false;
@@ -424,8 +408,7 @@ bool ParamChecker::CheckKvPoolConfigPath(const std::string &kvPoolConfigPath)
     return true;
 }
 
-bool ParamChecker::CheckInferMode(const std::string &inferMode)
-{
+bool ParamChecker::CheckInferMode(const std::string &inferMode) {
     if (inferMode != INFER_MODE_STANDARD && inferMode != INFER_MODE_DMI) {
         std::cout << "The inferMode should be standard or dmi" << std::endl;
         return false;
@@ -433,4 +416,4 @@ bool ParamChecker::CheckInferMode(const std::string &inferMode)
     return true;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

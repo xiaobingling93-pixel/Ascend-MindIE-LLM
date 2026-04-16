@@ -24,7 +24,7 @@ class MmcDirect(Enum):
     COPY_G2H = 2
     COPY_H2G = 3
 
-    
+
 class MemcacheMempool(MemPool):
     def __init__(self, config_path: str, role: str, **kwargs):
         local_config = os.environ.get("MMC_LOCAL_CONFIG_PATH", None)
@@ -34,7 +34,7 @@ class MemcacheMempool(MemPool):
             from memcache_hybrid import DistributedObjectStore
         except ImportError as e:
             raise ImportError("Please install memcache.") from e
-        
+
         device_id = kwargs.get("device_id", 0)
         init_bm = True if role == "worker" else False
         try:
@@ -51,13 +51,13 @@ class MemcacheMempool(MemPool):
             raise RuntimeError(msg)
 
         logger.info(f"Initialize {role} memcache mempool success.")
-    
+
     def exists(self, key: str, **kwargs) -> bool:
         if not isinstance(key, str):
             logger.error(f"MemcacheMempool `exists()` expects `key` to be a string, but got {type(key)}.")
             return False
         return self.store.is_exist(key) == 1
-    
+
     def batch_exist(self, keys: List[str]) -> List[bool]:
         if not isinstance(keys, list):
             logger.error(f"MemcacheMempool `batch_is_exist()` expects `key` to be a List[str], but got {type(keys)}.")
@@ -72,21 +72,23 @@ class MemcacheMempool(MemPool):
             tensors = [tensors]
         elif isinstance(keys, list) and isinstance(keys[0], str):
             if not isinstance(tensors, List) or len(tensors) != len(keys):
-                logger.error(f"The tensors should be Union[torch.Tensor, List]: got {type(tensors)} " \
-                    "And the lengths of keys and tensors must be equal: " \
-                    f"got {len(keys)} keys and {len(tensors)} tensors.")
+                logger.error(
+                    f"The tensors should be Union[torch.Tensor, List]: got {type(tensors)} "
+                    "And the lengths of keys and tensors must be equal: "
+                    f"got {len(keys)} keys and {len(tensors)} tensors."
+                )
                 return [False]
         else:
-            logger.error(f'The keys should be of type Union[str, List[str]], but got {type(keys)}.')
+            logger.error(f"The keys should be of type Union[str, List[str]], but got {type(keys)}.")
             return [False]
-        
+
         all_addrs = []
         all_sizes = []
         for single_tensor in tensors:
             addr, size = self._get_addr_size(single_tensor)
             all_addrs.append(addr[:])
             all_sizes.append(size[:])
-       
+
         try:
             ret = self.store.batch_put_from_layers(keys, all_addrs, all_sizes, MmcDirect.COPY_L2G.value)
             all_result = [x == 0 for x in ret]
@@ -101,21 +103,23 @@ class MemcacheMempool(MemPool):
             tensors = [tensors]
         elif isinstance(keys, list) and isinstance(keys[0], str):
             if not isinstance(tensors, List) or len(tensors) != len(keys):
-                logger.error(f"The tensors should be Union[torch.Tensor, List]: got {type(tensors)} " \
-                    "And the lengths of keys and tensors must be equal: " \
-                    f"got {len(keys)} keys and {len(tensors)} tensors.")
+                logger.error(
+                    f"The tensors should be Union[torch.Tensor, List]: got {type(tensors)} "
+                    "And the lengths of keys and tensors must be equal: "
+                    f"got {len(keys)} keys and {len(tensors)} tensors."
+                )
                 return [False]
         else:
-            logger.error(f'The keys should be of type Union[str, List[str]], but got {type(keys)}.')
+            logger.error(f"The keys should be of type Union[str, List[str]], but got {type(keys)}.")
             return [False]
-        
+
         all_addrs = []
         all_sizes = []
         for single_tensor in tensors:
             addr, size = self._get_addr_size(single_tensor)
             all_addrs.append(addr[:])
             all_sizes.append(size[:])
-       
+
         try:
             ret = self.store.batch_get_into_layers(keys, all_addrs, all_sizes, MmcDirect.COPY_G2L.value)
             all_result = [x == 0 for x in ret]
@@ -123,10 +127,8 @@ class MemcacheMempool(MemPool):
             logger.error(f"Failed to get keys from memcache mempool: {e}")
             all_result = [False] * len(keys)
         return all_result
-        
-    def close(
-        self
-    ) -> None:
+
+    def close(self) -> None:
         self.store.close()
         logger.info("Closed the memcache store connection")
 

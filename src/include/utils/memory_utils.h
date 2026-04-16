@@ -13,13 +13,15 @@
 #ifndef MEMORY_UTILS_H
 #define MEMORY_UTILS_H
 
-#include <cstdint>
 #include <fcntl.h>
-#include <map>
 #include <semaphore.h>
-#include <string>
 #include <unistd.h>
+
+#include <cstdint>
+#include <map>
+#include <string>
 #include <vector>
+
 #include "securec.h"
 namespace mindie_llm {
 const int MASK = 0600;
@@ -33,8 +35,8 @@ const uint32_t SHM_TRANSFER_IDX = 2;
 const uint32_t FIRSTCHANNEL = 0;
 const uint32_t SECONDCHANNEL = 1;
 
-constexpr int UNHEALTHY_THRESHOLD = 3;          // 3次没有收到心跳判定为异常
-constexpr uint32_t MAX_INIT_RESULTS_SIZE = 200; // 初始化模型initresult最大size
+constexpr int UNHEALTHY_THRESHOLD = 3;           // 3次没有收到心跳判定为异常
+constexpr uint32_t MAX_INIT_RESULTS_SIZE = 200;  // 初始化模型initresult最大size
 
 struct SharedSemaphore {
     sem_t semProduce;
@@ -58,11 +60,11 @@ using PCHAR = char *;
 using CPCHAR = const char *;
 
 #ifndef errno_t
-using errno_t = int ;
+using errno_t = int;
 #endif
 
 #ifndef EOK
 constexpr int EOK = 0;
 #endif
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

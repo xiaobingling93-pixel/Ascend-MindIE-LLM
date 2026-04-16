@@ -9,19 +9,17 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "prefix_tree.h"
 
 namespace mindie_llm {
 namespace prefix_tree {
-void PrefixTree::Put(std::vector<int>& tokenIds, const std::string& mode, int batchId)
-{
+void PrefixTree::Put(std::vector<int>& tokenIds, const std::string& mode, int batchId) {
     batchId = (mode == "output") ? -1 : batchId;
     AddNode(tokenIds, this->fullNodes, mode, batchId);
 }
 
-std::pair<std::vector<int>, int> PrefixTree::GetOneDraft(std::vector<int>& tokenIds, int batchId, int decodingLength)
-{
+std::pair<std::vector<int>, int> PrefixTree::GetOneDraft(std::vector<int>& tokenIds, int batchId, int decodingLength) {
     auto tempNodes = this->fullNodes;
     int matchTokenId = -1;
     if (tokenIds.size() > 0) {
@@ -53,16 +51,14 @@ std::pair<std::vector<int>, int> PrefixTree::GetOneDraft(std::vector<int>& token
     return SearchBestDraft(tempNodes, batchId, draftIds, decodingLength);
 }
 
-void PrefixTree::ResetInputFreq(int batchId)
-{
+void PrefixTree::ResetInputFreq(int batchId) {
     if (this->fullNodes.empty()) {
         return;
     }
     ClearInput(this->fullNodes, batchId);
 }
 
-void PrefixTree::Trim()
-{
+void PrefixTree::Trim() {
     if (this->nNode > this->maxNode || this->nOutputNode > this->maxOutputNode) {
         TrimNode(this->fullNodes);
         unsigned int size = 0;
@@ -73,8 +69,7 @@ void PrefixTree::Trim()
 }
 
 void PrefixTree::AddNode(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes,
-                         const std::string& mode, int batchId, unsigned int tokenIdIndex)
-{
+                         const std::string& mode, int batchId, unsigned int tokenIdIndex) {
     if (tokenIds.empty() || tokenIdIndex >= tokenIds.size()) {
         return;
     }
@@ -93,9 +88,8 @@ void PrefixTree::AddNode(std::vector<int>& tokenIds, std::map<int, std::shared_p
     AddNode(tokenIds, node->children, mode, batchId, tokenIdIndex + 1);
 }
 
-void PrefixTree::Pack(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes,
-                      int batchId, unsigned int tokenIdIndex)
-{
+void PrefixTree::Pack(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes, int batchId,
+                      unsigned int tokenIdIndex) {
     if (tokenIdIndex >= tokenIds.size()) {
         return;
     }
@@ -105,8 +99,7 @@ void PrefixTree::Pack(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<
     Pack(tokenIds, nodes[currentToken]->children, batchId, tokenIdIndex + 1);
 }
 
-void PrefixTree::AddNodeFreq(std::shared_ptr<Node>& node, int batchId) const
-{
+void PrefixTree::AddNodeFreq(std::shared_ptr<Node>& node, int batchId) const {
     if (node->freqs.find(batchId) == node->freqs.end()) {
         node->freqs[batchId] = DEFAULT_FREQ;
     } else if (node->freqs[batchId] < MAX_FREQ) {
@@ -115,8 +108,7 @@ void PrefixTree::AddNodeFreq(std::shared_ptr<Node>& node, int batchId) const
 }
 
 std::pair<std::vector<int>, int> PrefixTree::SearchBestDraft(std::map<int, std::shared_ptr<Node>> nodes, int batchId,
-                                                             std::vector<int>& draftIds, int decodingLength) const
-{
+                                                             std::vector<int>& draftIds, int decodingLength) const {
     int size = 0;
     int tempFreq = 0;
     int maxFreq = 0;
@@ -151,8 +143,7 @@ std::pair<std::vector<int>, int> PrefixTree::SearchBestDraft(std::map<int, std::
     return std::make_pair(draftIds, size);
 }
 
-void PrefixTree::ClearInput(std::map<int, std::shared_ptr<Node>>& nodes, int batchId)
-{
+void PrefixTree::ClearInput(std::map<int, std::shared_ptr<Node>>& nodes, int batchId) {
     for (auto iter = nodes.cbegin(); iter != nodes.cend(); iter++) {
         auto it = iter->second->freqs.find(batchId);
         if (it == iter->second->freqs.end()) {
@@ -165,8 +156,7 @@ void PrefixTree::ClearInput(std::map<int, std::shared_ptr<Node>>& nodes, int bat
     }
 }
 
-void PrefixTree::TrimNode(std::map<int, std::shared_ptr<Node>>& nodes)
-{
+void PrefixTree::TrimNode(std::map<int, std::shared_ptr<Node>>& nodes) {
     for (auto iter = nodes.begin(); iter != nodes.end();) {
         float outputFreq = 0.0;
         if (iter->second->freqs.find(-1) != iter->second->freqs.end()) {
@@ -184,8 +174,7 @@ void PrefixTree::TrimNode(std::map<int, std::shared_ptr<Node>>& nodes)
     }
 }
 
-void PrefixTree::CountNode(std::map<int, std::shared_ptr<Node>>& nodes, unsigned int& size)
-{
+void PrefixTree::CountNode(std::map<int, std::shared_ptr<Node>>& nodes, unsigned int& size) {
     size += nodes.size();
     for (auto iter = nodes.cbegin(); iter != nodes.cend(); iter++) {
         if (!iter->second->children.empty()) {
@@ -193,5 +182,5 @@ void PrefixTree::CountNode(std::map<int, std::shared_ptr<Node>>& nodes, unsigned
         }
     }
 }
-}
-}
+}  // namespace prefix_tree
+}  // namespace mindie_llm

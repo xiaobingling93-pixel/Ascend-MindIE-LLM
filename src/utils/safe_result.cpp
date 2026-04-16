@@ -13,28 +13,15 @@
 
 namespace mindie_llm {
 
-Result Result::OK()
-{
-    return Result(ResultCode::OK, "");
-}
+Result Result::OK() { return Result(ResultCode::OK, ""); }
 
-Result Result::Error(ResultCode code, std::string msg)
-{
-    return Result(code, std::move(msg));
-}
+Result Result::Error(ResultCode code, std::string msg) { return Result(code, std::move(msg)); }
 
-bool Result::IsOk() const noexcept
-{
-    return code_ == ResultCode::OK;
-}
+bool Result::IsOk() const noexcept { return code_ == ResultCode::OK; }
 
-std::string Result::Result2Str() const
-{
-    return IsOk() ? "" : CodeToString(code_);
-}
+std::string Result::Result2Str() const { return IsOk() ? "" : CodeToString(code_); }
 
-const std::string& Result::message() const noexcept
-{
+const std::string& Result::message() const noexcept {
     static thread_local std::string fullMsg;
     const std::string codeStr = Result2Str();
     if (!codeStr.empty()) {
@@ -44,11 +31,9 @@ const std::string& Result::message() const noexcept
     return message_;
 }
 
-Result::Result(ResultCode code, std::string msg)
-    : code_(code), message_(std::move(msg)) {}
+Result::Result(ResultCode code, std::string msg) : code_(code), message_(std::move(msg)) {}
 
-std::string Result::CodeToString(ResultCode code)
-{
+std::string Result::CodeToString(ResultCode code) {
     auto it = resultCodeMap.find(code);
     if (it != resultCodeMap.end()) {
         return it->second;
@@ -56,4 +41,4 @@ std::string Result::CodeToString(ResultCode code)
     return "UNDEFINE_ERROR";
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

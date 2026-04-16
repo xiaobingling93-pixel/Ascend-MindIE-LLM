@@ -9,15 +9,15 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <cmath>
+
 #include "decode_regression.h"
+
+#include <cmath>
 
 namespace mindie_llm {
 DecodeRegression::DecodeRegression() : count_(0), index_(0) {}
 
-void DecodeRegression::AddDataPoint(uint32_t tokenNum, uint32_t kvBlockNum, float execTime)
-{
+void DecodeRegression::AddDataPoint(uint32_t tokenNum, uint32_t kvBlockNum, float execTime) {
     if (count_ % windowSize_ == 0 && count_ != 0) {
         Train();
         double coefficientTokenNum = coefficients_[0][0];
@@ -42,16 +42,14 @@ void DecodeRegression::AddDataPoint(uint32_t tokenNum, uint32_t kvBlockNum, floa
     count_++;
 }
 
-float DecodeRegression::Predict(int tokenNum, int kvBlock)
-{
+float DecodeRegression::Predict(int tokenNum, int kvBlock) {
     std::vector<std::vector<double>> datapointTest = {
         {static_cast<double>(tokenNum), static_cast<double>(kvBlock), static_cast<double>(1)}};
     std::vector<std::vector<double>> result = Multiply(coefficients_, Transpose(datapointTest));
     return static_cast<float>(result[0][0]);
 }
 
-void DecodeRegression::Train()
-{
+void DecodeRegression::Train() {
     double det = Determinant3by3(Multiply(Transpose(featureMatrix_), featureMatrix_));
     if (std::fabs(det) > 1e-9) {
         std::vector<std::vector<double>> tmp = Multiply(
@@ -69,8 +67,7 @@ void DecodeRegression::Train()
     }
 }
 
-double DecodeRegression::Determinant3by3(const std::vector<std::vector<double>> &matrix) const
-{
+double DecodeRegression::Determinant3by3(const std::vector<std::vector<double>> &matrix) const {
     // 计算3x3矩阵行列式
     double det = 0.0;
     int endDim = 2;
@@ -81,8 +78,7 @@ double DecodeRegression::Determinant3by3(const std::vector<std::vector<double>> 
 }
 
 std::vector<std::vector<double>> DecodeRegression::Multiply(const std::vector<std::vector<double>> &matrixA,
-                                                            const std::vector<std::vector<double>> &matrixB) const
-{
+                                                            const std::vector<std::vector<double>> &matrixB) const {
     size_t rowsA = matrixA.size();
     size_t colsA = matrixA[0].size();
     size_t colsB = matrixB[0].size();
@@ -98,8 +94,7 @@ std::vector<std::vector<double>> DecodeRegression::Multiply(const std::vector<st
     return result;
 }
 
-std::vector<std::vector<double>> DecodeRegression::Inverse3by3(const std::vector<std::vector<double>> &matrix) const
-{
+std::vector<std::vector<double>> DecodeRegression::Inverse3by3(const std::vector<std::vector<double>> &matrix) const {
     double det = Determinant3by3(matrix);
     int inverseDim = 3;
     double inverseInit = 0.0;
@@ -118,11 +113,10 @@ std::vector<std::vector<double>> DecodeRegression::Inverse3by3(const std::vector
         inv[endDim][endDim] = (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) / det;
         return inv;
     }
-    return {}; // 返回空表示错误
+    return {};  // 返回空表示错误
 }
 
-std::vector<std::vector<double>> DecodeRegression::Transpose(const std::vector<std::vector<double>> &matrix) const
-{
+std::vector<std::vector<double>> DecodeRegression::Transpose(const std::vector<std::vector<double>> &matrix) const {
     uint64_t rows = matrix.size();
     uint64_t cols = matrix[0].size();
     std::vector<std::vector<double>> transposed(cols, std::vector<double>(rows));
@@ -133,4 +127,4 @@ std::vector<std::vector<double>> DecodeRegression::Transpose(const std::vector<s
     }
     return transposed;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

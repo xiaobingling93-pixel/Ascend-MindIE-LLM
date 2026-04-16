@@ -14,17 +14,13 @@
 
 namespace mindie_llm {
 
-ErrorQueue& ErrorQueue::GetInstance()
-{
+ErrorQueue &ErrorQueue::GetInstance() {
     static ErrorQueue instance;
     return instance;
 }
 
-void ErrorQueue::EnqueueErrorMessage(
-    const std::string &errCode,
-    const std::string &createdBy,
-    const std::chrono::time_point<std::chrono::system_clock> &timestamp)
-{
+void ErrorQueue::EnqueueErrorMessage(const std::string &errCode, const std::string &createdBy,
+                                     const std::chrono::time_point<std::chrono::system_clock> &timestamp) {
     ErrorItem item(errCode, createdBy, timestamp);
 
     if (errorList_.Size() >= maxErrorListSize) {
@@ -34,14 +30,8 @@ void ErrorQueue::EnqueueErrorMessage(
     errorList_.PushBack(item);
 }
 
-bool ErrorQueue::PopError(ErrorItem &item)
-{
-    return errorList_.PopFront(item);
-}
+bool ErrorQueue::PopError(ErrorItem &item) { return errorList_.PopFront(item); }
 
-size_t ErrorQueue::Size() const
-{
-    return errorList_.Size();
-}
+size_t ErrorQueue::Size() const { return errorList_.Size(); }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

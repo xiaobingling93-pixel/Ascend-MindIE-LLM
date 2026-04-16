@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef HASHLESS_BLOCK_OBJ_H
 #define HASHLESS_BLOCK_OBJ_H
 
@@ -25,7 +25,7 @@ namespace mindie_llm {
     The core function of this class is to manage token ids appended to the block.
 */
 class HashLessBlockObj : public BlockObj {
-public:
+   public:
     HashLessBlockObj() = default;
 
     ~HashLessBlockObj() override = default;
@@ -60,26 +60,26 @@ public:
     size_t GetNumEmptySlots() const;
 
     bool IsFull() const override;
-   
-    bool IsComputed() const override; // not used in HashLessBlock
 
-    float LastAccessed() const override; // not used in HashLessBlock
+    bool IsComputed() const override;  // not used in HashLessBlock
 
-    void SetComputed(bool isCompute) override; // not used in HashLessBlock
+    float LastAccessed() const override;  // not used in HashLessBlock
 
-    void SetLastAccessed(TimeStamp lastAccess) override; // not used in HashLessBlock
+    void SetComputed(bool isCompute) override;  // not used in HashLessBlock
 
-    HashValue GetHashValue() override; // not used in HashLessBlock
+    void SetLastAccessed(TimeStamp lastAccess) override;  // not used in HashLessBlock
 
-    HashValue ExtraHash() override; // not used in HashLessBlock
+    HashValue GetHashValue() override;  // not used in HashLessBlock
 
-    HashValue PrefixHash() override; // not used in HashLessBlock
+    HashValue ExtraHash() override;  // not used in HashLessBlock
+
+    HashValue PrefixHash() override;  // not used in HashLessBlock
 
     void ReplaceToken(size_t startIndex, TokenId newToken) override;
 
     void SetRankIdx(size_t rankIdx) override;
 
-private:
+   private:
     BlockObjSPtr prevBlock_ = nullptr;
 
     std::vector<TokenId> tokenIds_ = {};
@@ -90,6 +90,6 @@ private:
 
     size_t rankIdx_ = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

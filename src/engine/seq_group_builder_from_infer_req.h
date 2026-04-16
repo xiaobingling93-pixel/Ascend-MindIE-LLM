@@ -13,19 +13,19 @@
 #ifndef SEQUENCE_GROUP_FROM_INFER
 #define SEQUENCE_GROUP_FROM_INFER
 
-#include "sequence_group.h"
-#include "id_utils.h"
 #include "config_info.h"
+#include "id_utils.h"
 #include "request_response/request.h"
+#include "sequence_group.h"
 namespace mindie_llm {
 
 class SeqGroupBuilderFromInferReq {
-public:
+   public:
     // Build a sequence group from an infer request.
     static SequenceGroupSPtr BuildSequenceGroup(RequestSPtr request, SchedulerConfigSPtr schedulerConfig,
                                                 size_t rankId);
 
-private:
+   private:
     static SamplingParamsSPtr GetSampleParamFromInferRequest(RequestSPtr request, bool chooseV2BlockManager);
 
     static SequenceSPtr InitSeqFromInferRequest(RequestSPtr request, SchedulerConfigSPtr schedulerConfig);
@@ -33,5 +33,5 @@ private:
     static void InitSeqGrpFromInferRequest(RequestSPtr request, RequestIdNew inferReqId, SequenceGroupSPtr &seqGroup,
                                            SchedulerConfigSPtr schedulerConfigSptr);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

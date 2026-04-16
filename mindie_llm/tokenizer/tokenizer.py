@@ -34,9 +34,9 @@ _ALLOWED_LOCAL_MEDIA_PATH = "/data/multimodal_inputs/"
 once_flag = threading.Event()
 
 _DURATION = 30  # check undeleted cache dir pre 30 seconds
-_DELET_DURATION = 2 ** 16  # delete dirs in the cache that are older than 2**16 seconds, which is equal to e2eTimeout
+_DELET_DURATION = 2**16  # delete dirs in the cache that are older than 2**16 seconds, which is equal to e2eTimeout
 _SINGLE_VIDEO_LIMIT = 512 * 1024 * 1024  # 512 MB
-_MEDIA_SIZE_LIMIT = 1000 * 1024 * 1024 # 1 GB
+_MEDIA_SIZE_LIMIT = 1000 * 1024 * 1024  # 1 GB
 _URL_LENGTH_LIMIT = 4096
 
 _TEXT_KEY = "text"
@@ -48,10 +48,10 @@ _AUDIO_KEY = "audio_url"
 _INPUT_AUDIO_KEY = "input_audio"
 
 _MEDIA_TYPE = {
-    _IMAGE_KEY: ['.jpg', '.jpeg', '.png'],
-    _VIDEO_KEY: ['.mp4', '.avi', '.wmv'],
-    _AUDIO_KEY: ['.mp3', '.wav', '.flac'],
-    _INPUT_AUDIO_KEY: ['.mp3', '.wav', '.flac'],
+    _IMAGE_KEY: [".jpg", ".jpeg", ".png"],
+    _VIDEO_KEY: [".mp4", ".avi", ".wmv"],
+    _AUDIO_KEY: [".mp3", ".wav", ".flac"],
+    _INPUT_AUDIO_KEY: [".mp3", ".wav", ".flac"],
 }
 
 
@@ -63,7 +63,7 @@ _MIME_TYPE2EXT = {
     "x-ms-wmv": ".wmv",
     "mpeg": ".mp3",
     "x-wav": ".wav",
-    "flac": ".flac"
+    "flac": ".flac",
 }
 
 pid = os.getpid()
@@ -74,8 +74,8 @@ class IbisTokenizer:
     def __init__(self, path: str, bakend_type: str, trust_remote_code: bool, models_dict_str: str):
         logger.info(f"tokenizer-{pid} init start.")
         try:
-            parent_pid_cache_prefix = 'cache_' + str(os.getppid())
-            self.cache_prefix = str(os.getpid()) + '_'
+            parent_pid_cache_prefix = "cache_" + str(os.getppid())
+            self.cache_prefix = str(os.getpid()) + "_"
             self.cache_path = self._get_cache_base_path(parent_pid_cache_prefix)
             if not os.path.exists(self.cache_path):
                 os.makedirs(self.cache_path, exist_ok=True)
@@ -86,7 +86,8 @@ class IbisTokenizer:
 
             logger.info(f"tokenizer-{pid} init {bakend_type}")
             wrapper = get_tokenizer_wrapper(
-                path, bakend_type, trust_remote_code=trust_remote_code, models_dict=models_dict_str)
+                path, bakend_type, trust_remote_code=trust_remote_code, models_dict=models_dict_str
+            )
             logger.info(f"tokenizer-{pid} init {bakend_type} ok")
             self.tokenizer = wrapper.tokenizer
             self.input_builder = wrapper.input_builder
@@ -101,7 +102,7 @@ class IbisTokenizer:
         logger.info(f"tokenizer-{pid} init ok.")
 
     def __del__(self):
-        cache_path = getattr(self, 'cache_path', None)
+        cache_path = getattr(self, "cache_path", None)
         if cache_path is None:
             return
         dir_path = file_utils.standardize_path(cache_path)
@@ -115,10 +116,10 @@ class IbisTokenizer:
     def is_mm(prompt):
         try:
             prompt_obj = json.loads(prompt)
-        except ValueError as value_error:
+        except ValueError:
             # the prompt is not multimodal format.
             return False
-        except Exception as e:
+        except Exception:
             # adapt to the old input format.
             return False
         if isinstance(prompt_obj, list):
@@ -171,23 +172,18 @@ class IbisTokenizer:
             logger.error("Can not find the input media file.")
             raise FileNotFoundError("Can not find the input media file.")
 
-        path_pattern = re.compile(
-            r"^(\/(?:[\w\-\.]+\/)*[\w\-\.]*\/?)?$|^(?:[\w\-\.]+\/)*[\w\-\.]*\/?$"
-        )
+        path_pattern = re.compile(r"^(\/(?:[\w\-\.]+\/)*[\w\-\.]*\/?)?$|^(?:[\w\-\.]+\/)*[\w\-\.]*\/?$")
         if not path_pattern.fullmatch(media_url):
-            msg = (f'The media url contains dangerous characters, '
-               f'only allow a-zA-Z0-9_-.')
+            msg = "The media url contains dangerous characters, only allow a-zA-Z0-9_-."
             logger.error(msg)
             raise ValueError(msg)
-        
+
         file_utils.check_path_permission(media_url, mode=0o640)
         media_size = os.path.getsize(media_url)
         max_size = _SINGLE_VIDEO_LIMIT if input_type == _VIDEO_KEY else size_limit
         if media_size > max_size:
-            logger.error(f'The size of {input_type} cannot exceed '
-                         f'{max_size / (1024 * 1024)} MB')
-            raise ValueError(f'The size of {input_type} cannot exceed '
-                             f'{max_size / (1024 * 1024)} MB')
+            logger.error(f"The size of {input_type} cannot exceed {max_size / (1024 * 1024)} MB")
+            raise ValueError(f"The size of {input_type} cannot exceed {max_size / (1024 * 1024)} MB")
         io_utils.copy_media(media_url, cache_dir, ext)
         return media_size
 
@@ -202,11 +198,14 @@ class IbisTokenizer:
             dir_path = file_utils.standardize_path(dir_path)
             file_utils.check_path_permission(dir_path)
             if not os.access(dir_path, os.R_OK | os.W_OK):
-                logger.error(f'Check {dir_path} failed: the current user does not have read and write permissions. ' +
-                            'Please update the permissions or export LOCAL_CACHE_DIR to a correct directory path.')
+                logger.error(
+                    f"Check {dir_path} failed: the current user does not have read and write permissions. "
+                    + "Please update the permissions or export LOCAL_CACHE_DIR to a correct directory path."
+                )
                 raise ValueError(
-                    f'Check {dir_path} failed: the current user does not have read and write permissions. ' +
-                     'Please update the permissions or export LOCAL_CACHE_DIR to a correct directory path.')
+                    f"Check {dir_path} failed: the current user does not have read and write permissions. "
+                    + "Please update the permissions or export LOCAL_CACHE_DIR to a correct directory path."
+                )
         dir_path = os.path.join(dir_path, child_dir_name)
         file_utils.check_path_length_lt(dir_path)
         return dir_path
@@ -250,14 +249,12 @@ class IbisTokenizer:
         """
         domain = IbisTokenizer._extract_domain(media_url)
         if domain not in allowed_domains:
-            raise ValueError(
-                f"Domain '{domain}' is not in allowed domain list"
-            )
+            raise ValueError(f"Domain '{domain}' is not in allowed domain list")
 
     def delete_multimodal_cache(self, timestamp: int, cache_prefix=None):
         dir_path = self.cache_path
         if cache_prefix is not None:
-            dir_path = os.path.join(dir_path, cache_prefix + f'{timestamp}')
+            dir_path = os.path.join(dir_path, cache_prefix + f"{timestamp}")
             if os.path.exists(dir_path):
                 dir_path = file_utils.standardize_path(dir_path)
                 file_utils.check_path_permission(dir_path)
@@ -286,12 +283,12 @@ class IbisTokenizer:
             time.sleep(duration)
             all_request = os.listdir(dir_path)
             for request in all_request:
-                split_text = request.split('_')
+                split_text = request.split("_")
                 if len(split_text) != 2 or len(split_text[0]) < 1 or len(split_text[1]) < 1:
                     continue
                 req_time = int(split_text[1])
                 if time.time() - (req_time / 1_000_000_000) > _DELET_DURATION:
-                    self.delete_multimodal_cache(req_time, split_text[0] + '_')
+                    self.delete_multimodal_cache(req_time, split_text[0] + "_")
 
     def download_url(self, prompt: str, timestamp: int, size_limit: int):
         def download_elems(elem_list, size_limit: int):
@@ -300,7 +297,7 @@ class IbisTokenizer:
             for elem in elem_list:
                 media_size += self._download(elem, total_start_time, size_limit)
                 if media_size > _MEDIA_SIZE_LIMIT:
-                    err_str = f'The total media input cannot exceed {_MEDIA_SIZE_LIMIT / (1024 * 1024)} MB.'
+                    err_str = f"The total media input cannot exceed {_MEDIA_SIZE_LIMIT / (1024 * 1024)} MB."
                     logger.error(err_str)
                     raise ValueError(err_str)
 
@@ -347,12 +344,12 @@ class IbisTokenizer:
             return token_list
         except ValueError as value_error:
             self.delete_multimodal_cache(self.timestamp, self.cache_prefix)
-            logger.error(f'IbisTokenizer encode error: {value_error}')
-            raise RuntimeError(f'IbisTokenizer encode error: {value_error}') from value_error
+            logger.error(f"IbisTokenizer encode error: {value_error}")
+            raise RuntimeError(f"IbisTokenizer encode error: {value_error}") from value_error
         except Exception as e:
             self.delete_multimodal_cache(self.timestamp, self.cache_prefix)
-            logger.error(f'IbisTokenizer encode error: {e}')
-            raise RuntimeError(f'IbisTokenizer encode error: {e}') from e
+            logger.error(f"IbisTokenizer encode error: {e}")
+            raise RuntimeError(f"IbisTokenizer encode error: {e}") from e
 
     def encode_chat(self, prompt, chat_template_kwargs: dict):
         try:
@@ -392,7 +389,7 @@ class IbisTokenizer:
         try:
             tools = json.loads(tool_calls_json) if tool_calls_json is not None else None
         except Exception as e:
-            logger.debug('Decode tokens failed to load tools json of request: %s', e)
+            logger.debug("Decode tokens failed to load tools json of request: %s", e)
             tools = None
 
         is_stream = False
@@ -410,14 +407,15 @@ class IbisTokenizer:
             meta_data.update({"reasoning_tokens": kwargs.get("reasoning_tokens", -1), "tools": tools})
             input_kwargs.update({"metadata": meta_data})
             output_content = self.wrapper_decode(
-                all_token_ids, skip_special_tokens, use_tool_call, is_chat_req, is_stream, **input_kwargs)
+                all_token_ids, skip_special_tokens, use_tool_call, is_chat_req, is_stream, **input_kwargs
+            )
         except ValueError as e:
             strace = traceback.format_exc()
-            logger.error(f'Decode tokens failed and the reason is ValueError: {e}')
+            logger.error(f"Decode tokens failed and the reason is ValueError: {e}")
             logger.error(strace)
         except Exception as e:
             strace = traceback.format_exc()
-            logger.error(f'Decode tokens failed and the reason: {e}')
+            logger.error(f"Decode tokens failed and the reason: {e}")
             logger.error(strace)
 
         return json.dumps(output_content)
@@ -442,7 +440,7 @@ class IbisTokenizer:
         try:
             tools = json.loads(tool_calls_json) if tool_calls_json is not None else None
         except Exception as e:
-            logger.debug('Decode tokens failed to load tools json of request %s', e)
+            logger.debug("Decode tokens failed to load tools json of request %s", e)
             tools = None
 
         is_stream = True
@@ -462,24 +460,29 @@ class IbisTokenizer:
             if req_enable_reasoning_label in kwargs:
                 meta_data.update({req_enable_reasoning_label: kwargs[req_enable_reasoning_label]})
 
-            meta_data.update({"current_tool_name_sent": kwargs.get("current_tool_name_sent", False),
-                              "current_tool_arguments_sent": kwargs.get("current_tool_arguments_sent", False),
-                              "current_tool_id": kwargs.get("current_tool_id", -1),
-                              "reasoning_tokens": kwargs.get("reasoning_tokens", -1),
-                              "tools": tools, "req_end_flag": kwargs.get("req_end_flag", False),
-                              })
+            meta_data.update(
+                {
+                    "current_tool_name_sent": kwargs.get("current_tool_name_sent", False),
+                    "current_tool_arguments_sent": kwargs.get("current_tool_arguments_sent", False),
+                    "current_tool_id": kwargs.get("current_tool_id", -1),
+                    "reasoning_tokens": kwargs.get("reasoning_tokens", -1),
+                    "tools": tools,
+                    "req_end_flag": kwargs.get("req_end_flag", False),
+                }
+            )
             input_kwargs.update({"prev_decode_index": pre_index, "curr_decode_index": current_index})
             input_kwargs.update({"metadata": meta_data})
 
             output_content = self.wrapper_decode(
-                all_token_ids, skip_special_tokens, use_tool_call, is_chat_req, is_stream, **input_kwargs)
+                all_token_ids, skip_special_tokens, use_tool_call, is_chat_req, is_stream, **input_kwargs
+            )
         except ValueError as e:
             strace = traceback.format_exc()
-            logger.error(f'Decode one token failed and the reason is ValueError: {e}')
+            logger.error(f"Decode one token failed and the reason is ValueError: {e}")
             logger.error(strace)
         except Exception as e:
             strace = traceback.format_exc()
-            logger.error(f'Decode one token failed and the reason: {e}')
+            logger.error(f"Decode one token failed and the reason: {e}")
             logger.error(strace)
 
         return json.dumps(output_content)
@@ -495,16 +498,8 @@ class IbisTokenizer:
         images = sorted(os.listdir(self.media_cache_dirs.get(_IMAGE_KEY)))
         videos = sorted(os.listdir(self.media_cache_dirs.get(_VIDEO_KEY)))
         audios = sorted(os.listdir(self.media_cache_dirs.get(_AUDIO_KEY)))
-        medias = {
-            _IMAGE_KEY: images,
-            _VIDEO_KEY: videos,
-            _AUDIO_KEY: audios
-        }
-        media_idx = {
-            _IMAGE_KEY: 0,
-            _VIDEO_KEY: 0,
-            _AUDIO_KEY: 0
-        }
+        medias = {_IMAGE_KEY: images, _VIDEO_KEY: videos, _AUDIO_KEY: audios}
+        media_idx = {_IMAGE_KEY: 0, _VIDEO_KEY: 0, _AUDIO_KEY: 0}
 
         mm_inputs = []
         if _ROLE_KEY not in prompt_obj[0]:
@@ -512,8 +507,9 @@ class IbisTokenizer:
         else:
             for i, message in enumerate(prompt_obj):
                 if _CONTENT_NAME_KEY in message:
-                    media_idx, single_content = self._process_single_input(message[_CONTENT_NAME_KEY], medias,
-                                                                           media_idx)
+                    media_idx, single_content = self._process_single_input(
+                        message[_CONTENT_NAME_KEY], medias, media_idx
+                    )
                     prompt_obj[i][_CONTENT_NAME_KEY] = single_content
             mm_inputs = prompt_obj
 
@@ -535,8 +531,8 @@ class IbisTokenizer:
 
     def _download(self, info, total_start_time, size_limit):
         media_size = 0
-        input_type = info['type']
-        if input_type == 'text':
+        input_type = info["type"]
+        if input_type == "text":
             return media_size
         elif input_type not in _MEDIA_TYPE:
             logger.error(f"Input type {input_type} does not match the mm type.")
@@ -559,30 +555,27 @@ class IbisTokenizer:
 
         if media_url.startswith("http://") or media_url.startswith("https://"):  # http or https
             if len(media_url) > _URL_LENGTH_LIMIT:
-                logger.error(f"The length of media_url should be less than {_URL_LENGTH_LIMIT}, "
-                             f"but got {len(media_url)}.")
-                raise ValueError(f"The length of media_url should be less than {_URL_LENGTH_LIMIT}, "
-                                 f"but got {len(media_url)}.")
-     
+                logger.error(
+                    f"The length of media_url should be less than {_URL_LENGTH_LIMIT}, but got {len(media_url)}."
+                )
+                raise ValueError(
+                    f"The length of media_url should be less than {_URL_LENGTH_LIMIT}, but got {len(media_url)}."
+                )
+
             allowed_domains = self._load_allowed_media_domains()
             if allowed_domains:
                 try:
                     self._check_domain_allowed(media_url, allowed_domains)
                 except ValueError as e:
                     logger.error("Domain whitelist validation failed: %s", e)
-                    raise ValueError(
-                        f"The media URL domain is not allowed: {e}"
-                    ) from e
+                    raise ValueError(f"The media URL domain is not allowed: {e}") from e
             else:
                 if not once_flag.is_set():
                     with threading.Lock():
                         if not once_flag.is_set():
-                            logger.warning(
-                                "ALLOWED_MEDIA_DOMAIN_ENV is not set. "
-                                "Domain whitelist check is disabled."
-                            )
+                            logger.warning("ALLOWED_MEDIA_DOMAIN_ENV is not set. Domain whitelist check is disabled.")
                             once_flag.set()
-            
+
             limit_params = (size_limit, total_start_time)
             media_size = self._process_url_path(media_url, ext, input_type, cache_dir, limit_params)
         elif ext.lower() in _MEDIA_TYPE.get(input_type):  # local path
@@ -592,13 +585,17 @@ class IbisTokenizer:
             allowed_real_base = os.path.realpath(_ALLOWED_LOCAL_MEDIA_PATH)
             media_url = file_utils.standardize_path(media_url)
 
-            # Ensure the file is inside the allowlist directory 
-            if not media_url.startswith(allowed_real_base + os.sep): 
-                logger.error(f"Your input local file path is not allowed!"
-                  f"please ensure your multimedia files are placed under {_ALLOWED_LOCAL_MEDIA_PATH}") 
-                raise ValueError(f"Your input local file path is not allowed!"
-                  f"please ensure your multimedia files are placed under {_ALLOWED_LOCAL_MEDIA_PATH}")
-                  
+            # Ensure the file is inside the allowlist directory
+            if not media_url.startswith(allowed_real_base + os.sep):
+                logger.error(
+                    f"Your input local file path is not allowed!"
+                    f"please ensure your multimedia files are placed under {_ALLOWED_LOCAL_MEDIA_PATH}"
+                )
+                raise ValueError(
+                    f"Your input local file path is not allowed!"
+                    f"please ensure your multimedia files are placed under {_ALLOWED_LOCAL_MEDIA_PATH}"
+                )
+
             media_size = self._process_local_path(media_url, ext, input_type, cache_dir, size_limit)
         else:
             media_size = self._process_base64(info, media_url, input_type, size_limit)
@@ -606,10 +603,11 @@ class IbisTokenizer:
         return media_size
 
     def _process_base64(self, info, media_url, input_type, size_limit):
-
         if media_url.startswith("data:"):  # {"xxx_url": "data:{MIME};base64,{base64_encoded_data}"}
-            pattern = r"data:(image|video|audio)/" \
-                      r"((?:jpeg|png|mp4|x-msvideo|x-ms-wmv|mpeg|x-wav|flac));base64,([A-Za-z0-9+/=]+)"
+            pattern = (
+                r"data:(image|video|audio)/"
+                r"((?:jpeg|png|mp4|x-msvideo|x-ms-wmv|mpeg|x-wav|flac));base64,([A-Za-z0-9+/=]+)"
+            )
             match = re.search(pattern, media_url)
             cache_dir = self.media_cache_dirs.get(input_type)
             if match:
@@ -624,10 +622,14 @@ class IbisTokenizer:
             ext = "." + info[input_type].get("format", "")
             cache_dir = self.media_cache_dirs.get(_AUDIO_KEY)
             if not base64_data or ext.lower() not in _MEDIA_TYPE.get(input_type):
-                logger.error("'input_audio.data' should be base64 encoded data, "
-                             "and the 'input_audio.format' should be in ['mp3', 'wav', 'flac'].")
-                raise ValueError("'input_audio.data' should be base64 encoded data, "
-                                 "and the 'input_audio.format' should be in ['mp3', 'wav', 'flac'].")
+                logger.error(
+                    "'input_audio.data' should be base64 encoded data, "
+                    "and the 'input_audio.format' should be in ['mp3', 'wav', 'flac']."
+                )
+                raise ValueError(
+                    "'input_audio.data' should be base64 encoded data, "
+                    "and the 'input_audio.format' should be in ['mp3', 'wav', 'flac']."
+                )
             input_type = _AUDIO_KEY
         elif input_type == _IMAGE_KEY:  # {"image_url": {base64_encoded_data}}
             base64_data = media_url
@@ -654,26 +656,25 @@ class IbisTokenizer:
         if isinstance(prompt_obj, str):
             return media_idx, [{"text": prompt_obj}]
 
-        media_keys = {
-            _IMAGE_KEY: "image",
-            _VIDEO_KEY: "video",
-            _AUDIO_KEY: "audio"
-        }
+        media_keys = {_IMAGE_KEY: "image", _VIDEO_KEY: "video", _AUDIO_KEY: "audio"}
         mm_inputs = []
         for elem in prompt_obj:
-            input_type = _AUDIO_KEY if elem['type'] == _INPUT_AUDIO_KEY else elem['type']
+            input_type = _AUDIO_KEY if elem["type"] == _INPUT_AUDIO_KEY else elem["type"]
             path_idx = media_idx.get(input_type)
             media_list = medias.get(input_type)
             if input_type == _TEXT_KEY:
                 mm_inputs.append({_TEXT_KEY: elem[_TEXT_KEY]})
             elif input_type in media_keys.keys():
                 if path_idx > len(media_list):
-                    logger.error(f"Requested {path_idx} {input_type} \
-                        but only downloaded {len(media_list)}")
-                    raise ValueError(f"Requested {path_idx} {input_type} \
-                        but only downloaded {len(media_list)}")
-                media_path = os.path.join(self.media_cache_dirs.get(input_type),
-                    media_list[path_idx])
+                    logger.error(
+                        f"Requested {path_idx} {input_type} \
+                        but only downloaded {len(media_list)}"
+                    )
+                    raise ValueError(
+                        f"Requested {path_idx} {input_type} \
+                        but only downloaded {len(media_list)}"
+                    )
+                media_path = os.path.join(self.media_cache_dirs.get(input_type), media_list[path_idx])
                 IbisTokenizer.check_path(media_path)
                 mm_inputs.append({media_keys[input_type]: media_path})
                 media_idx[input_type] += 1

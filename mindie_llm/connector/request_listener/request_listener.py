@@ -10,6 +10,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+
 class RequestListener:
     _instance = None
 
@@ -25,8 +26,8 @@ class RequestListener:
         return cls._instance
 
     def start(self):
-        from mindie_llm.connector.request_listener.shared_mem_communication import \
-            SharedMemCommunication
+        from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
         self.communication = SharedMemCommunication.get_instance(self.config)
         self.communication.start()
         return True
@@ -34,4 +35,3 @@ class RequestListener:
     def stop(self):
         self.communication.stop()
         return True
-

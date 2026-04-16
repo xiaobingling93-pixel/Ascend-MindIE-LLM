@@ -14,11 +14,12 @@
 #define LOCKED_DEQUE_COUNTER_H
 
 #include <iostream>
+
+#include "block_manager_interface.h"
 #include "concurrent_deque.h"
+#include "config_info.h"
 #include "sequence.h"
 #include "sequence_group.h"
-#include "config_info.h"
-#include "block_manager_interface.h"
 
 using MilliSeconds = std::chrono::milliseconds;
 
@@ -35,8 +36,7 @@ struct SeqCounter {
 
     SeqCounter() = default;
 
-    void Init()
-    {
+    void Init() {
         this->availableSeqCount = 0;
         this->waitTokensCount = 0;
         this->waitBatchesCount = 0;
@@ -46,8 +46,7 @@ struct SeqCounter {
         this->firstSeqWaitTime = 0;
     }
 
-    friend std::ostream &operator<<(std::ostream &os, const SeqCounter &counter)
-    {
+    friend std::ostream &operator<<(std::ostream &os, const SeqCounter &counter) {
         os << "counter : availableSeqCount=" << counter.availableSeqCount
            << ", waitTokensCount=" << counter.waitTokensCount << ", waitBatchesCount=" << counter.waitBatchesCount
            << ", waitBlockNum=" << counter.waitBlockNum << ", totalWaitTime=" << counter.totalWaitTime
@@ -57,14 +56,14 @@ struct SeqCounter {
 };
 
 class QueueCounter {
-public:
+   public:
     QueueCounter() = delete;
     QueueCounter(const std::shared_ptr<SchedulerConfig> &schedulerConfig,
                  const std::shared_ptr<BlockSpaceManager> &blockManager);
 
     // 统一统计接口
-    template <typename Queue> std::shared_ptr<SeqCounter> Count(Queue &queue, SequenceStatus status) const
-    {
+    template <typename Queue>
+    std::shared_ptr<SeqCounter> Count(Queue &queue, SequenceStatus status) const {
         std::shared_ptr<SeqCounter> localResult = std::make_shared<SeqCounter>();
         localResult->Init();
         auto now = std::chrono::high_resolution_clock::now();
@@ -102,9 +101,9 @@ public:
         return localResult;
     }
 
-private:
+   private:
     std::shared_ptr<SchedulerConfig> schedulerConfig_;
-    BlockSpaceManagerSPtr blockManager_; // kv cache manager
+    BlockSpaceManagerSPtr blockManager_;  // kv cache manager
 
     std::pair<size_t, size_t> GetNumComputeNewUnCachedAndCachedTokens(const SequenceGroupSPtr seqGroup,
                                                                       const SequenceStatus status) const;
@@ -120,6 +119,6 @@ private:
     // 统计给定序列组所需的块（block）数量，根据序列状态采用不同的计算方式。
     size_t CountBlocks(SequenceGroupSPtr &seqgrp, SequenceStatus status) const;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

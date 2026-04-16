@@ -9,40 +9,33 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <string>
-#include <vector>
+#include "endpoint_def.h"
+
 #include <codecvt>
 #include <locale>
+#include <string>
+#include <vector>
 
-#include "spdlog/common.h"
 #include "common_util.h"
 #include "config_manager.h"
 #include "config_manager_impl.h"
-#include "endpoint_def.h"
+#include "spdlog/common.h"
 
 namespace mindie_llm {
 std::atomic<bool> g_health(false);
 
-std::atomic<bool>& HealthManager::GetHealth()
-{
-    return g_health;
-}
+std::atomic<bool> &HealthManager::GetHealth() { return g_health; }
 
-void HealthManager::UpdateHealth(bool healthStatus)
-{
-    g_health.store(healthStatus);
-}
+void HealthManager::UpdateHealth(bool healthStatus) { g_health.store(healthStatus); }
 
-std::string GetUriParameters(const httplib::Request &request, uint32_t index)
-{
+std::string GetUriParameters(const httplib::Request &request, uint32_t index) {
     if (request.matches.size() > index && request.matches[index].matched) {
         return request.matches[index];
     }
     return "";
 }
 
-std::u16string GetU16Str(const std::string &inputStr, std::string *error)
-{
+std::u16string GetU16Str(const std::string &inputStr, std::string *error) {
     try {
         std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> utf16cvt;
         return utf16cvt.from_bytes(inputStr);
@@ -54,12 +47,11 @@ std::u16string GetU16Str(const std::string &inputStr, std::string *error)
     }
 }
 
-std::wstring String2Wstring(const std::string& str, std::string *error)
-{
+std::wstring String2Wstring(const std::string &str, std::string *error) {
     try {
         std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
         return conv.from_bytes(str);
-    } catch (const std::range_error& e) {
+    } catch (const std::range_error &e) {
         if (error != nullptr) {
             *error += "Can't convert string to wstring: ";
             *error += e.what();
@@ -69,8 +61,7 @@ std::wstring String2Wstring(const std::string& str, std::string *error)
 }
 
 std::string TransformTruncation(std::u16string inputStr, int64_t truncationStart, int64_t truncationEnd,
-    std::string *error)
-{
+                                std::string *error) {
     inputStr = inputStr.substr(truncationStart, truncationEnd);
     std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> cvt;
     try {
@@ -83,8 +74,7 @@ std::string TransformTruncation(std::u16string inputStr, int64_t truncationStart
     }
 }
 
-std::string GetFinishReasonStr(InferStatusType finishReason)
-{
+std::string GetFinishReasonStr(InferStatusType finishReason) {
     if (finishReason == InferStatusType::END_OF_SENTENCE) {
         return "eos_token";
     } else if (finishReason == InferStatusType::ABORT || finishReason == InferStatusType::EXECUTE_ERROR ||
@@ -98,10 +88,9 @@ std::string GetFinishReasonStr(InferStatusType finishReason)
     }
 }
 
-uint32_t GetMaxInputLen()
-{
+uint32_t GetMaxInputLen() {
     auto serverConfig = GetServerConfig();
     uint32_t maxInputLen = serverConfig.maxRequestLength * 1024 * 1024;
     return maxInputLen;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

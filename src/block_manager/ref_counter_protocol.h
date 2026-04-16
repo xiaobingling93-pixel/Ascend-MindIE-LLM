@@ -13,14 +13,14 @@
 #ifndef REF_COUNTER_PROTOCOL_H
 #define REF_COUNTER_PROTOCOL_H
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #include "basic_types.h"
 
 namespace mindie_llm {
 class RefCounterProtocol {
-public:
+   public:
     virtual ~RefCounterProtocol() = default;
 
     virtual RefCount Increase(BlockId blockId) = 0;
@@ -34,6 +34,6 @@ using RefCounterProtocolSPtr = std::shared_ptr<RefCounterProtocol>;
 
 RefCounterProtocolSPtr MakeRefCounterProtocol(const std::vector<BlockId> &allBlockIndices);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

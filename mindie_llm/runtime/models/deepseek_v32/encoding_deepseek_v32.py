@@ -76,25 +76,23 @@ thinking_template = "{reasoning_content}"
 response_format_template: str = (
     "## Response Format:\n\nYou MUST strictly adhere to the following schema to reply:\n{schema}"
 )
-tool_call_template: str = (
-    "<{dsml_token}invoke name=\"{name}\">\n{arguments}\n</{dsml_token}invoke>"
-)
-tool_calls_template = (
-    "<{dsml_token}function_calls>\n{tool_calls}\n</{dsml_token}function_calls>"
-)
+tool_call_template: str = '<{dsml_token}invoke name="{name}">\n{arguments}\n</{dsml_token}invoke>'
+tool_calls_template = "<{dsml_token}function_calls>\n{tool_calls}\n</{dsml_token}function_calls>"
 
-tool_output_template: str = (
-    "\n<result>{content}</result>"
-)
+tool_output_template: str = "\n<result>{content}</result>"
+
 
 def to_json(value: Any) -> str:
     try:
         return json.dumps(value, ensure_ascii=False)
-    except:
-        return json.dumps(value, ensure_ascii=True)
+    except TypeError:
+        # 回退：将不可序列化的对象转为字符串
+        return json.dumps(str(value), ensure_ascii=False)
+
 
 def tools_from_openai_format(tools):
     return [tool["function"] for tool in tools]
+
 
 def tool_calls_from_openai_format(tool_calls):
     return [
@@ -105,6 +103,7 @@ def tool_calls_from_openai_format(tool_calls):
         for tool_call in tool_calls
     ]
 
+
 def tool_calls_to_openai_format(tool_calls):
     return [
         {
@@ -112,10 +111,11 @@ def tool_calls_to_openai_format(tool_calls):
             "function": {
                 "name": tool_call["name"],
                 "arguments": tool_call["arguments"],
-            }
+            },
         }
         for tool_call in tool_calls
     ]
+
 
 def encode_arguments_to_dsml(tool_call: Dict[str, str]) -> str:
     p_dsml_template = """<{dsml_token}parameter name="{key}" string="{is_str}">{value}</{dsml_token}parameter>"""
@@ -145,6 +145,7 @@ def decode_dsml_to_arguments(tool_name: str, tool_args: Dict[str, Tuple[str, str
     tool_args_json = "{" + ", ".join([_decode_value(k, v, string=is_str) for k, (v, is_str) in tool_args.items()]) + "}"
     return dict(name=tool_name, arguments=tool_args_json)
 
+
 def render_tools(tools: List[Dict[str, Union[str, Dict[str, Any]]]]) -> str:
     tools_json = [to_json(t) for t in tools]
 
@@ -155,13 +156,15 @@ def render_tools(tools: List[Dict[str, Union[str, Dict[str, Any]]]]) -> str:
         thinking_end_token=thinking_end_token,
     )
 
+
 def find_last_user_index(messages: List[Dict[str, Any]]) -> int:
     last_user_index = -1
-    for idx in range(len(messages)-1, -1, -1):
+    for idx in range(len(messages) - 1, -1, -1):
         if messages[idx].get("role") in ["user", "developer"]:
             last_user_index = idx
             break
     return last_user_index
+
 
 def render_message(index: int, messages: List[Dict[str, Any]], thinking_mode: str) -> str:
     assert 0 <= index < len(messages)
@@ -223,11 +226,15 @@ def render_message(index: int, messages: List[Dict[str, Any]], thinking_mode: st
             prev_assistant_idx -= 1
             assistant_msg = messages[prev_assistant_idx]
 
-        assert index == 0 or prev_assistant_idx >= 0 and assistant_msg.get("role") == "assistant", f"Invalid messages at {index}:\n{assistant_msg}"
+        assert index == 0 or prev_assistant_idx >= 0 and assistant_msg.get("role") == "assistant", (
+            f"Invalid messages at {index}:\n{assistant_msg}"
+        )
 
         tool_call_order = index - prev_assistant_idx
         assistant_tool_calls = assistant_msg.get("tool_calls")
-        assert assistant_tool_calls and len(assistant_tool_calls) >= tool_call_order, "No tool calls but found tool output"
+        assert assistant_tool_calls and len(assistant_tool_calls) >= tool_call_order, (
+            "No tool calls but found tool output"
+        )
 
         if tool_call_order == 1:
             prompt += "\n\n<function_results>"
@@ -250,21 +257,20 @@ def render_message(index: int, messages: List[Dict[str, Any]], thinking_mode: st
         if tool_calls:
             tool_calls = [
                 tool_call_template.format(
-                    dsml_token=dsml_token,
-                    name=tool_call.get("name"),
-                    arguments=encode_arguments_to_dsml(tool_call)
+                    dsml_token=dsml_token, name=tool_call.get("name"), arguments=encode_arguments_to_dsml(tool_call)
                 )
                 for tool_call in tool_calls
             ]
             tool_calls_content += "\n\n" + tool_calls_template.format(
-                dsml_token=dsml_token,
-                tool_calls="\n".join(tool_calls)
+                dsml_token=dsml_token, tool_calls="\n".join(tool_calls)
             )
 
         summary_content = content or ""
 
         if thinking_mode == "thinking" and index > last_user_idx:
-            assert reasoning_content or tool_calls, f"ThinkingMode: {thinking_mode}, invalid message without reasoning_content/tool_calls `{msg}` after last user message"
+            assert reasoning_content or tool_calls, (
+                f"ThinkingMode: {thinking_mode}, invalid message without reasoning_content/tool_calls `{msg}` after last user message"
+            )
             thinking_part = thinking_template.format(reasoning_content=reasoning_content or "") + thinking_end_token
 
         prompt += assistant_msg_template.format(
@@ -277,7 +283,8 @@ def render_message(index: int, messages: List[Dict[str, Any]], thinking_mode: st
 
     return prompt
 
-def drop_thinking_messages(messages: List[Dict[str, Any]], last_user_idx: Optional[int]=None) -> List[Dict[str, Any]]:
+
+def drop_thinking_messages(messages: List[Dict[str, Any]], last_user_idx: Optional[int] = None) -> List[Dict[str, Any]]:
     messages_wo_thinking: List[Dict[str, Any]] = []
     last_user_idx = find_last_user_index(messages) if last_user_idx is None else last_user_idx
     for idx, msg in enumerate(messages):
@@ -293,7 +300,14 @@ def drop_thinking_messages(messages: List[Dict[str, Any]], last_user_idx: Option
 
     return messages_wo_thinking
 
-def encode_messages(messages: List[Dict[str, Any]], thinking_mode: str, context: Optional[List[Dict[str, Any]]] = None, drop_thinking: bool = True, add_default_bos_token: bool = True) -> str:
+
+def encode_messages(
+    messages: List[Dict[str, Any]],
+    thinking_mode: str,
+    context: Optional[List[Dict[str, Any]]] = None,
+    drop_thinking: bool = True,
+    add_default_bos_token: bool = True,
+) -> str:
     context = context if context else []
     full_messages = context + messages
 
@@ -307,22 +321,24 @@ def encode_messages(messages: List[Dict[str, Any]], thinking_mode: str, context:
 
     return prompt
 
+
 def _read_until_stop(index: int, text: str, stop: List[str]) -> Tuple[int, str, Optional[str]]:
     min_pos = len(text)
     matched_stop = None
-    
+
     for s in stop:
         pos = text.find(s, index)
         if pos != -1 and pos < min_pos:
             min_pos = pos
             matched_stop = s
-    
+
     if matched_stop:
         content = text[index:min_pos]
         return min_pos + len(matched_stop), content, matched_stop
     else:
         content = text[index:]
         return len(text), content, None
+
 
 def parse_tool_calls(index: int, text: str):
     tool_calls: List[Dict[str, Any]] = []
@@ -338,7 +354,9 @@ def parse_tool_calls(index: int, text: str):
 
         assert stop_token is not None, "Missing special token"
 
-        index, tool_name_content, stop_token = _read_until_stop(index, text, [f"<{dsml_token}parameter", f"</{dsml_token}invoke"])
+        index, tool_name_content, stop_token = _read_until_stop(
+            index, text, [f"<{dsml_token}parameter", f"</{dsml_token}invoke"]
+        )
 
         p_tool_name = re.findall(r'^\s*name="(.*?)">\n$', tool_name_content, flags=re.DOTALL)
         assert len(p_tool_name) == 1, "Tool name format error"
@@ -355,13 +373,16 @@ def parse_tool_calls(index: int, text: str):
             assert param_name not in tool_args, "Duplicate parameter name"
             tool_args[param_name] = (param_value, string)
 
-            index, content, stop_token = _read_until_stop(index, text, [f"<{dsml_token}parameter", f"</{dsml_token}invoke"])
+            index, content, stop_token = _read_until_stop(
+                index, text, [f"<{dsml_token}parameter", f"</{dsml_token}invoke"]
+            )
             assert content == ">\n", "Parameter format error"
 
         tool_call = decode_dsml_to_arguments(tool_name=tool_name, tool_args=tool_args)
         tool_calls.append(tool_call)
 
     return index, stop_token, tool_calls
+
 
 # NOTE: This function is designed to parse only correctly formatted string and will not attempt to correct malformed output that may be generated by the model.
 def parse_message_from_completion_text(text: str, thinking_mode: str):
@@ -392,11 +413,13 @@ def parse_message_from_completion_text(text: str, thinking_mode: str):
     assert len(text) == index and stop_token in [eos_token, None], "Unexpected content at end"
 
     for sp_token in [bos_token, eos_token, thinking_start_token, thinking_end_token, dsml_token]:
-        assert sp_token not in summary_content and sp_token not in reasoning_content, "Unexpected special token in content"
+        assert sp_token not in summary_content and sp_token not in reasoning_content, (
+            "Unexpected special token in content"
+        )
 
     return {
         "role": "assistant",
         "content": summary_content,
         "reasoning_content": reasoning_content,
-        "tool_calls": tool_calls_to_openai_format(tool_calls)
+        "tool_calls": tool_calls_to_openai_format(tool_calls),
     }

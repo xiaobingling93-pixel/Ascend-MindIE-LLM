@@ -9,17 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <chrono>
-#include "policy/stage_policy/edge_cloud_policy.h"
 #include "layerwise_mixin/layerwise_mixin.h"
+
+#include <chrono>
+
+#include "policy/stage_policy/edge_cloud_policy.h"
 
 using namespace std;
 using namespace std::chrono;
 using std::chrono::system_clock;
 
 namespace mindie_llm {
-void LayerwiseMixin::LwdPrepareBatch(bool layerwiseDisaggregated, SchedulerOutputs &scheduleOut) const
-{
+void LayerwiseMixin::LwdPrepareBatch(bool layerwiseDisaggregated, SchedulerOutputs &scheduleOut) const {
     if (!layerwiseDisaggregated) {
         return;
     }
@@ -27,8 +28,9 @@ void LayerwiseMixin::LwdPrepareBatch(bool layerwiseDisaggregated, SchedulerOutpu
         for (auto prefillSeqGrpSPtr : scheduleOut.scheduledSeqGroups_) {
             SequenceGroupSPtr prefillSeqGroup = prefillSeqGrpSPtr->seqGroup_;
             auto prefillSeqId = prefillSeqGroup->firstSeq->seqId_;
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:"<<"prefillSeqId in prefill batch is: "
-                                << prefillSeqId << ", set prefill:1, recompute:0");
+            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:" << "prefillSeqId in prefill batch is: "
+                                                                      << prefillSeqId
+                                                                      << ", set prefill:1, recompute:0");
 
             bool isPrefill = true;
             prefillSeqGroup->firstSeq->data_.SetLayerwiseStage(isPrefill);
@@ -42,8 +44,7 @@ void LayerwiseMixin::LwdPrepareBatch(bool layerwiseDisaggregated, SchedulerOutpu
 }
 
 void LayerwiseMixin::LwdEngineAddBatchCnt(bool layerwiseDisaggregated, std::shared_ptr<StagePolicy> stagePolicy,
-    SchedulerOutputs &scheduleOut) const
-{
+                                          SchedulerOutputs &scheduleOut) const {
     if (!layerwiseDisaggregated) {
         return;
     }
@@ -52,8 +53,7 @@ void LayerwiseMixin::LwdEngineAddBatchCnt(bool layerwiseDisaggregated, std::shar
 }
 
 void LayerwiseMixin::LwdComputeArrTimeGap(bool layerwiseDisaggregated, SequenceGroupSPtr &seqGroup,
-    SequenceGroupSPtr lastSeqGroup)
-{
+                                          SequenceGroupSPtr lastSeqGroup) {
     // 边云特性动态切块使用，给TG侧传请求到达时间间隔用于切图
     if (!layerwiseDisaggregated) {
         return;
@@ -69,7 +69,7 @@ void LayerwiseMixin::LwdComputeArrTimeGap(bool layerwiseDisaggregated, SequenceG
             lastPArriveTime = lastSeqGroup->recomputeArriveTime_;
         }
         timeGap = static_cast<int32_t>(duration_cast<milliseconds>(currentTime - lastPArriveTime).count());
-    } else if (lastArriveTime_ != std::chrono::high_resolution_clock::time_point()) { // 说明已经设置有效时间
+    } else if (lastArriveTime_ != std::chrono::high_resolution_clock::time_point()) {  // 说明已经设置有效时间
         timeGap = static_cast<int32_t>(duration_cast<milliseconds>(currentTime - lastArriveTime_).count());
     }
     seqGroup->requestGap_ = timeGap;
@@ -81,8 +81,7 @@ void LayerwiseMixin::LwdComputeArrTimeGap(bool layerwiseDisaggregated, SequenceG
 }
 
 void LayerwiseMixin::LwdSetRecomputeArrTime(bool layerwiseDisaggregated, SequenceGroupSPtr &seqGroup,
-    SequenceGroupSPtr lastSeqGroup)
-{
+                                            SequenceGroupSPtr lastSeqGroup) {
     if (!layerwiseDisaggregated || !seqGroup->firstSeq->data_.layerwiseRecompute_) {
         return;
     }
@@ -93,35 +92,34 @@ void LayerwiseMixin::LwdSetRecomputeArrTime(bool layerwiseDisaggregated, Sequenc
         if (lastSeqGroup->firstSeq->data_.layerwiseRecompute_) {
             lastPArriveTime = lastSeqGroup->recomputeArriveTime_;
         }
-        timeGap = static_cast<int32_t>(duration_cast<milliseconds>(seqGroup->recomputeArriveTime_
-            - lastPArriveTime).count());
-    } else if (lastArriveTime_ != std::chrono::high_resolution_clock::time_point()) { // 说明已经设置有效时间
-        timeGap = static_cast<int32_t>(duration_cast<milliseconds>(seqGroup->recomputeArriveTime_
-            - lastArriveTime_).count());
+        timeGap =
+            static_cast<int32_t>(duration_cast<milliseconds>(seqGroup->recomputeArriveTime_ - lastPArriveTime).count());
+    } else if (lastArriveTime_ != std::chrono::high_resolution_clock::time_point()) {  // 说明已经设置有效时间
+        timeGap =
+            static_cast<int32_t>(duration_cast<milliseconds>(seqGroup->recomputeArriveTime_ - lastArriveTime_).count());
     }
     seqGroup->requestGap_ = timeGap;
     lastArriveTime_ = seqGroup->recomputeArriveTime_;
 }
 
 bool LayerwiseMixin::LwdProcessResponse(bool layerwiseDisaggregated, SequenceGroupSPtr seqGroup,
-    ForwardMode &lastForwardMode, ForwardMode lwdCurrBatchType,
-    std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const
-{
+                                        ForwardMode &lastForwardMode, ForwardMode lwdCurrBatchType,
+                                        std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const {
     if (!layerwiseDisaggregated) {
         return false;
     }
     if (seqGroup == nullptr) {
         lastForwardMode = lwdCurrBatchType;
         std::string forwardModeString = lastForwardMode == ForwardMode::PREFILL ? "prefill" : "decode";
-        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"seqGoup is nullptr!!! "
-            << forwardModeString<<" return");
+        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "seqGoup is nullptr!!! " << forwardModeString
+                                                                << " return");
         return false;
     }
     auto returnSeqId = seqGroup->firstSeq->seqId_;
     ForwardMode forwardMode = seqGroup->IsLayerwisePrefill() ? ForwardMode::PREFILL : ForwardMode::DECODE;
     if (forwardMode == ForwardMode::PREFILL) {
-        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"prefill return seq id:"<< returnSeqId);
-        
+        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "prefill return seq id:" << returnSeqId);
+
         // recompute in decode batch
         if (seqGroup->firstSeq->data_.layerwiseRunning_) {
             recomputeInDBatchQueue.emplace_back(seqGroup);
@@ -134,16 +132,16 @@ bool LayerwiseMixin::LwdProcessResponse(bool layerwiseDisaggregated, SequenceGro
         } else {
             // 记录recompute的seq返回，之后才允许下发重计算的P
             seqGroup->firstSeq->data_.layerwiseRecomputeReturn_ = true;
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"recompute return seq id:"<< returnSeqId);
+            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "recompute return seq id:" << returnSeqId);
         }
     } else {
-        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"decode return seq id:"<< returnSeqId);
+        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "decode return seq id:" << returnSeqId);
     }
     if (lastForwardMode == ForwardMode::DUMMY) {
         lastForwardMode = forwardMode;
     } else {
         if (lastForwardMode != forwardMode) {
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"P/D Type is not same in one batch!!!!!");
+            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "P/D Type is not same in one batch!!!!!");
         }
         lastForwardMode = forwardMode;
     }
@@ -151,17 +149,16 @@ bool LayerwiseMixin::LwdProcessResponse(bool layerwiseDisaggregated, SequenceGro
 }
 
 void LayerwiseMixin::LwdProcessRecomputeSeq(bool layerwiseNeedUpdate, ForwardMode lastForwardMode,
-    const std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const
-{
+                                            const std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const {
     if (!layerwiseNeedUpdate) {
         return;
     }
     // recompute in decode batch
     if (lastForwardMode == ForwardMode::DECODE && recomputeInDBatchQueue.size() > 0) {
-        for (auto recomputeSeqGroup: recomputeInDBatchQueue) {
+        for (auto recomputeSeqGroup : recomputeInDBatchQueue) {
             auto recomputeSeqId = recomputeSeqGroup->firstSeq->seqId_;
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"if SeqId="
-                << recomputeSeqId << "return in decode batch, ignore");
+            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "if SeqId=" << recomputeSeqId
+                                                                    << "return in decode batch, ignore");
             // 兜底一
             bool isPrefill = true;
             recomputeSeqGroup->firstSeq->data_.SetLayerwiseStage(isPrefill);
@@ -173,8 +170,7 @@ void LayerwiseMixin::LwdProcessRecomputeSeq(bool layerwiseNeedUpdate, ForwardMod
 }
 
 void LayerwiseMixin::LwdHandlerSubBatchCnt(bool layerwiseNeedUpdate, std::shared_ptr<StagePolicy> stagePolicy,
-    ForwardMode lastForwardMode) const
-{
+                                           ForwardMode lastForwardMode) const {
     if (!layerwiseNeedUpdate) {
         return;
     }
@@ -183,10 +179,9 @@ void LayerwiseMixin::LwdHandlerSubBatchCnt(bool layerwiseNeedUpdate, std::shared
     lwdPolicy->LayerwiseSubBatchCnt(lastForwardMode);
 }
 
-void LayerwiseMixin::LwdWaitingResponse(PDPriorityType pdPriorityType, std::shared_ptr<StagePolicy> stagePolicy)
-{
-    ForwardMode forwardMode = pdPriorityType == PDPriorityType::PREFILL_FIRST ?
-        ForwardMode::PREFILL : ForwardMode::DECODE;
+void LayerwiseMixin::LwdWaitingResponse(PDPriorityType pdPriorityType, std::shared_ptr<StagePolicy> stagePolicy) {
+    ForwardMode forwardMode =
+        pdPriorityType == PDPriorityType::PREFILL_FIRST ? ForwardMode::PREFILL : ForwardMode::DECODE;
     std::shared_ptr<EdgeCloudPolicy> lwdPolicy = std::static_pointer_cast<EdgeCloudPolicy>(stagePolicy);
     bool needWaiting = lwdPolicy->LwdNeedWaiting4Response(forwardMode);
 
@@ -197,4 +192,4 @@ void LayerwiseMixin::LwdWaitingResponse(PDPriorityType pdPriorityType, std::shar
         needWaiting = lwdPolicy->LwdNeedWaiting4Response(forwardMode);
     }
 }
-}
+}  // namespace mindie_llm

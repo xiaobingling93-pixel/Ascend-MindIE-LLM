@@ -24,7 +24,7 @@ struct FileValidationParams {
     bool checkPermission;
 };
 class FileUtils {
-public:
+   public:
     static const mode_t FILE_MODE_750 = 0b111'101'000;
     static const mode_t FILE_MODE_550 = 0b101'101'000;
     static const mode_t FILE_MODE_500 = 0b101'000'000;
@@ -37,20 +37,20 @@ public:
      * @param path: file full path
      * @param pattern: regex pattern
      */
-    static bool CheckFileExists(const std::string& filePath);
+    static bool CheckFileExists(const std::string &filePath);
 
     /**
      * is directory exists.
      * @param dir directory
      * @return
      */
-    static bool CheckDirectoryExists(const std::string& dirPath);
+    static bool CheckDirectoryExists(const std::string &dirPath);
 
     /** Check whether the destination path is a link
      * @param filePath raw file path
      * @return
      */
-    static bool IsSymlink(const std::string& filePath);
+    static bool IsSymlink(const std::string &filePath);
 
     /** Regular the file path using realPath.
      * @param filePath file path
@@ -58,8 +58,8 @@ public:
      * @param errMsg the err msg
      * @return
      */
-    static bool RegularFilePath(const std::string& filePath, const std::string& baseDir, std::string &errMsg,
-        std::string &regularPath);
+    static bool RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg,
+                                std::string &regularPath);
 
     /** Regular the file path using realPath.
      * @param filePath raw file path
@@ -67,15 +67,15 @@ public:
      * @param errMsg the err msg
      * @return
      */
-    static bool RegularFilePath(const std::string& filePath, const std::string& baseDir, std::string &errMsg,
-        bool flag, std::string &regularPath);
+    static bool RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg, bool flag,
+                                std::string &regularPath);
 
     /** Regular the file path using realPath.
      * @param filePath raw file path
      * @param errMsg the err msg
      * @return
      */
-    static bool RegularFilePath(const std::string& filePath, std::string &errMsg, std::string &regularPath);
+    static bool RegularFilePath(const std::string &filePath, std::string &errMsg, std::string &regularPath);
 
     /** Check the existence of the file and the size of the file.
      * @param filePath the input file path
@@ -86,8 +86,8 @@ public:
      * @param maxfileSize default 10485760(10M)， maxfileSize must in (1, 1073741824](1G)
      * @return
      */
-    static bool IsFileValid(const std::string& filePath, std::string &errMsg, bool isFileExit = true,
-        mode_t mode = FILE_MODE_750, bool checkPermission = true, uint64_t maxfileSize = 10485760);
+    static bool IsFileValid(const std::string &filePath, std::string &errMsg, bool isFileExit = true,
+                            mode_t mode = FILE_MODE_750, bool checkPermission = true, uint64_t maxfileSize = 10485760);
 
     /** Check the existence of the file and the size of the file.
      * @param configFile the input file path
@@ -96,10 +96,9 @@ public:
      * @param onlyCurrentUserOp strict check, only current user can write or execute
      * @return
      */
-    static bool IsFileValid(const std::string &filePath, std::string &errMsg,
-                            const FileValidationParams &params);
+    static bool IsFileValid(const std::string &filePath, std::string &errMsg, const FileValidationParams &params);
     static bool IsFileAndDirectoryExists(const std::string &filePath, std::string &errMsg,
-        const FileValidationParams &params);
+                                         const FileValidationParams &params);
     static bool GetCheckPermissionFlag();
     /** Check the file owner, file must be owner current user
      * @param filePath the input file path
@@ -116,20 +115,20 @@ public:
      */
     static bool ConstrainPermission(const std::string &filePath, const mode_t &mode, std::string &errMsg);
 
-        /** Check the existence of the file and the size of the file.
+    /** Check the existence of the file and the size of the file.
      * @param filePath the input file path
      * @param realFilePath the real file path
      * @param errMsg the err msg
      * @return
      */
-    static bool GetRealFilePath(const std::string& filePath, std::string& realFilePath, std::string& errMsg) noexcept;
+    static bool GetRealFilePath(const std::string &filePath, std::string &realFilePath, std::string &errMsg) noexcept;
 
     /** Check the existence of the file and the size of the file.
-    * @param installPath the install path
-    * @param errMsg the err msg
-    * @return
-    */
-    static bool GetInstallPath(std::string &installPath, std::string& errMsg) noexcept;
+     * @param installPath the install path
+     * @param errMsg the err msg
+     * @return
+     */
+    static bool GetInstallPath(std::string &installPath, std::string &errMsg) noexcept;
 
     /**
      * @brief Get the safe relative path.
@@ -138,9 +137,9 @@ public:
      * @param safePath output safe path
      * @return
      */
-    static std::string GetSafeRelativePath(const std::string& oldPath);
+    static std::string GetSafeRelativePath(const std::string &oldPath);
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_LLM_FILE_UTIL_H
+#endif  // MINDIE_LLM_FILE_UTIL_H

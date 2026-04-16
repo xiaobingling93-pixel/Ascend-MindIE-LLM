@@ -9,41 +9,41 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "grpc_handler.h"
+
 #include <memory>
-#include "grpc_communication_mng.h"
-#include "infer_instances.h"
-#include "http_rest_resource.h"
+
 #include "config_manager.h"
+#include "config_manager_impl.h"
+#include "dmi_role.h"
 #include "endpoint_def.h"
+#include "grpc_communication_mng.h"
+#include "grpc_context.h"
+#include "http_rest_resource.h"
+#include "infer_instances.h"
+#include "log.h"
 #include "single_llm_decode_req_handler.h"
 #include "single_req_infer_interface_base.h"
-#include "single_req_triton_text_infer_interface.h"
-#include "single_req_tgi_text_infer_interface.h"
-#include "single_req_vllm_openai_infer_interface.h"
-#include "single_req_vllm_openai_completions_infer_interface.h"
 #include "single_req_openai_infer_interface.h"
 #include "single_req_self_develop_infer_interface.h"
+#include "single_req_tgi_text_infer_interface.h"
+#include "single_req_triton_text_infer_interface.h"
 #include "single_req_triton_token_infer_interface.h"
 #include "single_req_vllm_infer_interface.h"
-#include "grpc_context.h"
-#include "log.h"
-#include "dmi_role.h"
-#include "config_manager_impl.h"
-#include "grpc_handler.h"
+#include "single_req_vllm_openai_completions_infer_interface.h"
+#include "single_req_vllm_openai_infer_interface.h"
 
 namespace mindie_llm {
 void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &para,
-    prefillAndDecodeCommunication::DecodeRequestResponse &response)
-{
+                         prefillAndDecodeCommunication::DecodeRequestResponse &response) {
     static uint64_t receiveCnt = 0;
     auto prof = PROF(L2, Domain("Communication").Resource(para.reqid()).SpanStart("handleDecodeRequest"));
     PROF(prof.Attr("InstanceId", para.pinstanceid()));
     PROF(prof.NumArrayAttr("tokens", para.tokens().begin(), para.tokens().end()));
     PROF(prof.NumArrayAttr("firsttoken", para.firsttoken().begin(), para.firsttoken().end()));
-    PROF(prof.ArrayAttr("outputnames", para.outputnames().begin(), para.outputnames().end(),
-        [](decltype(prof)* pColl, decltype(para.outputnames().begin()) item) -> void {
-            pColl->Attr("name", *item);
-        }));
+    PROF(prof.ArrayAttr(
+        "outputnames", para.outputnames().begin(), para.outputnames().end(),
+        [](decltype(prof) *pColl, decltype(para.outputnames().begin()) item) -> void { pColl->Attr("name", *item); }));
 
     PROF(prof.Attr("maxnewtoken", para.maxnewtoken()));
     PROF(prof.Attr("truncate", para.truncate()));
@@ -81,7 +81,7 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
         return;
     }
     KvCacheInfo kvCacheInfo;
-    
+
     kvCacheInfo.blockTable.resize(para.blocktable_size());
     for (int i = 0; i < para.blocktable_size(); ++i) {
         const auto &blocktable = para.blocktable(i);
@@ -90,12 +90,11 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
             kvCacheInfo.blockTable[i].push_back(blocktable.blockid(j));
         }
     }
-    
+
     for (int i = 0; i < para.dpinstanceids_size(); ++i) {
         kvCacheInfo.dpInstanceIds.push_back(para.dpinstanceids()[i]);
     }
-    DmiServerInfo serverInfo(
-        para.reqid(), para.pnodeaddr(), "", kvCacheInfo, InferReqType::REQ_DECODE);
+    DmiServerInfo serverInfo(para.reqid(), para.pnodeaddr(), "", kvCacheInfo, InferReqType::REQ_DECODE);
     auto gctx = std::make_shared<GrpcContext>(serverInfo);
     gctx->SetDecodeParams(para);
     std::shared_ptr<RequestContext> context{nullptr};
@@ -145,67 +144,63 @@ void HandleDecodeRequest(const prefillAndDecodeCommunication::DecodeParameters &
         inferInterface->SetDMIReComputeBuilder();
         inferInterface->DecodeProcess(response);
     } else {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            INIT_ERROR), "SingleReqInferInterfaceBase processImpl is null");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, INIT_ERROR),
+                   "SingleReqInferInterfaceBase processImpl is null");
     }
 };
 
-void HandleKvRelease(const std::string &requestId)
-{
+void HandleKvRelease(const std::string &requestId) {
     RequestIdNew reqId(requestId);
     static uint64_t releaseCnt = 0;
-    
+
     ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "P rcv release kv requestId: " << requestId << ", total " << ++releaseCnt);
     Status status = GetInferInstance()->ControlRequest(reqId, OperationV2::RELEASE_KV);
     if (status.StatusCode() != Error::Code::OK) {
-        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
-            STATUS_WARNING), "Failed release request. requestId: " << requestId);
+        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, STATUS_WARNING),
+                  "Failed release request. requestId: " << requestId);
     } else {
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Release request. requestId: " << requestId);
     }
     return;
 };
 
-GrpcHandler& GrpcHandler::GetInstance()
-{
+GrpcHandler &GrpcHandler::GetInstance() {
     static GrpcHandler instance;
     return instance;
 }
 
-bool GrpcHandler::InitGrpcService()
-{
+bool GrpcHandler::InitGrpcService() {
     if (isReady_) {
         return true;
     }
-    if (!GrpcCommunicationMng::GetInstance().Init(
-        GetServerConfig().interCommTLSEnabled,
-        GetServerConfig().ipAddress,
-        std::to_string(GetServerConfig().interCommPort))) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            INIT_ERROR), "Failed to init grpc communication manager");
+    if (!GrpcCommunicationMng::GetInstance().Init(GetServerConfig().interCommTLSEnabled, GetServerConfig().ipAddress,
+                                                  std::to_string(GetServerConfig().interCommPort))) {
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, INIT_ERROR),
+                   "Failed to init grpc communication manager");
         return false;
     }
     isReady_.store(true);
     return true;
 }
-bool GrpcHandler::InitDmiBusiness()
-{
+bool GrpcHandler::InitDmiBusiness() {
     if (isReady_) {
         return true;
     }
     // 注册 decode 请求消息
     if (!GrpcCommunicationMng::GetInstance().RegisterDecodeRequestHandler(HandleDecodeRequest)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to register decode request handler");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to register decode request handler");
         return false;
     }
     // 注册 kv release 消息
     if (!GrpcCommunicationMng::GetInstance().RegisterKvReleaseHandler(HandleKvRelease)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to register kv release handler");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to register kv release handler");
         return false;
     }
     return true;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

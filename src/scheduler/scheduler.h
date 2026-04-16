@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
@@ -17,16 +17,16 @@
 #include <climits>
 
 #include "ischeduler.h"
-#include "policy/policy.h"
-#include "live_infer_context.h"
-#include "qps_tracker.h"
-#include "latency_predictor/queue_counter.h"
 #include "latency_predictor/latency_predictor.h"
+#include "latency_predictor/queue_counter.h"
+#include "layerwise_mixin/layerwise_mixin.h"
+#include "live_infer_context.h"
+#include "policy/dynamic_batch_recorder.h"
+#include "policy/dynamic_batch_size.h"
+#include "policy/policy.h"
 #include "policy/stage_policy/stage_policy.h"
 #include "policy/stage_policy/time_division_policy.h"
-#include "policy/dynamic_batch_size.h"
-#include "policy/dynamic_batch_recorder.h"
-#include "layerwise_mixin/layerwise_mixin.h"
+#include "qps_tracker.h"
 
 namespace mindie_llm {
 
@@ -59,7 +59,7 @@ struct SchedulerMetricsStatics {
 };
 
 class Scheduler : public IScheduler {
-public:
+   public:
     explicit Scheduler(const SchedulerConfigSPtr &schedulerConfig, std::shared_ptr<LatencyPredictor> predictor,
                        Role pdRole, size_t localDPRank = 0);
 
@@ -113,7 +113,7 @@ public:
 
     std::shared_ptr<StagePolicy> GetStagePolicy() override;
 
-protected:
+   protected:
     // dequeue sequence group concurrent deques into non-concurrent data structure which is only accessed by scheduling
     // thread. So scheduling policy can own this resulting data collection exclusively.
     std::shared_ptr<SeqGroupCollection> PrepCandidatesForPolicy(PDPriorityType pdPriorityType,
@@ -133,7 +133,7 @@ protected:
 
     [[nodiscard]] SchedulerKVTransferOutput ConvertToSchedulerTransferOutput(KVTransferPolicyOutput &policyOut) const;
 
-private:
+   private:
     void SetRole(Role role);
 
     void ClearSeq(SequenceId seqId);
@@ -143,13 +143,13 @@ private:
     [[nodiscard]] SequenceGroupMetaDatas GenerateSequenceGroupMetadata(const SchedulerOutputs &schedulerOut);
 
     void CollectOrAggregateComputedBlocks(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
- 	    const std::vector<SequenceSPtr> &runningSeqSPtrs, bool isSimulateSeq);
+                                          const std::vector<SequenceSPtr> &runningSeqSPtrs, bool isSimulateSeq);
 
     void CollectComputedBlocksInfo(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
-    const std::vector<SequenceSPtr> &runningSeqSPtrs);
-    
+                                   const std::vector<SequenceSPtr> &runningSeqSPtrs);
+
     void AggregateComputedBlocksInfo(std::vector<SequenceGroupMetaData> &metaList, size_t metaIndex,
-        const std::vector<SequenceSPtr> &runningSeqSPtrs);
+                                     const std::vector<SequenceSPtr> &runningSeqSPtrs);
 
     [[nodiscard]] SequenceGroupMetaDatas GenSeqGroupMetadata(const SchedulerKVTransferOutput &schedulerOut) const;
 
@@ -163,7 +163,7 @@ private:
                                                         SequenceId seqId, ForwardMode forwardMode) const;
 
     std::vector<BlockId> LwdSetSpCpParamAndReturnAllBlocks(SequenceGroupMetaData &meta, SequenceGroupSPtr seqGrpSPtr,
-                                                        SequenceId seqId, ForwardMode forwardMode) const;
+                                                           SequenceId seqId, ForwardMode forwardMode) const;
 
     std::vector<BlockIds> GetAllBlocks(SequenceGroupSPtr seqGrpSPtr, SequenceId seqId) const;
     void SetChunkedParam(SequenceSPtr seq, SequenceGroupMetaData &meta) const;
@@ -197,9 +197,11 @@ private:
 
     void ClearQueueAndSendAbortedResponse(ConcurrentDeque<SequenceGroupSPtr> &srcQueue);
 
-    template <typename T> void PopAndSave_(ConcurrentDeque<T> &src, std::unordered_set<T> &dst) const;
+    template <typename T>
+    void PopAndSave_(ConcurrentDeque<T> &src, std::unordered_set<T> &dst) const;
 
-    template <typename T> void LifeEndKVCleanup(std::unordered_set<T> &lifeEndSet);
+    template <typename T>
+    void LifeEndKVCleanup(std::unordered_set<T> &lifeEndSet);
 
     bool LifeEndedWrapup_(SequenceGroupSPtr &seqGroup);
 
@@ -232,7 +234,7 @@ private:
     ConcurrentMap<SequenceId, SequenceGroupSPtr> transferringMap_;
 
     // P节点release kv使用
-    ConcurrentDeque<SequenceId> kvCachePulledSeqIds_; // avoid concurrent to non-current copy, use concurrent directly
+    ConcurrentDeque<SequenceId> kvCachePulledSeqIds_;  // avoid concurrent to non-current copy, use concurrent directly
 
     std::shared_ptr<SchedulerConfig> schedulerConfig_;
 
@@ -244,11 +246,11 @@ private:
 
     QPSTracker qpsTracker;
 
-    BlockSpaceManagerSPtr blockManager_; // kv cache manager
+    BlockSpaceManagerSPtr blockManager_;  // kv cache manager
 
-    std::shared_ptr<Policy> prefillPolicy_; // prefill阶段的policy，当前支持fcfs
+    std::shared_ptr<Policy> prefillPolicy_;  // prefill阶段的policy，当前支持fcfs
 
-    std::shared_ptr<Policy> decodePolicy_; // decode阶段的policy，当前支持fcfs
+    std::shared_ptr<Policy> decodePolicy_;  // decode阶段的policy，当前支持fcfs
 
     std::shared_ptr<StagePolicy> stagePolicy_;
 
@@ -277,7 +279,7 @@ private:
     // Records last schedule where prefill had priority but output was empty.
     bool lastScheduleEmpty_{false};
 
-    bool serving_{false}; // 用来避免服务中切换role， 并且此标志并不真正管用。 未来会支持服务中切换role
+    bool serving_{false};  // 用来避免服务中切换role， 并且此标志并不真正管用。 未来会支持服务中切换role
 
     std::unordered_set<SequenceId> abortedSequenceIds_;
 
@@ -305,8 +307,7 @@ private:
     LayerwiseMixin layerwiseMixin_;
 };
 
-inline size_t TrailingPlaceholderTokenCount(std::vector<TokenId> &outPutTokenIds)
-{
+inline size_t TrailingPlaceholderTokenCount(std::vector<TokenId> &outPutTokenIds) {
     // 计算place holder个数
     auto rit = std::find_if_not(outPutTokenIds.rbegin(), outPutTokenIds.rend(),
                                 [](auto token) { return token == PLACEHOLDER_TOKEN; });
@@ -315,6 +316,6 @@ inline size_t TrailingPlaceholderTokenCount(std::vector<TokenId> &outPutTokenIds
     return placeholderCount;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -51,19 +51,15 @@ def _triton_rope(
         cos_row = tl.load(cos_start_ptr + rope_offs, mask=rope_mask, other=0).to(tl.float32)
         sin_row = tl.load(sin_start_ptr + rope_offs, mask=rope_mask, other=0).to(tl.float32)
         for h_start in range(0, n_qh, BLOCK_HEADS):
-
             h_offs = h_start + tl.arange(0, BLOCK_HEADS)
             h_mask = h_offs < n_qh
             head_base_offsets = h_offs[:, None] * hd
             if IS_NEOX_STYLE:
-
                 offs_1 = head_base_offsets + rope_offs[None, :]
                 offs_2 = offs_1 + half_rope_dim
             else:
-
                 offs_1 = head_base_offsets + (2 * rope_offs[None, :])
                 offs_2 = offs_1 + 1
-
 
             mask = h_mask[:, None] & rope_mask[None, :]
 
@@ -116,18 +112,18 @@ def rope_forward_triton(
 
     num_tokens, n_q_head, head_dim = q.shape
     n_kv_head = k.shape[1]
-    
+
     # Flatten cos/sin to [num_tokens, dim]
     cos = cos.view(num_tokens, -1)
     sin = sin.view(num_tokens, -1)
-    
+
     if rope_dim == -1:
         rope_dim = cos.shape[-1] * 2
 
     pad_rope_dim = triton.next_power_of_2(rope_dim)
-    
-    BLOCK_HEADS = 16 
-    
+
+    BLOCK_HEADS = 16
+
     grid = (num_tokens,)
 
     _triton_rope[grid](
@@ -147,7 +143,7 @@ def rope_forward_triton(
         pad_rope_dim=pad_rope_dim,
         BLOCK_HEADS=BLOCK_HEADS,
         IS_NEOX_STYLE=is_neox_style,
-        num_stages=1, 
+        num_stages=1,
     )
     return q, k
 

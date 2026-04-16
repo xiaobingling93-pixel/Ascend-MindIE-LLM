@@ -28,7 +28,6 @@
 
 from typing import Tuple, Type
 from dataclasses import dataclass
-import numpy as np
 import torch
 import torch_npu
 
@@ -40,7 +39,6 @@ from .abstract import AttentionBackend, AttentionImpl, AttentionLayer
 
 
 class FiaAttentionBackend(AttentionBackend):
-
     @staticmethod
     def get_name() -> str:
         return "ATTENTION_V1"
@@ -48,11 +46,11 @@ class FiaAttentionBackend(AttentionBackend):
     @staticmethod
     def get_impl_cls() -> Type["FiaAttentionBackendImpl"]:
         return FiaAttentionBackendImpl
-    
+
     @staticmethod
     def get_builder_cls():
         return FiaAttentionMetadataBuilder
-    
+
 
 @dataclass
 class FiaAttentionMetadata(AttentionMetadata):
@@ -72,8 +70,9 @@ class FiaAttentionMetadata(AttentionMetadata):
     @staticmethod
     def register_buffer(max_num_token, device, max_block_per_seq):
         input_buffer.register("seq_lens", torch.zeros(max_num_token, dtype=torch.int32, device=device))
-        input_buffer.register("block_tables", 
-                              torch.zeros((max_num_token, max_block_per_seq), dtype=torch.int32, device=device))
+        input_buffer.register(
+            "block_tables", torch.zeros((max_num_token, max_block_per_seq), dtype=torch.int32, device=device)
+        )
         input_buffer.register("slot_mapping", -torch.ones(max_num_token, dtype=torch.int32, device=device))
 
     def to_device(self, device):
@@ -89,13 +88,13 @@ class FiaAttentionMetadata(AttentionMetadata):
         input_buffer_seq_lens[:num_actual_tokens].copy_(self.seq_lens[:num_actual_tokens])
         input_buffer_seq_lens[num_actual_tokens:num_tokens].fill_(0)
         self.seq_lens = input_buffer_seq_lens[:num_tokens]
-        
+
         self.seq_lens_list = self.seq_lens_list.tolist() + [0] * (num_tokens - num_actual_tokens)
 
         max_seq_pages = (self.max_seq_len + 128 - 1) // 128
 
         input_buffer_block_tables = input_buffer.get("block_tables")
-        input_buffer_block_tables[:num_actual_tokens, :self.block_tables.shape[-1]].copy_(self.block_tables)
+        input_buffer_block_tables[:num_actual_tokens, : self.block_tables.shape[-1]].copy_(self.block_tables)
         input_buffer_block_tables[:num_tokens, max_seq_pages:].fill_(0)
         input_buffer_block_tables[num_tokens:, :].fill_(0)
         self.block_tables = input_buffer_block_tables
@@ -105,7 +104,7 @@ class FiaAttentionMetadata(AttentionMetadata):
         self.slot_mapping = input_buffer_slot_mapping[:num_tokens]
 
 
-class FiaAttentionMetadataBuilder: 
+class FiaAttentionMetadataBuilder:
     # NOTE: This class is used for building attention metadata in the future.
 
     @staticmethod
@@ -128,7 +127,6 @@ class FiaAttentionMetadataBuilder:
 
 
 class FiaAttentionBackendImpl(AttentionImpl):
-
     def __init__(
         self,
         num_heads: int,
@@ -150,7 +148,7 @@ class FiaAttentionBackendImpl(AttentionImpl):
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
         self.key_cache = None
         self.value_cache = None
-        self.block_size = 128   # NOTE: currently hard-coding.
+        self.block_size = 128  # NOTE: currently hard-coding.
         self.quant_method = quant_method
 
     def reshape_and_cache(
@@ -162,11 +160,12 @@ class FiaAttentionBackendImpl(AttentionImpl):
     ):
         if self.key_cache is None or id(self.key_cache) != id(kv_cache[0]):
             self.key_cache, self.value_cache = kv_cache[0], kv_cache[1]
-        
+
         if self.quant_method:
             shape = key.shape
-            key_int8, value_int8 = self.quant_method.apply(key.view(-1, self.head_size * self.num_kv_heads),
-                value.view(-1, self.head_size * self.num_kv_heads))
+            key_int8, value_int8 = self.quant_method.apply(
+                key.view(-1, self.head_size * self.num_kv_heads), value.view(-1, self.head_size * self.num_kv_heads)
+            )
             key_int8 = key_int8.view(shape)
             value_int8 = value_int8.view(shape)
         torch_npu._npu_reshape_and_cache(
@@ -174,7 +173,8 @@ class FiaAttentionBackendImpl(AttentionImpl):
             value=value_int8 if self.quant_method else value,
             key_cache=kv_cache[0],
             value_cache=kv_cache[1],
-            slot_indices=attn_metadata.slot_mapping)
+            slot_indices=attn_metadata.slot_mapping,
+        )
         return key, value
 
     def apply_prefill_attention(self, query, key, value, attn_metadata):
@@ -199,7 +199,7 @@ class FiaAttentionBackendImpl(AttentionImpl):
         )
         attn_output = attn_output.view(num_tokens, -1)
         return attn_output
-    
+
     def apply_decode_attention(self, query, key, value, attn_metadata):
         block_tables = attn_metadata.block_tables
         seq_lens = attn_metadata.seq_lens
@@ -229,7 +229,7 @@ class FiaAttentionBackendImpl(AttentionImpl):
         )
         attn_output = attn_output.view(batch_size, -1)
         return attn_output
-    
+
     def apply_fullgraph_attention(self, query, attn_metadata):
         block_size = self.block_size
         k_cache = self.key_cache.view(-1, block_size, self.num_kv_heads * self.head_size)
@@ -283,7 +283,7 @@ class FiaAttentionBackendImpl(AttentionImpl):
         key: torch.Tensor,
         value: torch.Tensor,
         forward_context: ForwardContext,
-        attn_metadata: AttentionMetadata
+        attn_metadata: AttentionMetadata,
     ):
         if forward_context.is_prefill:
             return self.apply_prefill_attention(query, key, value, attn_metadata)

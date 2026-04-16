@@ -9,17 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_MANAGER_H
 #define MINDIE_LLM_MANAGER_H
 
-#include <memory>
-#include <string>
 #include <map>
+#include <memory>
 #include <set>
+#include <string>
+
 #include "callback.h"
-#include "status.h"
 #include "data_type.h"
+#include "status.h"
 
 namespace mindie_llm {
 class LlmManagerImpl;
@@ -28,7 +29,7 @@ class LlmManagerImpl;
 /// This class is a manager to to support continuous batching of requests, provides basic functions such as
 /// initialize the LlmManager，get running params，shutdown the LlmManager and functions of PD Separation.
 class LlmManager {
-public:
+   public:
     /// This Constructor initializes a LlmManager object with the following parameters
     ///
     /// \param llmConfigPath The path of the LLM configuration file
@@ -80,8 +81,8 @@ public:
 
     ~LlmManager();
 
-private:
+   private:
     std::shared_ptr<LlmManagerImpl> impl_;
 };
-} // namespace mindie_llm
-#endif // MINDIE_LLM_MANAGER_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_MANAGER_H

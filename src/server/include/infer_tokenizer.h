@@ -13,22 +13,24 @@
 #ifndef IBIS_INFER_TOKENIZER_H
 #define IBIS_INFER_TOKENIZER_H
 
-#include <condition_variable>
-#include <chrono>
-#include <mutex>
 #include <pybind11/embed.h>
+#include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
-#include <pybind11/functional.h>
-#include <queue>
 #include <semaphore.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
+#include <queue>
 #include <string>
 #include <utility>
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <optional>
-#include "status.h"
+
 #include "memory_utils.h"
+#include "status.h"
 namespace mindie_llm {
 constexpr int SHARE_ERROR_INFO_SIZE = 1024;
 constexpr uint32_t MAGIC_HEAD_BEGIN = 0xFEDCBA;
@@ -55,37 +57,37 @@ struct DetokenizeExtraInfo {
 };
 
 namespace detail {
-    enum SharedTokenSemState : uint32_t {
-        E_SEM_STATE_FREE = 0,
-        E_SEM_STATE_IN_USE = 1,
-        E_SEM_STATE_PRE_FREE = 2,
-    };
-    enum SharedTokenSemStep : uint32_t {
-        E_SEM_STEP_INIT = 0,
-        E_SEM_STEP_START,
-        E_SEM_STEP_WAIT_HEAD,
-        E_SEM_STEP_WAIT_HEAD_FAIL,
-        E_SEM_STEP_WAIT_HEAD_SUCC,
+enum SharedTokenSemState : uint32_t {
+    E_SEM_STATE_FREE = 0,
+    E_SEM_STATE_IN_USE = 1,
+    E_SEM_STATE_PRE_FREE = 2,
+};
+enum SharedTokenSemStep : uint32_t {
+    E_SEM_STEP_INIT = 0,
+    E_SEM_STEP_START,
+    E_SEM_STEP_WAIT_HEAD,
+    E_SEM_STEP_WAIT_HEAD_FAIL,
+    E_SEM_STEP_WAIT_HEAD_SUCC,
 
-        E_SEM_STEP_BIND_START,
-        E_SEM_STEP_BIND_NO_IBIS,
-        E_SEM_STEP_BIND_IBIS,
-        E_SEM_STEP_BIND_NO_FUNC,
-        E_SEM_STEP_BIND_CHECK_OK,
-        E_SEM_STEP_BIND_FAIL,
-        E_SEM_STEP_BIND_SUCC,
+    E_SEM_STEP_BIND_START,
+    E_SEM_STEP_BIND_NO_IBIS,
+    E_SEM_STEP_BIND_IBIS,
+    E_SEM_STEP_BIND_NO_FUNC,
+    E_SEM_STEP_BIND_CHECK_OK,
+    E_SEM_STEP_BIND_FAIL,
+    E_SEM_STEP_BIND_SUCC,
 
-        E_SEM_STEP_START_SUCC,
-        E_SEM_STEP_RUN = 100,
-    };
-    struct SharedTokenSemaphore {
-        sem_t produce;
-        sem_t consume;
-        sem_t subInitialized;
-        SharedTokenSemState state;
-        SharedTokenSemStep step;
-    };
-}
+    E_SEM_STEP_START_SUCC,
+    E_SEM_STEP_RUN = 100,
+};
+struct SharedTokenSemaphore {
+    sem_t produce;
+    sem_t consume;
+    sem_t subInitialized;
+    SharedTokenSemState state;
+    SharedTokenSemStep step;
+};
+}  // namespace detail
 
 struct SharedMemoryHeader {
     uint32_t magic = 0;
@@ -115,38 +117,38 @@ struct SharedMemoryHeader {
 
 #pragma GCC visibility push(default)
 class InferTokenizer {
-public:
+   public:
     explicit InferTokenizer(std::shared_ptr<pybind11::object> tokenizer) : autoTokenizer(std::move(tokenizer)) {}
 
-public:
+   public:
     void EncodeToken(std::string &prompt, std::vector<int64_t> &tokenIds);
     void EncodeChatToken(std::string &prompt, std::optional<bool> enableThinking,
-        std::optional<std::string> chatTemplate, std::vector<int64_t> &tokenIds);
+                         std::optional<std::string> chatTemplate, std::vector<int64_t> &tokenIds);
     void DecodeToken(std::vector<int64_t> &tokenIds, std::string &outputText, SharedMemoryHeader *header);
     void DecodeOneToken(std::vector<int64_t> &tokenIds, std::string &outputText, SharedMemoryHeader *header);
     bool DownloadUrl(std::string &prompt, uint64_t reqId, std::string &msg);
     void DeleteMultimodalCache(uint64_t reqId);
     std::string MaskPathsInString(const std::string &input) const;
-    std::string ExtractCoreErrorMessage(const std::string& originalError);
+    std::string ExtractCoreErrorMessage(const std::string &originalError);
 
-private:
+   private:
     void ProcessTokenIds(pybind11::list &originalTokenIds, std::vector<int64_t> &tokenIds) const;
     std::shared_ptr<pybind11::object> autoTokenizer{};
 };
 #pragma GCC visibility pop
 
 class ShareTokenMemory {
-public:
+   public:
     ShareTokenMemory() = default;
-    ShareTokenMemory& operator=(const ShareTokenMemory& stm)=delete;
-    ShareTokenMemory(const ShareTokenMemory& stm)=delete;
+    ShareTokenMemory &operator=(const ShareTokenMemory &stm) = delete;
+    ShareTokenMemory(const ShareTokenMemory &stm) = delete;
     ~ShareTokenMemory();
     int Create(const std::string &name);
     uint8_t *GetBuf();
     static bool SharedMemorySizeCheck(const uint32_t &pendingMemoryAllocationSize);
     static bool SharedMemoryNameChecker(const std::string &name);
 
-private:
+   private:
     int mFd{};
     std::string mName{};
     uint32_t mCurSize{};
@@ -155,29 +157,28 @@ private:
     uint8_t *mMapBuf = nullptr;
 };
 
-
 class TokenizerProcessPool {
-public:
-    static TokenizerProcessPool &GetInstance() noexcept
-    {
+   public:
+    static TokenizerProcessPool &GetInstance() noexcept {
         static TokenizerProcessPool pool;
         return pool;
     }
 
     bool InitTokenizerPool();
     Status Encode(const std::string &prompt, std::vector<int64_t> &tokenIds, HeadFlag flag, uint64_t &timestamp,
-        std::optional<bool> enableThinking = std::nullopt, std::optional<std::string> chatTemplate = std::nullopt);
-    Status Decode(std::vector<int64_t> &tokenIds, std::string &output,
-        const uint64_t &timestamp, bool useToolsCall = false, const bool &skipSpecialTokens = true,
-        const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
+                  std::optional<bool> enableThinking = std::nullopt,
+                  std::optional<std::string> chatTemplate = std::nullopt);
+    Status Decode(std::vector<int64_t> &tokenIds, std::string &output, const uint64_t &timestamp,
+                  bool useToolsCall = false, const bool &skipSpecialTokens = true,
+                  const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
     Status DecodeOne(std::vector<int64_t> &tokenIds, std::string &output, uint32_t prevDecodeIndex,
-                        uint32_t currentDecodeIndex, const uint64_t &timestamp, const bool &useToolsCall = false,
-                        const bool &skipSpecialTokens = true, const bool requestEndFlag = false,
-                        const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
+                     uint32_t currentDecodeIndex, const uint64_t &timestamp, const bool &useToolsCall = false,
+                     const bool &skipSpecialTokens = true, const bool requestEndFlag = false,
+                     const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
     Status TikToken(const std::string &prompt, int &numTokenId, std::vector<std::string> &tokens, bool doDecode);
     void RemoveMultimodalCache(const uint64_t &timestamp);
 
-private:
+   private:
     explicit TokenizerProcessPool() = default;
     ~TokenizerProcessPool() = default;
 
@@ -186,24 +187,25 @@ private:
     bool CreateChildProcesses(std::vector<pid_t> &pids);
     bool InitProcessesV2();
     bool CreateOneChildWithRetry(std::shared_ptr<ShareTokenMemory> shm, const int idx);
-    bool CreateOneChild(std::shared_ptr<ShareTokenMemory> shm, pid_t& pid);
+    bool CreateOneChild(std::shared_ptr<ShareTokenMemory> shm, pid_t &pid);
     bool WaitOneChildPid(const pid_t pid, const int idx);
     bool WaitOneChildInit(std::shared_ptr<ShareTokenMemory> shm, const time_t waitTime);
     bool KillAndWaitChild(const pid_t pid, const int sign);
     bool InitSharedMemory(int32_t parentPid);
     bool ProcessWorker(std::shared_ptr<ShareTokenMemory> shm);
     bool InitWorkerResource(const std::shared_ptr<ShareTokenMemory> &curMemory,
-        std::shared_ptr<InferTokenizer> &tokenizer);
+                            std::shared_ptr<InferTokenizer> &tokenizer);
     pid_t GetAvailablePid();
     void ReturnPid(pid_t pid);
     bool InitSubProcessMemory(const std::shared_ptr<ShareTokenMemory> &curMemory);
     bool InitSubProcessTokenizer(const std::shared_ptr<ShareTokenMemory> &curMemory,
-        std::shared_ptr<InferTokenizer> &tokenizer);
+                                 std::shared_ptr<InferTokenizer> &tokenizer);
     Status DoDecode(std::vector<int64_t> &tokenIds, std::string &output, HeadFlag flag, uint32_t prevDecodeIndex,
-        uint32_t currentDecodeIndex, const uint64_t &timestamp, bool useToolsCall, const bool &skipSpecialTokens,
-        const bool requestEndFlag, const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
+                    uint32_t currentDecodeIndex, const uint64_t &timestamp, bool useToolsCall,
+                    const bool &skipSpecialTokens, const bool requestEndFlag,
+                    const DetokenizeExtraInfo &detokenizeStatus = DetokenizeExtraInfo{});
     static bool ProcessEncode(SharedMemoryHeader *header, const std::shared_ptr<InferTokenizer> &tokenizer,
-     HeadFlag flag);
+                              HeadFlag flag);
     static bool ProcessDecode(SharedMemoryHeader *header, const std::shared_ptr<InferTokenizer> &tokenizer);
     static bool ProcessDecodeOne(SharedMemoryHeader *header, const std::shared_ptr<InferTokenizer> &tokenizer);
     static bool ProcessStop(SharedMemoryHeader &header, const std::shared_ptr<InferTokenizer> &tokenizer);
@@ -211,7 +213,8 @@ private:
     time_t GetEncodeTimeout() const;
     Status GetPidAndMemory(pid_t &pid, std::shared_ptr<ShareTokenMemory> &memory, SharedMemoryHeader *&header);
     Status GetPidAndMemoryOnce(pid_t &pid, std::shared_ptr<ShareTokenMemory> &memory, SharedMemoryHeader *&header);
-    static bool ValidateAndConvertTokenIds(SharedMemoryHeader &header, int64_t *dataBuff, std::vector<int64_t> &tokenIds);
+    static bool ValidateAndConvertTokenIds(SharedMemoryHeader &header, int64_t *dataBuff,
+                                           std::vector<int64_t> &tokenIds);
 
     // for getting a process in multi-thread safely
     std::vector<pid_t> availablePid{};
@@ -227,6 +230,6 @@ private:
     bool trustRemoteCode_ = false;
     uint32_t tokenizerNumber_{};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // IBIS_INFER_TOKENIZER_H
+#endif  // IBIS_INFER_TOKENIZER_H

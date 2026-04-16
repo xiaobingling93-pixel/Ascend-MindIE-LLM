@@ -19,4 +19,4 @@ namespace mindie_llm {
 bool CheckJsonDepthCallback(int depth, Json::parse_event_t ev, Json& obj);
 bool CheckOrderedJsonDepthCallback(int depth, OrderedJson::parse_event_t ev, OrderedJson& obj);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -16,7 +16,6 @@
 
 #include "log.h"
 
-
 namespace mindie_llm {
 constexpr uint64_t MAX_HIT_NUM = 62;
 /*
@@ -24,8 +23,7 @@ constexpr uint64_t MAX_HIT_NUM = 62;
     This should be called every time the allocator allocates an immutable block
     Only used for PrefixCachingAllocator
 */
-void HitRateCalculator::Record(bool hit)
-{
+void HitRateCalculator::Record(bool hit) {
     if (hit) {
         hitNum_++;
     } else {
@@ -37,12 +35,11 @@ void HitRateCalculator::Record(bool hit)
 }
 
 // Calculate cache hit rate
-double HitRateCalculator::GetHitRate() const
-{
+double HitRateCalculator::GetHitRate() const {
     uint64_t totalNum = hitNum_ + missNum_;
     if (totalNum == 0) {
         return 0;
     }
     return static_cast<double>(hitNum_) / static_cast<double>(totalNum);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

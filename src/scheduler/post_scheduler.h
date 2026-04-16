@@ -32,7 +32,7 @@ struct BatchInfo {
 };
 
 class PostScheduler {
-public:
+   public:
     static void SyncBatchInfo(BatchInfo &batchInfo, size_t dpRank, bool enableDistributed);
 
     static void SyncSeqLenList(std::vector<std::vector<int64_t>> &tokenNumList, std::vector<int64_t> &batchSizeList,
@@ -42,7 +42,8 @@ public:
 
     static std::unordered_set<SequenceId> AllGatherCleanSeqIdsAcrossDPs(
         std::unordered_set<SequenceId> &curCleanSeqIdSet, size_t dpRank);
-private:
+
+   private:
     static void SyncBatchInfoAcrossDP(BatchInfo &batchInfo, size_t dpRank);
 
     static void SyncBatchInfoAcrossNodes(BatchInfo &batchInfo);
@@ -55,5 +56,5 @@ private:
 
     static void RemovePaddingData(std::vector<std::vector<int64_t>> &tokenNumList, std::vector<int64_t> batchSizeList);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

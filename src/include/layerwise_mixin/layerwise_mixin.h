@@ -15,37 +15,37 @@
 
 #include <deque>
 #include <memory>
+
 #include "basic_types.h"
-#include "sequence_group.h"
 #include "block_manager_interface.h"
 #include "policy/stage_policy/stage_policy.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 class LayerwiseMixin {
-public:
+   public:
     void LwdPrepareBatch(bool layerwiseDisaggregated, SchedulerOutputs &scheduleOut) const;
 
     void LwdEngineAddBatchCnt(bool layerwiseDisaggregated, std::shared_ptr<StagePolicy> stagePolicy,
-        SchedulerOutputs &scheduleOut) const;
+                              SchedulerOutputs &scheduleOut) const;
 
-    void LwdComputeArrTimeGap(bool layerwiseDisaggregated, SequenceGroupSPtr &seqGroup,
-        SequenceGroupSPtr lastSeqGroup);
+    void LwdComputeArrTimeGap(bool layerwiseDisaggregated, SequenceGroupSPtr &seqGroup, SequenceGroupSPtr lastSeqGroup);
 
     void LwdSetRecomputeArrTime(bool layerwiseDisaggregated, SequenceGroupSPtr &seqGroup,
-        SequenceGroupSPtr lastSeqGroup);
+                                SequenceGroupSPtr lastSeqGroup);
 
     bool LwdProcessResponse(bool layerwiseDisaggregated, SequenceGroupSPtr seqGroup, ForwardMode &lastForwardMode,
-        ForwardMode lwdCurrBatchType, std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const;
+                            ForwardMode lwdCurrBatchType, std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const;
     void LwdProcessRecomputeSeq(bool layerwiseNeedUpdate, ForwardMode lastForwardMode,
-                                   const std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const;
+                                const std::deque<SequenceGroupSPtr> &recomputeInDBatchQueue) const;
     void LwdHandlerSubBatchCnt(bool layerwiseNeedUpdate, std::shared_ptr<StagePolicy> stagePolicy,
-        ForwardMode lastForwardMode) const;
+                               ForwardMode lastForwardMode) const;
 
     void LwdWaitingResponse(PDPriorityType pdPriorityType, std::shared_ptr<StagePolicy> stagePolicy);
 
-private:
+   private:
     std::chrono::time_point<std::chrono::high_resolution_clock> lastArriveTime_;
 };
-}
+}  // namespace mindie_llm
 
 #endif

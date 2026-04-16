@@ -15,16 +15,17 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
+#include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 /**
  * @brief Triton text 格式的推理请求处理类
  */
 class SingleReqSelfDevelopInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqSelfDevelopInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                                 bool isReCompute = false,
                                                 const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
@@ -32,17 +33,19 @@ public:
                            RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
     void SetDMIReComputeBuilder() override;
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
-protected:
+
+   protected:
     bool ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp) override;
     void SendStreamResponse(RespBodyQueue &jsonStrings) override;
     bool CheckTextInput(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp);
     bool CheckTokenInput(nlohmann::ordered_json &body, std::string &msg);
-private:
+
+   private:
     std::string ChangeUtf8Str(std::string &input) const;
     bool EncodeSelfDevelopResponse(RespBodyQueue &jsonStrs);
     bool EncodeSelfDevelopStreamResponse(RespBodyQueue &jsonStrings) noexcept;
-    std::string BuildSelfDevelopReComputeBody(const std::vector<BestNTokens>& tokens);
+    std::string BuildSelfDevelopReComputeBody(const std::vector<BestNTokens> &tokens);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // ENDPOINT_SELF_DEVELOP_INFER_H

@@ -13,29 +13,29 @@
 #ifndef PREFILL_WRAPPER_H
 #define PREFILL_WRAPPER_H
 
-#include <vector>
 #include <limits>
 #include <shared_mutex>
+#include <vector>
 
-#include "http_rest_resource.h"
-#include "grpc_communication_mng.h"
-#include "single_llm_req_handler_base.h"
 #include "endpoint_def.h"
-#include "request_response/response.h"
+#include "grpc_communication_mng.h"
+#include "http_rest_resource.h"
 #include "infer_param.h"
+#include "request_response/response.h"
+#include "single_llm_req_handler_base.h"
 
 namespace mindie_llm {
 class SingleLLMPrefillReqHandler : public SingleLLMReqHandlerBase,
                                    public std::enable_shared_from_this<SingleLLMPrefillReqHandler> {
-public:
+   public:
     SingleLLMPrefillReqHandler(ReqCtxPtr& ctx, uint16_t msgType, bool isRecompute);
     ~SingleLLMPrefillReqHandler() override = default;
-    void Process(RequestSPtr request, const std::string &requestId, const uint64_t &timestamp) override;
+    void Process(RequestSPtr request, const std::string& requestId, const uint64_t& timestamp) override;
     bool GetContextJsonBody(nlohmann::ordered_json& body) override;
     bool GetContextRequestId(std::string& requestId) override;
-    void UpdateInferRequest(const std::vector<int64_t> &reqTokens,
-                            const int64_t &tokenLen, RequestSPtr request) override;
-    void UpdateInferParam(RequestSPtr request, const InferParamSPtr &inferParam) override;
+    void UpdateInferRequest(const std::vector<int64_t>& reqTokens, const int64_t& tokenLen,
+                            RequestSPtr request) override;
+    void UpdateInferParam(RequestSPtr request, const InferParamSPtr& inferParam) override;
     void SetBackManagerCallBack(RequestSPtr request) override;
     void SendResponseInfo(int code, const std::string& responseStr, bool needMetricsCollect = true) override;
     void SendResponse(int code, const std::string& responseStr) override;
@@ -47,11 +47,12 @@ public:
     void BuildInferParameters(prefillAndDecodeCommunication::DecodeParameters& params);
     void BuildMetricsParameters(prefillAndDecodeCommunication::DecodeParameters& params);
     bool GenerateFirstToken(ResponseSPtr response, bool expect);
-private:
-    std::vector<int64_t> inputTokens_; // reqTokens
+
+   private:
+    std::vector<int64_t> inputTokens_;  // reqTokens
     size_t oriReqTokenLen = std::numeric_limits<size_t>::max();
     std::vector<int64_t> respTokens_;
-    bool AtomicReadWriteFinish(bool &expect);
+    bool AtomicReadWriteFinish(bool& expect);
     void GetPNodeAddr(bool containPort);
     void GetSingleLLMPrefillReqHandlerId();
     void ProcessResponseStream(bool isEnd);
@@ -63,14 +64,14 @@ private:
     std::string prefillNodeAddr_;
     // pInstanceId_ will be updated by GetSingleLLMPrefillReqHandlerId
     uint32_t pInstanceId_{0};
-    uint16_t msgType_{ MSG_TYPE_INVALID };
+    uint16_t msgType_{MSG_TYPE_INVALID};
     RespBodyQueue respStr_;
     // 多个response并发call back使用;
     std::shared_mutex prefillCbMutex;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // PREFILL_WRAPPER_H
+#endif  // PREFILL_WRAPPER_H
 
 // P节点的通信包含：
 // 1. 与Coordinator节点通过context进行通信

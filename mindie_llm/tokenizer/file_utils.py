@@ -24,17 +24,18 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 MAX_LINENUM_PER_FILE = 10 * 1024 * 1024
 
 FLAG_OS_MAP = {
-    'r': os.O_RDONLY, 'r+': os.O_RDWR,
-    'w': os.O_CREAT | os.O_TRUNC | os.O_WRONLY,
-    'w+': os.O_CREAT | os.O_TRUNC | os.O_RDWR,
-    'a': os.O_CREAT | os.O_APPEND | os.O_WRONLY,
-    'a+': os.O_CREAT | os.O_APPEND | os.O_RDWR,
-    'x': os.O_CREAT | os.O_EXCL,
-    "b": getattr(os, "O_BINARY", 0)
+    "r": os.O_RDONLY,
+    "r+": os.O_RDWR,
+    "w": os.O_CREAT | os.O_TRUNC | os.O_WRONLY,
+    "w+": os.O_CREAT | os.O_TRUNC | os.O_RDWR,
+    "a": os.O_CREAT | os.O_APPEND | os.O_WRONLY,
+    "a+": os.O_CREAT | os.O_APPEND | os.O_RDWR,
+    "x": os.O_CREAT | os.O_EXCL,
+    "b": getattr(os, "O_BINARY", 0),
 }
 
 
-def safe_open(file_path: str, mode='r', encoding=None, permission_mode=0o600, is_exist_ok=True, **kwargs):
+def safe_open(file_path: str, mode="r", encoding=None, permission_mode=0o600, is_exist_ok=True, **kwargs):
     """
     :param file_path: 文件路径
     :param mode: 文件打开模式
@@ -47,9 +48,9 @@ def safe_open(file_path: str, mode='r', encoding=None, permission_mode=0o600, is
     :param kwargs:
     :return:
     """
-    max_path_length = kwargs.get('max_path_length', MAX_PATH_LENGTH)
-    max_file_size = kwargs.get('max_file_size', MAX_FILE_SIZE)
-    check_link = kwargs.get('check_link', True)
+    max_path_length = kwargs.get("max_path_length", MAX_PATH_LENGTH)
+    max_file_size = kwargs.get("max_file_size", MAX_FILE_SIZE)
+    check_link = kwargs.get("check_link", True)
 
     file_path = standardize_path(file_path, max_path_length, check_link)
     check_file_safety(file_path, mode, is_exist_ok, max_file_size)
@@ -63,8 +64,7 @@ def safe_open(file_path: str, mode='r', encoding=None, permission_mode=0o600, is
     flags = [FLAG_OS_MAP.get(mode, os.O_RDONLY) for mode in flags]
     total_flag = reduce(lambda a, b: a | b, flags)
 
-    return os.fdopen(os.open(file_path, total_flag, permission_mode),
-                     mode, encoding=encoding)
+    return os.fdopen(os.open(file_path, total_flag, permission_mode), mode, encoding=encoding)
 
 
 def standardize_path(path: str, max_path_length=MAX_PATH_LENGTH, check_link=True):
@@ -145,8 +145,10 @@ def check_access_rights(file_path: str, mode=0o750):
         cur_perm = (current_permissions >> (i * 3)) & 0o7
         max_perm = (required_permissions >> (i * 3)) & 0o7
         if (cur_perm | max_perm) != max_perm:
-            err_msg = f"File: {file_path} Check {['Other group', 'Owner group', 'Owner'][i]} failed: " \
-                        f"Current permission is {cur_perm}, but required permission is {max_perm}. "
+            err_msg = (
+                f"File: {file_path} Check {['Other group', 'Owner group', 'Owner'][i]} failed: "
+                f"Current permission is {cur_perm}, but required permission is {max_perm}. "
+            )
             raise argparse.ArgumentTypeError(err_msg)
 
 
@@ -155,14 +157,14 @@ def check_path_permission(file_path: str, mode=0o750):
     check_access_rights(file_path, mode)
 
 
-def check_file_safety(file_path: str, mode='r', is_exist_ok=True, max_file_size=MAX_FILE_SIZE):
+def check_file_safety(file_path: str, mode="r", is_exist_ok=True, max_file_size=MAX_FILE_SIZE):
     if is_path_exists(file_path):
         if not is_exist_ok:
             raise argparse.ArgumentTypeError("The file already exists.")
         check_file_size_lt(file_path, max_file_size)
         file_dir = file_path
     else:
-        if mode == 'r' or mode == 'r+':
+        if mode == "r" or mode == "r+":
             raise argparse.ArgumentTypeError("The file doesn't exist.")
         file_dir = os.path.dirname(file_path)
 
@@ -183,8 +185,7 @@ def has_owner_write_permission(file_path: str):
 def safe_readlines(file_obj, max_line_num=MAX_LINENUM_PER_FILE):
     lines = file_obj.readlines()
     if len(lines) > max_line_num:
-        raise argparse.ArgumentTypeError(f"The file line num is {len(lines)}, "
-                                         f"which exceeds the limit {max_line_num}.")
+        raise argparse.ArgumentTypeError(f"The file line num is {len(lines)}, which exceeds the limit {max_line_num}.")
     return lines
 
 
@@ -212,14 +213,14 @@ def parse_log_env(key: str, default_val: str):
     if len(env_str) == 0:
         return default_val
 
-    env_list = env_str.split(';')
+    env_list = env_str.split(";")
     modules = {}
     for s in env_list:
         s = s.strip()
-        if ':' not in s and len(s) > 0:
+        if ":" not in s and len(s) > 0:
             modules[LOG_MOD_ALL] = s
             continue
-        pair = s.split(':')
+        pair = s.split(":")
         if len(pair) != 2:
             continue
         k = pair[0].strip()
@@ -237,14 +238,14 @@ def parse_log_env(key: str, default_val: str):
 
 def parse_log_path():
     now = datetime.now(timezone.utc)
-    now_str = now.strftime('%Y%m%d%H%S%f')[:-3]
+    now_str = now.strftime("%Y%m%d%H%S%f")[:-3]
     file_name = f"mindie-llm-tokenizer_{os.getpid()}_{now_str}.log"
 
     log_base_path = LOG_PATH_BASE
     path_str = parse_log_env(LOG_PATH_ENV, "")
     if len(path_str) == 0:
         dir_path = os.path.join(log_base_path, LOG_PATH_LAST)
-    elif path_str.startswith('/') or path_str.startswith('~'):
+    elif path_str.startswith("/") or path_str.startswith("~"):
         dir_path = os.path.join(path_str, LOG_PATH_MID, LOG_PATH_LAST)
     else:
         dir_path = os.path.join(log_base_path, path_str, LOG_PATH_LAST)
@@ -263,8 +264,13 @@ def parse_log_path():
 
 def parse_log_level():
     lvl_str = parse_log_env(LOG_LVL_ENV, LOG_LVL_INFO)
-    lvl_map = {"critical": logging.CRITICAL, "error": logging.ERROR, "warn": logging.WARN, LOG_LVL_INFO: logging.INFO,
-               "debug": logging.DEBUG}
+    lvl_map = {
+        "critical": logging.CRITICAL,
+        "error": logging.ERROR,
+        "warn": logging.WARN,
+        LOG_LVL_INFO: logging.INFO,
+        "debug": logging.DEBUG,
+    }
     if lvl_str in lvl_map:
         return lvl_map[lvl_str]
     else:
@@ -280,8 +286,10 @@ def get_tokenizer_logger():
     try:
         log_lvl = parse_log_level()
         logger.setLevel(log_lvl)
-        formatter = logging.Formatter('[%(asctime)s] [%(process)d] [%(thread)d] [tokenizer] [%(levelname)s] '
-            '[%(filename)s-%(lineno)d] : %(message)s')
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(process)d] [%(thread)d] [tokenizer] [%(levelname)s] "
+            "[%(filename)s-%(lineno)d] : %(message)s"
+        )
 
         console_hd = logging.StreamHandler()
         console_hd.setLevel(log_lvl)

@@ -16,11 +16,12 @@
 #include <cstdint>
 #include <optional>
 #include <sstream>
+
+#include "base64_util.h"
+#include "endpoint_def.h"
+#include "http_rest_resource.h"
 #include "httplib.h"
 #include "nlohmann/json.hpp"
-#include "http_rest_resource.h"
-#include "endpoint_def.h"
-#include "base64_util.h"
 
 namespace mindie_llm {
 struct InferParam {
@@ -37,8 +38,8 @@ struct InferParam {
     std::optional<std::string> toolCallsJson;
 
     bool streamMode = false;
-    int32_t maxNewTokens = MAX_NEW_TOKENS_DFT; // The number of tokens remaining for inference
-    size_t outputLenOffset = 0; // D节点或重计算场景，maxNewTokens需要减去已输出的token数
+    int32_t maxNewTokens = MAX_NEW_TOKENS_DFT;  // The number of tokens remaining for inference
+    size_t outputLenOffset = 0;  // D节点或重计算场景，maxNewTokens需要减去已输出的token数
 
     // Defaults to true because non-vLLM/OpenAI interfaces handle max_new_tokens by default.
     // Only vLLM and OpenAI interfaces need to decide between user input or config parameters.
@@ -59,12 +60,12 @@ struct InferParam {
     bool isChatReq = false;
     std::string adapterId;
     std::string model_;
-    std::vector<std::string> outputNames; // triton token
+    std::vector<std::string> outputNames;  // triton token
     std::map<uint64_t, uint32_t> prevDecodeIndex{};
     std::map<uint64_t, uint32_t> currentDecodeIndex{};
     size_t preOutputTokenNum = 0;
-    std::map<uint64_t, std::string> postSingleText{}; // text produced in current round
-    std::map<uint64_t, std::string> respStreamStr{}; // accumulated text produced for current request
+    std::map<uint64_t, std::string> postSingleText{};  // text produced in current round
+    std::map<uint64_t, std::string> respStreamStr{};   // accumulated text produced for current request
     Metrics metrics;
 
     struct FeatureSupport {
@@ -100,8 +101,7 @@ struct InferParam {
         float reqTemperature = 0.0f;
         bool reqStructuredOutput = false;
 
-        std::string ToString() const
-        {
+        std::string ToString() const {
             std::ostringstream oss;
             oss << "ValidationContext {\n";
             oss << "  endpoint: {\n";
@@ -135,10 +135,11 @@ struct InferParam {
     // 统一能力校验：根据端点能力、服务能力、请求参数/运行形态，拦截不支持的组合
     // 返回true表示通过；返回false并在error中携带原因。
     bool ValidateFeatureCompatibility(const ValidationContext &ctx, std::string &error,
-        bool dmiSupportStopWords = false) const noexcept;
-private:
+                                      bool dmiSupportStopWords = false) const noexcept;
+
+   private:
     bool ValidateFeatureDmi(const ValidationContext &ctx, std::string &error,
-        bool dmiSupportStopWords = false) const noexcept;
+                            bool dmiSupportStopWords = false) const noexcept;
     bool ValidateFeatureBeamSearch(const ValidationContext &ctx, std::string &error) const noexcept;
     bool ValidateFeatureBeamSearchEnable(const ValidationContext &ctx, std::string &error) const noexcept;
     bool ValidateFeatureOverlay(const ValidationContext &ctx, std::string &error) const noexcept;
@@ -191,6 +192,6 @@ bool AssignStream(const OrderedJson &jsonObj, InferParamSPtr inferParam, std::st
 bool CheckMultimodalUrlFromJson(const OrderedJson &jsonObj, std::string &error) noexcept;
 bool AssignLoraId(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &modelName, std::string &error);
 bool AssignResponseFormat(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::string &error) noexcept;
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // ENDPOINT_INFER_PARAM_H
+#endif  // ENDPOINT_INFER_PARAM_H

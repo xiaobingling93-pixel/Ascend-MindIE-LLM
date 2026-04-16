@@ -10,17 +10,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <openssl/evp.h>
+#include "base64_util.h"
+
 #include <openssl/buffer.h>
+#include <openssl/evp.h>
+
 #include "endpoint_def.h"
 #include "log.h"
-#include "base64_util.h"
 
 namespace mindie_llm {
 const uint32_t MAX_BUFFER_SIZE = 1024;
 
-std::string Base64Util::Encode(const std::string &input)
-{
+std::string Base64Util::Encode(const std::string &input) {
     try {
         BIO *b64 = nullptr;
         BIO *bio = nullptr;
@@ -29,37 +30,42 @@ std::string Base64Util::Encode(const std::string &input)
 
         b64 = BIO_new(BIO_f_base64());
         if (b64 == nullptr) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-                ENCODE_DECODE_ERROR), "Base64 encode failed.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                       "Base64 encode failed.");
             return "";
         }
         bio = BIO_new(BIO_s_mem());
         if (bio == nullptr) {
             CleanBio(b64);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-                ENCODE_DECODE_ERROR), "Base64 encode failed.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                       "Base64 encode failed.");
             return "";
         }
         bio = BIO_push(b64, bio);
         long ret = BIO_write(bio, input.data(), input.size());
         if (ret < 0) {
             CleanBio(bio);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-                ENCODE_DECODE_ERROR), "Base64 encode failed.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                       "Base64 encode failed.");
             return "";
         }
         ret = BIO_flush(bio);
         if (ret <= 0) {
             CleanBio(bio);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-                ENCODE_DECODE_ERROR), "Base64 encode failed.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                       "Base64 encode failed.");
             return "";
         }
         ret = BIO_get_mem_ptr(bio, &bptr);
         if (ret <= 0) {
             CleanBio(bio);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-                ENCODE_DECODE_ERROR), "Base64 encode failed.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                       "Base64 encode failed.");
             return "";
         }
 
@@ -68,15 +74,15 @@ std::string Base64Util::Encode(const std::string &input)
         BIO_free_all(bio);
 
         return encoded;
-    } catch(...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST,
-            ENCODE_DECODE_ERROR), "Base64 encode failed: " << input);
+    } catch (...) {
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, ENCODE_DECODE_ERROR),
+                   "Base64 encode failed: " << input);
     }
     return "";
 }
 
-void Base64Util::CleanBio(BIO *bio)
-{
+void Base64Util::CleanBio(BIO *bio) {
     if (bio != nullptr) {
         // 获取bio中的数据和长度
         char *data = nullptr;
@@ -87,4 +93,4 @@ void Base64Util::CleanBio(BIO *bio)
         BIO_free_all(bio);
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

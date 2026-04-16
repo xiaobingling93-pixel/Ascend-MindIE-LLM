@@ -13,12 +13,12 @@
 #ifndef LORAOPS_MIXIN_H
 #define LORAOPS_MIXIN_H
 
-#include "llm_manager_v2/llm_manager_v2.h"
 #include "config/config_info.h"
+#include "llm_manager_v2/llm_manager_v2.h"
 
 namespace mindie_llm {
 class LoraOpsMixin {
-public:
+   public:
     virtual Status LoraLoad(const std::vector<LoraParamSPtr> &loraInfo, size_t dpSize);
 
     virtual Status LoraUnLoad(const std::vector<LoraParamSPtr> &loraInfo, size_t dpSize);
@@ -27,6 +27,6 @@ public:
 
     virtual void InitStaticLoras(const std::vector<ModelParam> &modelParamVec, size_t dpSize);
 };
-}
+}  // namespace mindie_llm
 
 #endif

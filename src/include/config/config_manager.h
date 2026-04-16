@@ -9,21 +9,21 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 
 #include <memory>
 #include <mutex>
+
 #include "config_info.h"
 #include "log_config.h"
-
 #include "nlohmann/json.hpp"
 
 namespace mindie_llm {
 
 class ConfigManager {
-public:
+   public:
     ConfigManager() = delete;
     ConfigManager(const ConfigManager &) = delete;
     ConfigManager &operator=(const ConfigManager &) = delete;
@@ -55,11 +55,11 @@ public:
     bool IsLwdMultiNodesEnable() const;
     std::string GetLwdRoleType() const;
 
-private:
+   private:
     explicit ConfigManager(const std::string &jsonPath);
-    ~ConfigManager();            // 无需手动管理，智能指针会自动释放
-    class Impl;                  // 前向声明实现类
-    std::unique_ptr<Impl> impl_; // PImpl 指针
+    ~ConfigManager();             // 无需手动管理，智能指针会自动释放
+    class Impl;                   // 前向声明实现类
+    std::unique_ptr<Impl> impl_;  // PImpl 指针
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

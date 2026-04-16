@@ -22,11 +22,12 @@ from mindie_llm.runtime.model_runner.forward_metadata.module_metadata import Mod
 @dataclass
 class DPMetadata(ModuleMetadata):
     """Metadata for data parallel operations.
-    
+
     Attributes:
         num_tokens_across_dp_cpu: Number of tokens across data parallel groups (CPU tensor).
         num_actual_tokens_across_dp_cpu: Actual number of tokens across data parallel groups (CPU tensor).
     """
+
     num_tokens_across_dp_cpu: torch.Tensor
     num_actual_tokens_across_dp_cpu: torch.Tensor
     max_tokens_across_dp_cpu: int
@@ -38,9 +39,11 @@ class DPMetadata(ModuleMetadata):
         """
         num_token_cur_dp = self.num_tokens_across_dp_cpu
         dp_para_info = get_parallel_info_manager().get(ParallelType.ATTN_DP)
-        num_token_tensor = torch.tensor([
-                num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)
-            ], dtype=torch.int32, device="cpu")
+        num_token_tensor = torch.tensor(
+            [num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)],
+            dtype=torch.int32,
+            device="cpu",
+        )
         if dp_para_info.is_enabled():
             torch_dist.all_reduce(num_token_tensor, group=dp_para_info.cpu_process_group)
         self.num_tokens_across_dp_cpu = num_token_tensor
@@ -48,12 +51,12 @@ class DPMetadata(ModuleMetadata):
         self.num_actual_tokens_across_dp_cpu = self.num_tokens_across_dp_cpu
 
     @staticmethod
-    def from_model_input(model_input: Any) -> 'DPMetadata':
+    def from_model_input(model_input: Any) -> "DPMetadata":
         """Create DP metadata from model input.
-        
+
         Args:
             model_input: Model input data.
-            
+
         Returns:
             Created DP metadata instance.
         """
@@ -61,13 +64,13 @@ class DPMetadata(ModuleMetadata):
         return DPMetadata(
             num_tokens_across_dp_cpu=num_actual_tokens,
             num_actual_tokens_across_dp_cpu=num_actual_tokens,
-            max_tokens_across_dp_cpu=0
+            max_tokens_across_dp_cpu=0,
         )
 
     @staticmethod
     def is_enabled() -> bool:
         """Check if data parallel is enabled.
-        
+
         Returns:
             True if data parallel is enabled, False otherwise.
         """
@@ -76,7 +79,7 @@ class DPMetadata(ModuleMetadata):
     @staticmethod
     def register_buffer(max_num_token: int, device: torch.device) -> None:
         """Register buffer for DP metadata.
-        
+
         Args:
             max_num_token: Maximum number of tokens.
             device: Target device.
@@ -85,7 +88,7 @@ class DPMetadata(ModuleMetadata):
 
     def to_device(self, device: torch.device) -> None:
         """Move DP metadata tensors to the specified device.
-        
+
         Args:
             device: Target device.
         """
@@ -93,10 +96,11 @@ class DPMetadata(ModuleMetadata):
 
     def copy(self, num_actual_tokens: int, num_tokens: int) -> None:
         """Copy DP metadata with new token counts.
-        
+
         Args:
             num_actual_tokens: Actual number of tokens.
             num_tokens: Total number of tokens (including padding).
         """
         self.num_tokens_across_dp_cpu = torch.tensor(
-            [num_tokens] * get_parallel_info_manager().get(ParallelType.ATTN_DP).group_size)
+            [num_tokens] * get_parallel_info_manager().get(ParallelType.ATTN_DP).group_size
+        )

@@ -20,13 +20,17 @@ from ....runtime.model_runner.model_runner import ModelRunner
 
 
 class AclGraphModelWrapper(ModelWrapper):
-    def __init__(self,
-                 rank, local_rank, world_size, npu_device_id,
-                 model_id: str,
-                 **kwargs,
-                 ):
+    def __init__(
+        self,
+        rank,
+        local_rank,
+        world_size,
+        npu_device_id,
+        model_id: str,
+        **kwargs,
+    ):
         self.model_id = model_id
-        self.model_name = kwargs.get('model_name')
+        self.model_name = kwargs.get("model_name")
 
         self.model_runner = ModelRunner(
             model_name_or_path=model_id,
@@ -34,25 +38,25 @@ class AclGraphModelWrapper(ModelWrapper):
             local_rank=local_rank,
             npu_id=npu_device_id,
             world_size=world_size,
-            trust_remote_code=kwargs.get('trust_remote_code', False),
-            load_tokenizer=kwargs.get('load_tokenizer', True),
-            tokenizer_path=kwargs.get('tokenizer_path', None),
+            trust_remote_code=kwargs.get("trust_remote_code", False),
+            load_tokenizer=kwargs.get("load_tokenizer", True),
+            tokenizer_path=kwargs.get("tokenizer_path", None),
             inference_mode=kwargs.get("inference_mode", None),
             max_position_embeddings=kwargs.get("max_position_embeddings", None),
-            plugin_params=kwargs.get('plugin_params', None),
-            num_speculative_tokens=kwargs.get('num_speculative_tokens', None),
+            plugin_params=kwargs.get("plugin_params", None),
+            num_speculative_tokens=kwargs.get("num_speculative_tokens", None),
             distributed_enable=kwargs.get("distributed_enable", False),
             max_batch_size=kwargs.get("max_batch_size", -1),
             models_dict=kwargs.get("models", None),
-            model_role=kwargs.get('role', 'standard'),
-            tp=kwargs.get('tp', -1),
-            dp=kwargs.get('dp', -1),
-            cp=kwargs.get('cp', -1),
-            sp=kwargs.get('sp', -1),
-            moe_tp=kwargs.get('moe_tp', -1),
-            moe_ep=kwargs.get('moe_ep', -1),
+            model_role=kwargs.get("role", "standard"),
+            tp=kwargs.get("tp", -1),
+            dp=kwargs.get("dp", -1),
+            cp=kwargs.get("cp", -1),
+            sp=kwargs.get("sp", -1),
+            moe_tp=kwargs.get("moe_tp", -1),
+            moe_ep=kwargs.get("moe_ep", -1),
             max_seq_len=kwargs.get("max_seq_len", -1),
-            block_size=kwargs.get("block_size", -1)
+            block_size=kwargs.get("block_size", -1),
         )
         self.config = self.model_runner.config
         self.config_dict = self.model_runner.config_dict
@@ -64,8 +68,10 @@ class AclGraphModelWrapper(ModelWrapper):
         self.sp_size = self.mapping.attn_inner_sp.group_size
         self.cp_size = self.mapping.attn_cp.group_size
 
-        logger.debug(f"Enter ATBModelWrapper initialization. The current rank is {self.rank}. "
-                     f"The size of process group is {self.process_group.size()}.")
+        logger.debug(
+            f"Enter ATBModelWrapper initialization. The current rank is {self.rank}. "
+            f"The size of process group is {self.process_group.size()}."
+        )
         self.device = self.model_runner.device
 
         logger.debug(f"[Config]\t>>> rank:{self.rank} load weight start...")
@@ -77,18 +83,20 @@ class AclGraphModelWrapper(ModelWrapper):
         logger.debug(f"[Config]\t>>> rank:{self.rank} load weight finish")
 
         enable_nz = self.model_runner.enable_nz
-        self.model_info = ModelInfo(self.model_runner.device,
-                                    self.model_runner.kv_cache_dtype,
-                                    torch.tensor([], dtype=self.model_runner.kv_cache_dtype).element_size(),
-                                    self.model_runner.num_layers,
-                                    self.model_runner.num_kv_heads,
-                                    self.model_runner.head_size,
-                                    k_head_size=self.model_runner.k_head_size,
-                                    v_head_size=self.model_runner.v_head_size,
-                                    enable_nz=enable_nz,
-                                    kvcache_quant_layers=self.model_runner.kvcache_quant_layers,
-                                    index_head_dim=self.model_runner.index_head_dim,
-                                    num_index_heads=self.model_runner.num_index_heads)
+        self.model_info = ModelInfo(
+            self.model_runner.device,
+            self.model_runner.kv_cache_dtype,
+            torch.tensor([], dtype=self.model_runner.kv_cache_dtype).element_size(),
+            self.model_runner.num_layers,
+            self.model_runner.num_kv_heads,
+            self.model_runner.head_size,
+            k_head_size=self.model_runner.k_head_size,
+            v_head_size=self.model_runner.v_head_size,
+            enable_nz=enable_nz,
+            kvcache_quant_layers=self.model_runner.kvcache_quant_layers,
+            index_head_dim=self.model_runner.index_head_dim,
+            num_index_heads=self.model_runner.num_index_heads,
+        )
         self.max_position_embeddings = self.model_runner.max_position_embeddings
         self.soc_info = self.model_runner.soc_info
         self.adapter_manager = self.model_runner.adapter_manager
@@ -128,9 +136,11 @@ class AclGraphModelWrapper(ModelWrapper):
         block_tables = torch.tensor(model_inputs.block_tables, dtype=torch.int32).to(self.device)
         slots = torch.tensor(model_inputs.slots).to(self.device)
         input_lengths = torch.tensor(model_inputs.context_length).to(self.device)
-        lm_head_indices = torch.tensor(
-            model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device) \
-            if model_inputs.prefill_head_indices is not None else None
+        lm_head_indices = (
+            torch.tensor(model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device)
+            if model_inputs.prefill_head_indices is not None
+            else None
+        )
 
         token_size_per_dp_group = kwargs.get("token_size_per_dp_group")
         if token_size_per_dp_group is not None:
@@ -159,20 +169,22 @@ class AclGraphModelWrapper(ModelWrapper):
         max_dp_batch_size = kwargs.get("max_dp_batch_size")
         if max_dp_batch_size is not None:
             kwargs["max_dp_batch_size"] = torch.tensor(max_dp_batch_size).to(self.device)
-        mtp_logits_gather_indices = kwargs.get('mtp_logits_gather_indices', None)
+        mtp_logits_gather_indices = kwargs.get("mtp_logits_gather_indices", None)
         if mtp_logits_gather_indices is not None:
             kwargs["mtp_logits_gather_indices"] = torch.tensor(mtp_logits_gather_indices).to(self.device)
 
         if model_inputs.sp_computed_slots_padding_idx is not None:
-            kwargs["sp_computed_slots_padding_idx"] = \
-                torch.tensor(model_inputs.sp_computed_slots_padding_idx).to(self.device)
+            kwargs["sp_computed_slots_padding_idx"] = torch.tensor(model_inputs.sp_computed_slots_padding_idx).to(
+                self.device
+            )
         if model_inputs.sp_computed_slots_order is not None:
             kwargs["sp_computed_slots_order"] = torch.tensor(model_inputs.sp_computed_slots_order).to(self.device)
         if model_inputs.all_rank_prefix_lens is not None:
             kwargs["all_rank_prefix_lens"] = model_inputs.all_rank_prefix_lens.tolist()
         if model_inputs.per_rank_prefix_lens is not None:
-            kwargs["per_rank_prefix_lens"] = \
-                torch.tensor(model_inputs.per_rank_prefix_lens, dtype=torch.int32).to(self.device)
+            kwargs["per_rank_prefix_lens"] = torch.tensor(model_inputs.per_rank_prefix_lens, dtype=torch.int32).to(
+                self.device
+            )
 
         sub_model_inputs = kwargs.get("sub_model_inputs")
         if sub_model_inputs is not None:
@@ -180,9 +192,11 @@ class AclGraphModelWrapper(ModelWrapper):
             sub_position_ids = torch.tensor(sub_model_inputs.position_ids, dtype=torch.int64).to(self.device)
             sub_slots = torch.tensor(sub_model_inputs.slots).to(self.device)
             sub_input_lengths = torch.tensor(sub_model_inputs.context_length).to(self.device)
-            sub_lm_head_indices = torch.tensor(
-                sub_model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device) \
-                if sub_model_inputs.prefill_head_indices is not None else None
+            sub_lm_head_indices = (
+                torch.tensor(sub_model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device)
+                if sub_model_inputs.prefill_head_indices is not None
+                else None
+            )
             sub_block_tables = torch.tensor(sub_model_inputs.block_tables, dtype=torch.int32).to(self.device)
             sub_model_inputs.input_ids = sub_input_ids
             sub_model_inputs.position_ids = sub_position_ids
@@ -225,18 +239,20 @@ class AclGraphModelWrapper(ModelWrapper):
         return result
 
     def forward_tensor(
-            self,
-            input_ids: torch.Tensor,
-            position_ids: torch.Tensor,
-            is_prefill: bool,
-            kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
-            block_tables: torch.Tensor,
-            slots: torch.Tensor,
-            input_lengths: torch.Tensor,
-            max_seq_len: int,
-            lm_head_indices: Optional[torch.Tensor] = None,
-            **kwargs):
+        self,
+        input_ids: torch.Tensor,
+        position_ids: torch.Tensor,
+        is_prefill: bool,
+        kv_cache: List[Tuple[torch.Tensor, torch.Tensor]],
+        block_tables: torch.Tensor,
+        slots: torch.Tensor,
+        input_lengths: torch.Tensor,
+        max_seq_len: int,
+        lm_head_indices: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
         from mindie_llm.utils.prof.profiler import span_start, span_end, span_attr, tensor_attr, Level
+
         prof = span_start(name="forward_tensor", level=Level.DETAILED)
         prof = span_attr(prof, "input_ids", lambda: tensor_attr(input_ids, False))
         prof = span_attr(prof, "position_ids", lambda: tensor_attr(position_ids, False))
@@ -245,8 +261,9 @@ class AclGraphModelWrapper(ModelWrapper):
         prof = span_attr(prof, "slots", lambda: tensor_attr(slots, False))
         prof = span_attr(prof, "input_lengths", lambda: tensor_attr(input_lengths, False))
         prof = span_attr(prof, "max_seq_len", int(max_seq_len))
-        prof = span_attr(prof, "lm_head_indices", \
-            None if lm_head_indices is None else tensor_attr(lm_head_indices, False))
+        prof = span_attr(
+            prof, "lm_head_indices", None if lm_head_indices is None else tensor_attr(lm_head_indices, False)
+        )
 
         try:
             result = self.model_runner.forward(

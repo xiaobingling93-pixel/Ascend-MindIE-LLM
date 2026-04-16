@@ -13,13 +13,14 @@
 #ifndef BUFFERED_RESPONSER_H
 #define BUFFERED_RESPONSER_H
 #include <chrono>
-#include <unordered_map>
+#include <functional>
 #include <string>
 #include <thread>
-#include <functional>
+#include <unordered_map>
+
+#include "concurrent_map.h"
 #include "request_response/request_id.h"
 #include "response_buffer.h"
-#include "concurrent_map.h"
 
 namespace mindie_llm {
 using ForwardRespToManagerCall = std::function<void(ResponseSPtr response)>;
@@ -32,7 +33,7 @@ struct BufferResponseConfig {
 };
 
 class BufferedResponser {
-public:
+   public:
     explicit BufferedResponser(ForwardRespToManagerCall cb, BufferResponseConfig &config);
 
     ~BufferedResponser();
@@ -43,20 +44,21 @@ public:
 
     void RecordArriveTime(RequestIdNew inferReqId,
                           std::chrono::time_point<std::chrono::high_resolution_clock> arriveTime);
-private:
+
+   private:
     std::thread respBufferThread_;
-    ConcurrentMap<std::string, ResponseBufferPtr> respBufferMap_; // request id to response buffer
+    ConcurrentMap<std::string, ResponseBufferPtr> respBufferMap_;  // request id to response buffer
     double sloBufferRatio = 0.95;
     const uint32_t changeNsToMs = 1000000;
-    ForwardRespToManagerCall forwardRespToManagerCall_; // from llm manager
+    ForwardRespToManagerCall forwardRespToManagerCall_;  // from llm manager
     BufferResponseConfig bufferResponseConfig_;
     std::atomic<bool> stop_ = {false};
 
     void SendEndResponse(ResponseBufferPtr &responseBuffer);
 
-    void MaybeSendContinueResponse(ResponseBufferPtr &responseBuffer,
-                              double prefillExpectedTime, double decodeExpectedTime);
+    void MaybeSendContinueResponse(ResponseBufferPtr &responseBuffer, double prefillExpectedTime,
+                                   double decodeExpectedTime);
 };
-} // namespace mindie_llm
-  
-#endif // BUFFERED_RESPONSER_H
+}  // namespace mindie_llm
+
+#endif  // BUFFERED_RESPONSER_H

@@ -11,24 +11,25 @@
  */
 
 #include "json_util.h"
+
 #include "log.h"
 
 namespace mindie_llm {
 
-bool CheckJsonDepthCallback(int depth, Json::parse_event_t ev, [[maybe_unused]] Json& obj)
-{
+bool CheckJsonDepthCallback(int depth, Json::parse_event_t ev, [[maybe_unused]] Json& obj) {
     return CheckJsonDepthWithLogger(depth, ev, [depth]() {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to parse json: depth is " << depth <<  ", limit is " << GetJsonDepthLimit());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                   "Failed to parse json: depth is " << depth << ", limit is " << GetJsonDepthLimit());
     });
 }
 
-bool CheckOrderedJsonDepthCallback(int depth, OrderedJson::parse_event_t ev, [[maybe_unused]] OrderedJson& obj)
-{
+bool CheckOrderedJsonDepthCallback(int depth, OrderedJson::parse_event_t ev, [[maybe_unused]] OrderedJson& obj) {
     return CheckJsonDepthWithLogger(depth, ev, [depth]() {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            JSON_PARSE_ERROR), "Failed to parse json: depth is " << depth <<  ", limit is " << GetJsonDepthLimit());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, JSON_PARSE_ERROR),
+                   "Failed to parse json: depth is " << depth << ", limit is " << GetJsonDepthLimit());
     });
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

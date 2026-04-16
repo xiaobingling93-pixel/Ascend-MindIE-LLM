@@ -9,25 +9,27 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <future>
+#include "communicator.h"
+
 #include <algorithm>
-#include <functional>
 #include <chrono>
+#include <functional>
+#include <future>
 #include <thread>
 
-#include "string_utils.h"
+#include "config_manager.h"
 #include "log.h"
 #include "msServiceProfiler/msServiceProfiler.h"
-#include "config_manager.h"
-#include "communicator.h"
+#include "string_utils.h"
 
 namespace mindie_llm {
 
 Communicator::Communicator(std::unordered_map<std::string, std::string> &config, bool isMultiNodesInfer, int dpRankIdx,
                            int remoteDPRankIdx, bool intraNodeTP)
-    : isMultiNodesInfer_(isMultiNodesInfer), dpRankIdx_(dpRankIdx), remoteDPRankIdx_(remoteDPRankIdx),
-      intraNodeTP_(intraNodeTP)
-{
+    : isMultiNodesInfer_(isMultiNodesInfer),
+      dpRankIdx_(dpRankIdx),
+      remoteDPRankIdx_(remoteDPRankIdx),
+      intraNodeTP_(intraNodeTP) {
     std::string lwdRoletype = "";
     auto lwdIt = config.find("layerwiseDisaggregated");
     if (lwdIt != config.end() && lwdIt->second == "true") {
@@ -40,7 +42,7 @@ Communicator::Communicator(std::unordered_map<std::string, std::string> &config,
         isLwdMultiNodesInfer_ = true;
     }
 
-    msRole_ = MasterSlaveRole::MASTER; // Default to master role for single node inference.
+    msRole_ = MasterSlaveRole::MASTER;  // Default to master role for single node inference.
     if ((isMultiNodesInfer && config.at("isMaster") == "0") or (lwdRoletype == "slave")) {
         msRole_ = MasterSlaveRole::SLAVE;
     }
@@ -52,7 +54,7 @@ Communicator::Communicator(std::unordered_map<std::string, std::string> &config,
         numExpectedResponses_ = intraNodeTP ? slaveCount : 1;
         size_t dpNumPerNode = intraNodeTP ? 1 : std::stoul(config.at("dp")) / (slaveCount + 1);
         if (intraNodeTP || static_cast<std::size_t>(dpRankIdx_) < dpNumPerNode) {
-            remoteSlaveIP_ = ""; // The first segment of DP ranks in Master node does not have remote DP rank.
+            remoteSlaveIP_ = "";  // The first segment of DP ranks in Master node does not have remote DP rank.
         } else {
             // Calculate the corresponding slave IP.
             remoteSlaveIP_ = slaveIPs.at(static_cast<std::size_t>(dpRankIdx_) / dpNumPerNode - 1);
@@ -68,8 +70,7 @@ Communicator::Communicator(std::unordered_map<std::string, std::string> &config,
     PROF(INFO, AddMetaInfo("msRole", static_cast<int>(msRole_)));
 }
 
-bool Communicator::InitIPCCommunicators(const std::string &sharedMemPrefix, uint32_t localWorldSize)
-{
+bool Communicator::InitIPCCommunicators(const std::string &sharedMemPrefix, uint32_t localWorldSize) {
     ShmSizeConfig executeShmConfig{SHARED_MEMORY_256MB, DEFAULT_SHARED_MEMORY_SIZE};
     SemaphoreConfig semConfig{localWorldSize, localWorldSize};
     ipcCommunicatorExecute_ = InitSingleIPCCommunicator(sharedMemPrefix + "_execute", semConfig, executeShmConfig);
@@ -101,8 +102,8 @@ bool Communicator::InitIPCCommunicators(const std::string &sharedMemPrefix, uint
         return false;
     }
 
-    ShmSizeConfig executeErrorShmConfig{0, ERROR_SHARED_MEMORY_SIZE}; // no request shared memory
-    SemaphoreConfig executeErrorSemConfig{0, 1}; // no request semaphores, 1 response read/write semaphore
+    ShmSizeConfig executeErrorShmConfig{0, ERROR_SHARED_MEMORY_SIZE};  // no request shared memory
+    SemaphoreConfig executeErrorSemConfig{0, 1};  // no request semaphores, 1 response read/write semaphore
     ipcCommunicatorExecuteError_ =
         InitSingleIPCCommunicator(sharedMemPrefix + "_execute_error", executeErrorSemConfig, executeErrorShmConfig);
     if (ipcCommunicatorExecuteError_ == nullptr) {
@@ -114,8 +115,7 @@ bool Communicator::InitIPCCommunicators(const std::string &sharedMemPrefix, uint
 }
 
 bool Communicator::LwdGRPCCommunicatorInit(std::unordered_map<std::string, std::string> &config,
-    uint32_t grpcCommunicatorNum)
-{
+                                           uint32_t grpcCommunicatorNum) {
     auto itrFindDp = config.find("dp");
     uint32_t dpNum = std::stol(itrFindDp->second);
     if (dpNum == 0) {
@@ -160,8 +160,7 @@ bool Communicator::LwdGRPCCommunicatorInit(std::unordered_map<std::string, std::
 }
 
 bool Communicator::InitGRPCCommunicator(std::unordered_map<std::string, std::string> &config,
-                                        ResponseHandler responseFromSlaveHandler, uint32_t grpcCommunicatorNum)
-{
+                                        ResponseHandler responseFromSlaveHandler, uint32_t grpcCommunicatorNum) {
     grpcCommunicator_ = GRPCCommunicator::GetInstance(config);
 
     if (msRole_ == MasterSlaveRole::MASTER) {
@@ -196,13 +195,11 @@ bool Communicator::InitGRPCCommunicator(std::unordered_map<std::string, std::str
     return true;
 }
 
-void Communicator::RegisterModelInitReqHandler(SlaveModelInitReqHandler handler)
-{
+void Communicator::RegisterModelInitReqHandler(SlaveModelInitReqHandler handler) {
     slaveModelInitReqHandler_ = handler;
 }
 
-bool Communicator::SendModelInitRequestAndReceive(ExecuteRequest &request, std::vector<ExecuteResponse> &responses)
-{
+bool Communicator::SendModelInitRequestAndReceive(ExecuteRequest &request, std::vector<ExecuteResponse> &responses) {
     if (!ipcCommunicatorExecute_->SendMessageViaSM(request)) {
         MINDIE_LLM_LOG_ERROR("Failed to send MODEL_INIT request to local executors.");
         return false;
@@ -215,8 +212,7 @@ bool Communicator::SendModelInitRequestAndReceive(ExecuteRequest &request, std::
     return true;
 }
 
-bool Communicator::SendSharedSyncRequest(ExecuteRequest &request)
-{
+bool Communicator::SendSharedSyncRequest(ExecuteRequest &request) {
     // Send the sync request to local workers if ipcCommunicatoSharedSyncLink_ is initialized.
     if (ipcCommunicatorSharedSync_ != nullptr) {
         if (!ipcCommunicatorSharedSync_->SendMessageViaSM(request)) {
@@ -234,8 +230,7 @@ bool Communicator::SendSharedSyncRequest(ExecuteRequest &request)
     return true;
 }
 
-bool Communicator::SendSharedSyncRequestAndReceive(ExecuteRequest &request, std::vector<ExecuteResponse> &responses)
-{
+bool Communicator::SendSharedSyncRequestAndReceive(ExecuteRequest &request, std::vector<ExecuteResponse> &responses) {
     // Send the request to local workers and Send the sync request to remote slave node
     if (!SendSharedSyncRequest(request)) {
         return false;
@@ -260,8 +255,7 @@ bool Communicator::SendSharedSyncRequestAndReceive(ExecuteRequest &request, std:
     return true;
 }
 
-bool Communicator::ReceiveSyncResponsesFromRemote(std::vector<ExecuteResponse> &responses)
-{
+bool Communicator::ReceiveSyncResponsesFromRemote(std::vector<ExecuteResponse> &responses) {
     for (uint32_t i = 0; i < numExpectedResponses_; i++) {
         ExecuteResponse grpcResponse;
         if (!grpcCommunicator_->GetSyncResponse(grpcResponse, dpRankIdx_)) {
@@ -273,8 +267,8 @@ bool Communicator::ReceiveSyncResponsesFromRemote(std::vector<ExecuteResponse> &
     return true;
 }
 
-bool Communicator::SendRecoverCommandRequestAndReceive(ExecuteRequest &request, std::vector<ExecuteResponse> &responses)
-{
+bool Communicator::SendRecoverCommandRequestAndReceive(ExecuteRequest &request,
+                                                       std::vector<ExecuteResponse> &responses) {
     if (ipcCommunicatorRecoverCommand_ != nullptr) {
         if (!ipcCommunicatorRecoverCommand_->SendMessageViaSM(request)) {
             MINDIE_LLM_LOG_ERROR("Failed to send a sync recover command request to local workers.");
@@ -304,8 +298,7 @@ bool Communicator::SendRecoverCommandRequestAndReceive(ExecuteRequest &request, 
     return true;
 }
 
-bool Communicator::SendAsyncReponseToRemote(ExecuteResponse &response)
-{
+bool Communicator::SendAsyncReponseToRemote(ExecuteResponse &response) {
     if (grpcCommunicator_ == nullptr) {
         MINDIE_LLM_LOG_ERROR("grpcCommunicator_ is null, cannot send response to master.");
         return false;
@@ -317,8 +310,7 @@ bool Communicator::SendAsyncReponseToRemote(ExecuteResponse &response)
     return true;
 }
 
-bool Communicator::LaunchIPCHandleResponseThreads(ResponseHandler handler)
-{
+bool Communicator::LaunchIPCHandleResponseThreads(ResponseHandler handler) {
     ResponseHandler responseHandler = nullptr;
     if ((isMultiNodesInfer_ || layerwiseDisaggregated_) && msRole_ == MasterSlaveRole::SLAVE) {
         responseHandler = std::bind(&Communicator::SlaveNodeIPCResponseHandler, this, std::placeholders::_1);
@@ -350,8 +342,7 @@ bool Communicator::LaunchIPCHandleResponseThreads(ResponseHandler handler)
 }
 
 bool Communicator::RegisterAndStartIPCHandler(std::shared_ptr<IPCCommunicator> ipcCommunicator,
-                                              ResponseHandler handler) const
-{
+                                              ResponseHandler handler) const {
     if (!ipcCommunicator->RegisterResponseHandler(handler)) {
         MINDIE_LLM_LOG_ERROR("Failed to register response handler for IPC Communicator.");
         return false;
@@ -363,8 +354,7 @@ bool Communicator::RegisterAndStartIPCHandler(std::shared_ptr<IPCCommunicator> i
     return true;
 }
 
-bool Communicator::SlaveNodeGRPCRequestHandler(ExecuteRequest &request)
-{
+bool Communicator::SlaveNodeGRPCRequestHandler(ExecuteRequest &request) {
     if (request.execute_type() == REMOTE_MODEL_INIT) {
         std::map<std::string, std::string> pdInfo;
         auto &initRequest = request.remote_model_init_request();
@@ -384,8 +374,7 @@ bool Communicator::SlaveNodeGRPCRequestHandler(ExecuteRequest &request)
     return true;
 }
 
-bool Communicator::SlaveNodeGRPCRecoverRequestHandler(ExecuteRequest &request)
-{
+bool Communicator::SlaveNodeGRPCRecoverRequestHandler(ExecuteRequest &request) {
     if (ipcCommunicatorRecoverCommand_ != nullptr) {
         if (!ipcCommunicatorRecoverCommand_->SendMessageViaSM(request)) {
             MINDIE_LLM_LOG_ERROR("Failed to send a sync recover command request to local workers.");
@@ -404,8 +393,7 @@ bool Communicator::SlaveNodeGRPCRecoverRequestHandler(ExecuteRequest &request)
     return SendAsyncReponseToRemote(response);
 }
 
-ExecuteResponse Communicator::AggregateToOneResponse(const std::vector<ExecuteResponse> &responses)
-{
+ExecuteResponse Communicator::AggregateToOneResponse(const std::vector<ExecuteResponse> &responses) {
     // If any command fails, return the first failed response.
     // Otherwise, return the first response (all responses' command_result should be success in this case).
     uint32_t success_result = 0;
@@ -417,27 +405,22 @@ ExecuteResponse Communicator::AggregateToOneResponse(const std::vector<ExecuteRe
     return responses[0];
 }
 
-bool Communicator::SlaveNodeIPCResponseHandler(ExecuteResponse &response)
-{
+bool Communicator::SlaveNodeIPCResponseHandler(ExecuteResponse &response) {
     // for edge-cloud, slave(cloud) node doesnt need to handle response
     if (layerwiseDisaggregated_) {
         return true;
     }
     // Skip sending to remote master if intra-node TP is enabled and response type is not PD_LINK.
-    if (intraNodeTP_ && response.msg_type() != PD_LINK &&
-        response.msg_type() != PD_LINK_STATUS_QUERY &&
-        response.msg_type() != RECOVER_COMMAND_EXEC &&
-        response.msg_type() != START_COMMAND_EXEC &&
-        response.msg_type() != PAUSE_COMMAND_EXEC &&
-        response.msg_type() != CLEAR_COMMAND_EXEC &&
+    if (intraNodeTP_ && response.msg_type() != PD_LINK && response.msg_type() != PD_LINK_STATUS_QUERY &&
+        response.msg_type() != RECOVER_COMMAND_EXEC && response.msg_type() != START_COMMAND_EXEC &&
+        response.msg_type() != PAUSE_COMMAND_EXEC && response.msg_type() != CLEAR_COMMAND_EXEC &&
         response.msg_type() != EXECUTE_ERROR) {
-        return true; // Intra-node TP does not send responses to remote master nodes.
+        return true;  // Intra-node TP does not send responses to remote master nodes.
     }
     return SendAsyncReponseToRemote(response);
 }
 
-bool Communicator::GRPCGetSyncResponse(ExecuteResponse &response)
-{
+bool Communicator::GRPCGetSyncResponse(ExecuteResponse &response) {
     if (grpcCommunicator_ == nullptr) {
         MINDIE_LLM_LOG_ERROR("grpcCommunicator_ is null, cannot get sync response.");
         return false;
@@ -448,8 +431,7 @@ bool Communicator::GRPCGetSyncResponse(ExecuteResponse &response)
 std::unique_ptr<IPCCommunicator> Communicator::InitSingleIPCCommunicator(const std::string &sharedMemName,
                                                                          const SemaphoreConfig &semConfig,
                                                                          const ShmSizeConfig &shmSizeConfig,
-                                                                         bool receiveAllRank) const
-{
+                                                                         bool receiveAllRank) const {
     std::unique_ptr<IPCCommunicator> ipcCommunicator =
         std::make_unique<IPCCommunicator>(sharedMemName, semConfig, receiveAllRank);
     if (!ipcCommunicator->SetupChannel(shmSizeConfig)) {
@@ -458,8 +440,7 @@ std::unique_ptr<IPCCommunicator> Communicator::InitSingleIPCCommunicator(const s
     }
     return ipcCommunicator;
 }
-bool Communicator::SendAsyncRequest(ExecuteRequest &request)
-{
+bool Communicator::SendAsyncRequest(ExecuteRequest &request) {
     if (isMultiNodesInfer_ && msRole_ == MasterSlaveRole::SLAVE) {
         MINDIE_LLM_LOG_ERROR("Slave nodes cannot call SendAsyncRequest themselves.");
         return false;
@@ -492,40 +473,30 @@ bool Communicator::SendAsyncRequest(ExecuteRequest &request)
     return true;
 }
 
-
-bool Communicator::SendAsyncRequestToLocal(ExecuteRequest &request)
-{
-    std::vector<IPCCommunicator*> targets;
+bool Communicator::SendAsyncRequestToLocal(ExecuteRequest &request) {
+    std::vector<IPCCommunicator *> targets;
 
     if (request.execute_type() == MODEL_FINALIZE) {
         // Broadcast to all communicators
-        targets = {
-            ipcCommunicatorExecute_.get(),
-            ipcCommunicatorKVTransfer_.get(),
-            ipcCommunicatorSharedSync_.get()
-        };
-    } else if (request.execute_type() == MODEL_INFER ||
-               request.execute_type() == TEXT_GENERATOR_CLEANUP ||
+        targets = {ipcCommunicatorExecute_.get(), ipcCommunicatorKVTransfer_.get(), ipcCommunicatorSharedSync_.get()};
+    } else if (request.execute_type() == MODEL_INFER || request.execute_type() == TEXT_GENERATOR_CLEANUP ||
                request.execute_type() == EOS_CLEANUP) {
         targets = {ipcCommunicatorExecute_.get()};
     } else if (request.execute_type() == KV_TRANSFER) {
         targets = {ipcCommunicatorKVTransfer_.get()};
-    } else if (request.execute_type() == PD_LINK ||
-               request.execute_type() == PD_LINK_STATUS_QUERY ||
-               request.execute_type() == RECOVER_COMMAND_EXEC ||
-               request.execute_type() == START_COMMAND_EXEC ||
-               request.execute_type() == PAUSE_COMMAND_EXEC ||
-               request.execute_type() == CLEAR_COMMAND_EXEC) {
+    } else if (request.execute_type() == PD_LINK || request.execute_type() == PD_LINK_STATUS_QUERY ||
+               request.execute_type() == RECOVER_COMMAND_EXEC || request.execute_type() == START_COMMAND_EXEC ||
+               request.execute_type() == PAUSE_COMMAND_EXEC || request.execute_type() == CLEAR_COMMAND_EXEC) {
         targets = {ipcCommunicatorSharedSync_.get()};
     } else {
         MINDIE_LLM_LOG_ERROR("Unsupported execute type for asynchronous request: " << request.execute_type());
         return false;
     }
 
-    for (IPCCommunicator* comm : targets) {
+    for (IPCCommunicator *comm : targets) {
         if (!comm->SendMessageViaSM(request)) {
-            MINDIE_LLM_LOG_ERROR("Failed to send asynchronous request to local workers (type: "
-                                 << request.execute_type() << ").");
+            MINDIE_LLM_LOG_ERROR(
+                "Failed to send asynchronous request to local workers (type: " << request.execute_type() << ").");
             return false;
         }
     }
@@ -533,8 +504,7 @@ bool Communicator::SendAsyncRequestToLocal(ExecuteRequest &request)
     return true;
 }
 
-bool Communicator::SendAsyncRequestToRemote(ExecuteRequest &request)
-{
+bool Communicator::SendAsyncRequestToRemote(ExecuteRequest &request) {
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
     if (configManager.IslayerwiseDisaggregated() && request.has_execute_model_request()) {
         model_execute_data::ExecuteModelRequest *modelReq = request.mutable_execute_model_request();
@@ -561,8 +531,7 @@ bool Communicator::SendAsyncRequestToRemote(ExecuteRequest &request)
     return true;
 }
 
-void Communicator::CleanUp()
-{
+void Communicator::CleanUp() {
     if (handleExecuteErrorThread_ && handleExecuteErrorThread_->joinable()) {
         handleExecuteErrorThread_->join();
         handleExecuteErrorThread_.reset();
@@ -592,4 +561,4 @@ void Communicator::CleanUp()
 
 Communicator::~Communicator() {}
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

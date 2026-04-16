@@ -13,8 +13,8 @@
 #ifndef EVICTOR_H
 #define EVICTOR_H
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #include "basic_types.h"
 
@@ -25,7 +25,7 @@ struct EvictionResult {
 };
 
 class Evictor {
-public:
+   public:
     Evictor() = default;
 
     virtual ~Evictor() = default;
@@ -48,6 +48,6 @@ enum class EvictionPolicy { LRU };
 using EvictorPtr = std::unique_ptr<Evictor>;
 
 EvictorPtr MakeEvictor(EvictionPolicy policy = EvictionPolicy::LRU);
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

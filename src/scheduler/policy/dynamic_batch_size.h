@@ -14,49 +14,49 @@
 #define DYNAMIC_BATCH_SIZE_H
 
 #include "block_manager_interface.h"
-#include "policy/seq_group_collection.h"
-#include "dataclass/metric.h"
 #include "concurrent_deque.h"
-#include "sequence_group.h"
-#include "scheduling_budget.h"
-#include "latency_predictor/latency_predictor.h"
+#include "dataclass/metric.h"
 #include "dynamic_batch_recorder.h"
+#include "latency_predictor/latency_predictor.h"
+#include "policy/seq_group_collection.h"
+#include "scheduling_budget.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 
 class DecodeBatchSizeTracker {
-public:
-    explicit DecodeBatchSizeTracker(uint64_t windowSize): windowSize_(windowSize) {}
+   public:
+    explicit DecodeBatchSizeTracker(uint64_t windowSize) : windowSize_(windowSize) {}
     void AddDataPoint(uint64_t batchSize);
     uint64_t GetRecentAvgBatchSize(uint64_t forwardNum);
     ~DecodeBatchSizeTracker() = default;
 
-private:
+   private:
     uint64_t windowSize_;
     std::deque<uint64_t> queue_;
 };
 
 class DynamicBatchSize {
-public:
+   public:
     explicit DynamicBatchSize(const SchedulerConfigSPtr schedulerConfig, std::shared_ptr<LatencyPredictor> predictor,
-    std::shared_ptr<BlockSpaceManager> blockManager, size_t localDPRank);
+                              std::shared_ptr<BlockSpaceManager> blockManager, size_t localDPRank);
 
-    void ApplyDynamicBatchSize(Role role, SchedulerOutputs& schedulerOut, size_t waitingSize,
-    size_t runningSize, size_t swappedSize);
+    void ApplyDynamicBatchSize(Role role, SchedulerOutputs& schedulerOut, size_t waitingSize, size_t runningSize,
+                               size_t swappedSize);
 
     void RecordPredictorMetrics(const SchedulerOutputs& schedulerOut, const SchedulingBudget& budget);
 
     virtual ~DynamicBatchSize() = default;
 
-private:
+   private:
     SchedulerConfigSPtr schedulerConfig_;
     std::shared_ptr<LatencyPredictor> predictor_;
-    BlockSpaceManagerSPtr blockManager_; // kv cache manager
+    BlockSpaceManagerSPtr blockManager_;  // kv cache manager
     size_t localDPRank_{0};
 
     // dynamic batch size
     uint32_t stage_ = 0;
-    size_t previousStage_ = 0; // 0 : prefill, 1 : decode
+    size_t previousStage_ = 0;  // 0 : prefill, 1 : decode
     size_t previousDecodeBatchSize_ = 0;
     size_t previousDecodeMaxBatchSize_ = 0;
     uint64_t batchSizeUpper_ = 0;
@@ -66,8 +66,8 @@ private:
     uint64_t batchTrackerWindowSize_ = 0;
     std::shared_ptr<DecodeBatchSizeTracker> decodeBatchSizeQueue_;
 
-    void AdjustBatchSize(size_t previousStage, size_t previousDecodeBatchSize,
-        size_t waitingSize, size_t runningSize, size_t swappedSize);
+    void AdjustBatchSize(size_t previousStage, size_t previousDecodeBatchSize, size_t waitingSize, size_t runningSize,
+                         size_t swappedSize);
 
     void BinarySearchBatchSize(uint64_t currentDecodeRequestNum, double avgDecodeLatency, uint64_t avgBatchSize);
 
@@ -77,6 +77,6 @@ private:
 
     void ApplyUpdatedBatchSize(uint64_t newDecodeMaxBatchSize, uint64_t newPrefillMaxBatchSize);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

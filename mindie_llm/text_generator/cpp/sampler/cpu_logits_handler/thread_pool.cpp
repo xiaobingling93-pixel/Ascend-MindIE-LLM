@@ -9,19 +9,20 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
+#include "thread_pool.h"
+
 #include <iostream>
 #include <stdexcept>
-#include "securec.h"
+
 #include "log.h"
-#include "thread_pool.h"
+#include "securec.h"
 
 const int MAX_NUM_THREADS = 256;
 
 using namespace std;
 
-void mindie_llm::cpu_logits_handler::ThreadPool::Init()
-{
+void mindie_llm::cpu_logits_handler::ThreadPool::Init() {
     m_taskQ = new TaskQueue;
     m_taskQ->Init();
     do {
@@ -53,8 +54,7 @@ void mindie_llm::cpu_logits_handler::ThreadPool::Init()
     } while (0);
 }
 
-mindie_llm::cpu_logits_handler::ThreadPool::~ThreadPool()
-{
+mindie_llm::cpu_logits_handler::ThreadPool::~ThreadPool() {
     m_shutdown = 1;
 
     pthread_cond_broadcast(&m_notEmpty);
@@ -62,8 +62,8 @@ mindie_llm::cpu_logits_handler::ThreadPool::~ThreadPool()
         for (int i = 0; i < m_threadNum; ++i) {
             if (m_threadIDs[i] != 0) {
                 pthread_join(m_threadIDs[i], nullptr);
-                }
             }
+        }
     }
 
     if (m_taskQ) {
@@ -78,8 +78,7 @@ mindie_llm::cpu_logits_handler::ThreadPool::~ThreadPool()
     pthread_cond_destroy(&m_notEmpty);
 }
 
-void mindie_llm::cpu_logits_handler::ThreadPool::AddTask(Task task)
-{
+void mindie_llm::cpu_logits_handler::ThreadPool::AddTask(Task task) {
     if (m_shutdown) {
         return;
     }
@@ -90,10 +89,8 @@ void mindie_llm::cpu_logits_handler::ThreadPool::AddTask(Task task)
     pthread_cond_signal(&m_notEmpty);
 }
 
-void *mindie_llm::cpu_logits_handler::ThreadPool::Worker(void *arg)
-{
-    mindie_llm::cpu_logits_handler::ThreadPool *pool = \
-    static_cast<mindie_llm::cpu_logits_handler::ThreadPool *>(arg);
+void *mindie_llm::cpu_logits_handler::ThreadPool::Worker(void *arg) {
+    mindie_llm::cpu_logits_handler::ThreadPool *pool = static_cast<mindie_llm::cpu_logits_handler::ThreadPool *>(arg);
     while (true) {
         pthread_mutex_lock(&pool->m_lock);
 
@@ -125,8 +122,7 @@ void *mindie_llm::cpu_logits_handler::ThreadPool::Worker(void *arg)
     return nullptr;
 }
 
-void mindie_llm::cpu_logits_handler::ThreadPool::ThreadExit()
-{
+void mindie_llm::cpu_logits_handler::ThreadPool::ThreadExit() {
     pthread_t tid = pthread_self();
     for (int i = 0; i < m_threadNum; ++i) {
         if (m_threadIDs[i] == tid) {
@@ -136,8 +132,7 @@ void mindie_llm::cpu_logits_handler::ThreadPool::ThreadExit()
     }
 }
 
-void mindie_llm::cpu_logits_handler::ThreadPool::Join()
-{
+void mindie_llm::cpu_logits_handler::ThreadPool::Join() {
     pthread_mutex_lock(&m_taskLock);
     while (m_taskNum != 0) {
         pthread_cond_wait(&m_empty, &m_taskLock);

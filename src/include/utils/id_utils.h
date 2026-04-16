@@ -17,13 +17,13 @@
 
 namespace mindie_llm {
 class IDUtils {
-public:
+   public:
     static RequestId GenerateRequestID();
 
     static SequenceId GenerateSequenceId();
 
     static BatchId GenerateBatchID();
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -17,8 +17,7 @@
 
 namespace mindie_llm {
 CpuNpuBlockAllocator::CpuNpuBlockAllocator(const AllocatorConfig &config)
-    : rankSize_(config.rankSize), beginCpuBlockId_(config.numNpuBlocks), hostSize_(config.hostSize)
-{
+    : rankSize_(config.rankSize), beginCpuBlockId_(config.numNpuBlocks), hostSize_(config.hostSize) {
     if (config.rankSize == 0) {
         throw std::runtime_error("Rank size cannot be zero.");
     }
@@ -64,22 +63,19 @@ CpuNpuBlockAllocator::CpuNpuBlockAllocator(const AllocatorConfig &config)
     swapMapping_ = {};
 }
 
-DeviceType CpuNpuBlockAllocator::GetDeviceTypeForBlockId(BlockId blockId) const
-{
+DeviceType CpuNpuBlockAllocator::GetDeviceTypeForBlockId(BlockId blockId) const {
     return (blockId < beginCpuBlockId_) ? DeviceType::NPU : DeviceType::CPU;
 }
 
 BlockObjSPtr CpuNpuBlockAllocator::AllocateMutableBlock(DeviceType deviceType, std::vector<TokenId> &tokenIds,
-                                                        BlockObjSPtr prevBlock, HashValue extraHash, size_t rankIdx)
-{
+                                                        BlockObjSPtr prevBlock, HashValue extraHash, size_t rankIdx) {
     BlockObjSPtr block = GetAllocator(deviceType, rankIdx)->AllocateMutableBlock(tokenIds, prevBlock, extraHash);
     block->SetRankIdx(rankIdx);
     return block;
 }
 
 BlockObjSPtr CpuNpuBlockAllocator::AllocateImmutableBlock(DeviceType deviceType, std::vector<TokenId> &tokenIds,
-                                                          BlockObjSPtr prevBlock, HashValue extraHash, size_t rankIdx)
-{
+                                                          BlockObjSPtr prevBlock, HashValue extraHash, size_t rankIdx) {
     BlockObjSPtr block = GetAllocator(deviceType, rankIdx)->AllocateImmutableBlock(tokenIds, prevBlock, extraHash);
     block->SetRankIdx(rankIdx);
     return block;
@@ -88,8 +84,7 @@ BlockObjSPtr CpuNpuBlockAllocator::AllocateImmutableBlock(DeviceType deviceType,
 std::vector<BlockObjSPtr> CpuNpuBlockAllocator::AllocateImmutableBlocks(DeviceType deviceType,
                                                                         std::vector<std::vector<TokenId>> &tokenIds,
                                                                         BlockObjSPtr prevBlock, HashValue extraHash,
-                                                                        size_t rankIdx)
-{
+                                                                        size_t rankIdx) {
     std::vector<BlockObjSPtr> blocks =
         GetAllocator(deviceType, rankIdx)->AllocateImmutableBlocks(tokenIds, prevBlock, extraHash);
     for (BlockObjSPtr &block : blocks) {
@@ -98,8 +93,7 @@ std::vector<BlockObjSPtr> CpuNpuBlockAllocator::AllocateImmutableBlocks(DeviceTy
     return blocks;
 }
 
-void CpuNpuBlockAllocator::Free(BlockObjSPtr &block)
-{
+void CpuNpuBlockAllocator::Free(BlockObjSPtr &block) {
     size_t rankIdx = block->GetRankIdx();
     BlockId blockId = block->GetBlockId();
     bool keepBlockObj = false;
@@ -112,8 +106,7 @@ void CpuNpuBlockAllocator::Free(BlockObjSPtr &block)
     }
 }
 
-std::vector<BlockObjSPtr> CpuNpuBlockAllocator::Fork(BlockObjSPtr &block)
-{
+std::vector<BlockObjSPtr> CpuNpuBlockAllocator::Fork(BlockObjSPtr &block) {
     BlockId blockId = block->GetBlockId();
     DeviceType deviceType = GetDeviceTypeForBlockId(blockId);
     size_t rankIdx = block->GetRankIdx();
@@ -121,8 +114,7 @@ std::vector<BlockObjSPtr> CpuNpuBlockAllocator::Fork(BlockObjSPtr &block)
     return GetAllocator(deviceType, rankIdx)->Fork(block);
 }
 
-size_t CpuNpuBlockAllocator::GetNumTotalBlocks(DeviceType deviceType) const
-{
+size_t CpuNpuBlockAllocator::GetNumTotalBlocks(DeviceType deviceType) const {
     size_t numTotalBlocks = 0;
     for (size_t rankId = 0; rankId < rankSize_; rankId++) {
         numTotalBlocks += GetAllocator(deviceType, rankId)->GetNumTotalBlocks();
@@ -130,8 +122,7 @@ size_t CpuNpuBlockAllocator::GetNumTotalBlocks(DeviceType deviceType) const
     return numTotalBlocks;
 }
 
-size_t CpuNpuBlockAllocator::GetNumFreeBlock(DeviceType deviceType) const
-{
+size_t CpuNpuBlockAllocator::GetNumFreeBlock(DeviceType deviceType) const {
     if (rankSize_ == 1) {
         return GetAllocator(deviceType)->GetNumFreeBlock();
     } else {
@@ -148,13 +139,11 @@ size_t CpuNpuBlockAllocator::GetNumFreeBlock(DeviceType deviceType) const
     }
 }
 
-size_t CpuNpuBlockAllocator::GetNumFreeBlock(DeviceType deviceType, size_t rankId) const
-{
+size_t CpuNpuBlockAllocator::GetNumFreeBlock(DeviceType deviceType, size_t rankId) const {
     return GetAllocator(deviceType, rankId)->GetNumFreeBlock();
 }
 
-PhysicalBlockId CpuNpuBlockAllocator::GetPhysicalBlockId(BlockId globalBlockId) const
-{
+PhysicalBlockId CpuNpuBlockAllocator::GetPhysicalBlockId(BlockId globalBlockId) const {
     DeviceType deviceType = GetDeviceTypeForBlockId(globalBlockId);
     if (deviceType == DeviceType::NPU) {
         return globalBlockId;
@@ -166,8 +155,7 @@ PhysicalBlockId CpuNpuBlockAllocator::GetPhysicalBlockId(BlockId globalBlockId) 
 }
 
 std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::Swap(std::vector<BlockObjSPtr> &swapTargetBlocks,
-                                                                    DeviceType srcDevice, DeviceType dstDevice)
-{
+                                                                    DeviceType srcDevice, DeviceType dstDevice) {
     // 对sp， cp暂时不支持swap,走recomputed 或者 cancel
     if (rankSize_ != 1) {
         throw std::invalid_argument("Can not swap when rank size larger than 1!");
@@ -184,7 +172,7 @@ std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::Swap(std::vector<
     }
 
     // SwapIn()采用保留原有Block对象替换新分配的BlockId的方式
-    GetAllocator(srcDevice)->SwapOut(swapTargetBlocks); // free block ids owned
+    GetAllocator(srcDevice)->SwapOut(swapTargetBlocks);  // free block ids owned
     // allocate new block ids in dst device, in-place block id update
     GetAllocator(dstDevice)->SwapIn(swapTargetBlocks);
 
@@ -211,8 +199,7 @@ std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::Swap(std::vector<
 }
 
 size_t CpuNpuBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks,
-                                                     DeviceType deviceType) const
-{
+                                                     DeviceType deviceType) const {
     if (rankSize_ == 1) {
         return GetAllocator(deviceType)->GetNumFullBlocksTouched(blocks);
     }
@@ -225,16 +212,14 @@ size_t CpuNpuBlockAllocator::GetNumFullBlocksTouched(const std::vector<BlockObjS
     return numFullBlocksTouched;
 }
 
-std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::ClearCopyOnWrites()
-{
+std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::ClearCopyOnWrites() {
     if (rankSize_ > 1) {
         throw std::runtime_error("ClearCopyOnWrites only supports single rank");
     }
     return GetAllocator(DeviceType::NPU)->ClearCopyOnWrites();
 }
 
-void CpuNpuBlockAllocator::MarkBlocksAsAccessed(size_t rankId, const std::vector<BlockId> &blockIds, float now)
-{
+void CpuNpuBlockAllocator::MarkBlocksAsAccessed(size_t rankId, const std::vector<BlockId> &blockIds, float now) {
     if (blockIds.size() == 0) {
         return;
     }
@@ -243,8 +228,7 @@ void CpuNpuBlockAllocator::MarkBlocksAsAccessed(size_t rankId, const std::vector
     return GetAllocator(deviceType, rankId)->MarkBlocksAsAccessed(blockIds, now);
 }
 
-void CpuNpuBlockAllocator::MarkBlocksAsComputed()
-{
+void CpuNpuBlockAllocator::MarkBlocksAsComputed() {
     // prefixcache sp cp场景下，只支持prefill阶段
     for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
         GetAllocator(DeviceType::NPU, rankIdx)->MarkBlocksAsComputed();
@@ -252,18 +236,16 @@ void CpuNpuBlockAllocator::MarkBlocksAsComputed()
     return;
 }
 
-size_t CpuNpuBlockAllocator::GetCachedBlockNum(size_t rankIdx, std::vector<HashValue> hashValues) const
-{
+size_t CpuNpuBlockAllocator::GetCachedBlockNum(size_t rankIdx, std::vector<HashValue> hashValues) const {
     size_t res = GetAllocator(DeviceType::NPU, rankIdx)->GetCachedBlockNum(hashValues);
     return res;
 }
 
 std::vector<size_t> CpuNpuBlockAllocator::GetAllRankCommonComputedBlockNum(
-    const std::vector<std::vector<std::vector<BlockId>>> &rankedComputedSeqBlockIds) const
-{
+    const std::vector<std::vector<std::vector<BlockId>>> &rankedComputedSeqBlockIds) const {
     std::vector<size_t> allRankComputedBlockNum;
     for (size_t rankIdx = 0; rankIdx < rankedComputedSeqBlockIds.size(); rankIdx++) {
-        std::vector<BlockId> computedBlocks = \
+        std::vector<BlockId> computedBlocks =
             GetAllocator(DeviceType::NPU, rankIdx)->GetCommonComputedBlockIds(rankedComputedSeqBlockIds[rankIdx]);
         allRankComputedBlockNum.push_back(computedBlocks.size());
     }
@@ -271,39 +253,31 @@ std::vector<size_t> CpuNpuBlockAllocator::GetAllRankCommonComputedBlockNum(
 }
 
 std::vector<BlockId> CpuNpuBlockAllocator::GetCommonComputedBlockIds(
-    const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const
-{
+    const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const {
     // prefixcache sp cp场景下，只支持prefill阶段的，待实现
     return GetAllocator(DeviceType::NPU, 0)->GetCommonComputedBlockIds(computedSeqBlockIds);
 }
 
-float CpuNpuBlockAllocator::GetPrefixCacheHitRate() const
-{
+float CpuNpuBlockAllocator::GetPrefixCacheHitRate() const {
     // prefixcache sp cp场景下，只支持prefill阶段的，待实现
     return GetAllocator(DeviceType::NPU, 0)->GetPrefixCacheHitRate();
 }
 
-bool CpuNpuBlockAllocator::ResetPrefixCache() const
-{
-    return GetAllocator(DeviceType::NPU, 0)->ResetPrefixCache();
-}
+bool CpuNpuBlockAllocator::ResetPrefixCache() const { return GetAllocator(DeviceType::NPU, 0)->ResetPrefixCache(); }
 
-bool CpuNpuBlockAllocator::FindCachedBlockPrefix(size_t rankIdx, HashValue blockHash) const
-{
+bool CpuNpuBlockAllocator::FindCachedBlockPrefix(size_t rankIdx, HashValue blockHash) const {
     // prefixcache sp cp场景下，只支持prefill阶段
     return GetAllocator(DeviceType::NPU, rankIdx)->FindCachedBlockPrefix(blockHash);
 }
 
-std::vector<BlockId> CpuNpuBlockAllocator::FindCachedBlocksPrefix(
-    size_t rankIdx, std::vector<HashValue> &blockHashes) const
-{
+std::vector<BlockId> CpuNpuBlockAllocator::FindCachedBlocksPrefix(size_t rankIdx,
+                                                                  std::vector<HashValue> &blockHashes) const {
     // prefixcache sp cp场景下，只支持prefill阶段
     return GetAllocator(DeviceType::NPU, rankIdx)->FindCachedBlocksPrefix(blockHashes);
 }
 // not used.
 // usage scenario is required. If no one calling this, swaMapping_ will keep growing.
-std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::GetAndResetSwaps()
-{
+std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::GetAndResetSwaps() {
     std::vector<std::pair<BlockId, BlockId>> swapMapping = {};
     for (const auto &pair : swapMapping_) {
         swapMapping.push_back(pair);
@@ -312,22 +286,19 @@ std::vector<std::pair<BlockId, BlockId>> CpuNpuBlockAllocator::GetAndResetSwaps(
     return swapMapping;
 }
 
-void CpuNpuBlockAllocator::AppendTokenIds(BlockObjSPtr block, const std::vector<TokenId> &tokenIds)
-{
+void CpuNpuBlockAllocator::AppendTokenIds(BlockObjSPtr block, const std::vector<TokenId> &tokenIds) {
     BlockId blockId = block->GetBlockId();
     DeviceType deviceType = GetDeviceTypeForBlockId(blockId);
     GetAllocator(deviceType, block->GetRankIdx())->AppendTokenIds(block, tokenIds);
 }
 
-void CpuNpuBlockAllocator::ReplaceToken(BlockObjSPtr block, size_t startIndex, TokenId newToken)
-{
+void CpuNpuBlockAllocator::ReplaceToken(BlockObjSPtr block, size_t startIndex, TokenId newToken) {
     BlockId blockId = block->GetBlockId();
     DeviceType deviceType = GetDeviceTypeForBlockId(blockId);
     GetAllocator(deviceType, block->GetRankIdx())->ReplaceToken(block, startIndex, newToken);
 }
 
-BlockAllocatorSPtr CpuNpuBlockAllocator::GetAllocator(DeviceType deviceType, size_t rankIdx) const
-{
+BlockAllocatorSPtr CpuNpuBlockAllocator::GetAllocator(DeviceType deviceType, size_t rankIdx) const {
     if (deviceType == DeviceType::CPU) {
         if (rankIdx >= cpuAllocators_.size()) {
             throw std::out_of_range("Invalid rank index for CPU allocator");
@@ -342,4 +313,4 @@ BlockAllocatorSPtr CpuNpuBlockAllocator::GetAllocator(DeviceType deviceType, siz
     throw std::invalid_argument("Unsupported device type");
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

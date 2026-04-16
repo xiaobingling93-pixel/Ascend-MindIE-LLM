@@ -25,18 +25,13 @@ namespace mindie_llm {
 
 // response buffer for the same request
 class ResponseBuffer {
-public:
+   public:
     explicit ResponseBuffer(InferReqType inferStage, std::int64_t lastRespArriveTime)
-        : lastRespArriveTime_(lastRespArriveTime), inferStage_(inferStage)
-    {
-    }
+        : lastRespArriveTime_(lastRespArriveTime), inferStage_(inferStage) {}
 
     ~ResponseBuffer() = default;
 
-    void AddResponse(const ResponseSPtr &response)
-    {
-        responseQueue4UniqueReq.PushBack(response);
-    }
+    void AddResponse(const ResponseSPtr &response) { responseQueue4UniqueReq.PushBack(response); }
 
     void SetlastRespArriveTime(std::int64_t lastRespArriveTime) { lastRespArriveTime_ = lastRespArriveTime; }
 
@@ -44,7 +39,7 @@ public:
 
     InferReqType GetInferStage() const { return inferStage_; }
 
-    void SetReqEnded() {  isEnded_ = true; }
+    void SetReqEnded() { isEnded_ = true; }
 
     bool IsEnded() const { return isEnded_; }
 
@@ -52,20 +47,20 @@ public:
 
     bool IsEmpty() { return responseQueue4UniqueReq.Empty(); }
 
-    ResponseSPtr PopFront()
-    {
+    ResponseSPtr PopFront() {
         ResponseSPtr result;
         if (responseQueue4UniqueReq.PopFront(result)) {
             return result;
         }
         return nullptr;
     }
-private:
+
+   private:
     ConcurrentDeque<ResponseSPtr> responseQueue4UniqueReq;
     std::int64_t lastRespArriveTime_;
     InferReqType inferStage_;
     std::atomic<bool> isEnded_ = {false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // RESPONSE_BUFFER_H
+#endif  // RESPONSE_BUFFER_H

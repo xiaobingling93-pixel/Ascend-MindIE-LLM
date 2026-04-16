@@ -10,6 +10,7 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
+
 class ProcessStartArgName:
     LOCAL_RANK = "local_rank"
     LOCAL_WORLD_SIZE = "local_world_size"

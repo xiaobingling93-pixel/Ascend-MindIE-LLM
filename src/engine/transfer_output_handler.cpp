@@ -9,21 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "transfer_output_handler.h"
-#include "model_exec_output_handler.h"
+
 #include "log.h"
+#include "model_exec_output_handler.h"
 
 using namespace model_execute_data;
 namespace mindie_llm {
 
 TransferOutputHandler::TransferOutputHandler(ForwardRespToManagerCall cb, size_t localDPRank)
-    : forwardRespToManagerCall_(cb), localDPRank_(localDPRank)
-{
-}
+    : forwardRespToManagerCall_(cb), localDPRank_(localDPRank) {}
 
-void TransferOutputHandler::Entry4Executor(PullKVResponseSPtr pullKvResponse)
-{
+void TransferOutputHandler::Entry4Executor(PullKVResponseSPtr pullKvResponse) {
     // 先处理 successPulledRequestIds_，不阻塞调度
     for (int i = 0; i < pullKvResponse->pull_kv_results_size(); ++i) {
         const auto &result = pullKvResponse->pull_kv_results(i);
@@ -46,7 +44,7 @@ void TransferOutputHandler::Entry4Executor(PullKVResponseSPtr pullKvResponse)
         // former PULL_KV_RESULT
         ResponseSPtr response = std::make_shared<Response>(inferRequestId);
         response->responseContents.resize(1);
-        response->responseContents[0].pdErrorCode = errorCode; // pdErrorCode
+        response->responseContents[0].pdErrorCode = errorCode;  // pdErrorCode
 
         // 返回推理结果给上层的回调函数
         response->transferStatusFlag = TransferStatusType::PULL_KV_COMPLETE;
@@ -62,4 +60,4 @@ void TransferOutputHandler::Entry4Executor(PullKVResponseSPtr pullKvResponse)
 }
 
 ConcurrentDeque<RequestId> &TransferOutputHandler::GetPulledReqIds() { return kvPulledReqIds_; }
-} // namespace mindie_llm
+}  // namespace mindie_llm

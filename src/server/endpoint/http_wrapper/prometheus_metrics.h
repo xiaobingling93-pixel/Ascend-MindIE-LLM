@@ -13,30 +13,31 @@
 #ifndef PROMETHEUS_METRICS_H
 #define PROMETHEUS_METRICS_H
 
-#include <cstdint>
+#include <prometheus/counter.h>
+#include <prometheus/gauge.h>
+#include <prometheus/histogram.h>
+#include <prometheus/registry.h>
+#include <prometheus/text_serializer.h>
+
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <thread>
 
-#include <prometheus/registry.h>
-#include <prometheus/counter.h>
-#include <prometheus/histogram.h>
-#include <prometheus/gauge.h>
-#include <prometheus/text_serializer.h>
 #include "status.h"
 
 namespace mindie_llm {
 class PrometheusMetrics {
-public:
-    PrometheusMetrics(const PrometheusMetrics &) = delete;
+   public:
+    PrometheusMetrics(const PrometheusMetrics&) = delete;
     ~PrometheusMetrics();
 
     static std::shared_ptr<PrometheusMetrics> GetInstance();
-    PrometheusMetrics &operator=(const PrometheusMetrics &) = delete;
+    PrometheusMetrics& operator=(const PrometheusMetrics&) = delete;
 
     Status InitPrometheusMetrics(std::string modelName);
 
-    void GetMetricsResult(std::string &metricsResult);
+    void GetMetricsResult(std::string& metricsResult);
 
     void TTFTObserve(uint64_t prefillTime);
     void TBTObserve(uint64_t decodeTime);
@@ -56,8 +57,8 @@ public:
     void RequestInputTokenCount(uint32_t tokenNum);
     void ResponseOutputTokenCount(uint32_t tokenNum);
 
-    void CacheBlockDataCollect(uint32_t freeNpuBlockNums, uint32_t freeCpuBlockNums,
-        uint32_t totalNpuBlockNums, uint32_t totalCpuBlockNums);
+    void CacheBlockDataCollect(uint32_t freeNpuBlockNums, uint32_t freeCpuBlockNums, uint32_t totalNpuBlockNums,
+                               uint32_t totalCpuBlockNums);
 
     void RadixMatchDataCollect(uint64_t allRadixMatchNum, uint64_t npuRadixMatchHitNum);
 
@@ -73,7 +74,8 @@ public:
     void RecordStatusData();
 
     bool IsActivate();
-private:
+
+   private:
     explicit PrometheusMetrics();
 
     static constexpr int tokenArraySize = 15;
@@ -85,37 +87,37 @@ private:
     uint32_t inputTokens;
     void PrintTokenDistribution();
 
-    prometheus::Counter* requestNumCounter_ = nullptr;  // request number counter
-    prometheus::Counter* responseNumCounter_ = nullptr; // response number counter
-    prometheus::Counter* failedResponseNumCounter_ = nullptr; // failed response number counter
-    prometheus::Gauge *runningRequestNumGauge_ = nullptr; // Number of requests is running and pending status
-    prometheus::Gauge *waitingRequestNumGauge_ = nullptr; // Number of requests is waiting status
-    prometheus::Gauge *swappedRequestNumGauge_ = nullptr; // Number of requests swapped to CPU
+    prometheus::Counter* requestNumCounter_ = nullptr;         // request number counter
+    prometheus::Counter* responseNumCounter_ = nullptr;        // response number counter
+    prometheus::Counter* failedResponseNumCounter_ = nullptr;  // failed response number counter
+    prometheus::Gauge* runningRequestNumGauge_ = nullptr;      // Number of requests is running and pending status
+    prometheus::Gauge* waitingRequestNumGauge_ = nullptr;      // Number of requests is waiting status
+    prometheus::Gauge* swappedRequestNumGauge_ = nullptr;      // Number of requests swapped to CPU
 
-    prometheus::Gauge* prefillThroughputGauge_ = nullptr;   // request prefill throughput using average
-    prometheus::Gauge* decodeThroughputGauge_ = nullptr;    // request decode throughput
+    prometheus::Gauge* prefillThroughputGauge_ = nullptr;  // request prefill throughput using average
+    prometheus::Gauge* decodeThroughputGauge_ = nullptr;   // request decode throughput
 
-    prometheus::Histogram* requestTTFTHistogram_ = nullptr; // request time to first token, after all prefill
-    prometheus::Histogram* requestTBTHistogram_ = nullptr;  // request time between tokens, in decoding
-    prometheus::Histogram* requestE2EHistogram_ = nullptr;  // request end to end time, from request to response
+    prometheus::Histogram* requestTTFTHistogram_ = nullptr;  // request time to first token, after all prefill
+    prometheus::Histogram* requestTBTHistogram_ = nullptr;   // request time between tokens, in decoding
+    prometheus::Histogram* requestE2EHistogram_ = nullptr;   // request end to end time, from request to response
 
     // failed request rate, recoding when http response code is not 200
     prometheus::Gauge* failedRequestRateGauge_ = nullptr;
 
-    prometheus::Histogram* requestInputTokenHistogram_ = nullptr;   // request input token length
-    prometheus::Histogram* responseOutputTokenHistogram_ = nullptr; // response output token length
+    prometheus::Histogram* requestInputTokenHistogram_ = nullptr;    // request input token length
+    prometheus::Histogram* responseOutputTokenHistogram_ = nullptr;  // response output token length
     prometheus::Counter* requestInputTokenCounter_ = nullptr;
     prometheus::Counter* responseOutputTokenCounter_ = nullptr;
 
-    prometheus::Gauge* npuCacheUsedRateGauge_ = nullptr;   // npu cache used rate
-    prometheus::Gauge* cpuCacheUsedRateGauge_ = nullptr;   // cpu cache used rate
+    prometheus::Gauge* npuCacheUsedRateGauge_ = nullptr;  // npu cache used rate
+    prometheus::Gauge* cpuCacheUsedRateGauge_ = nullptr;  // cpu cache used rate
 
-    prometheus::Gauge* npuPrefixCacheHitRate_ = nullptr;   // npu cache hit rate
-    prometheus::Counter* requestNumPreemptionsTotal_ = nullptr;   // Cumulative number of preemption from the engine
+    prometheus::Gauge* npuPrefixCacheHitRate_ = nullptr;         // npu cache hit rate
+    prometheus::Counter* requestNumPreemptionsTotal_ = nullptr;  // Cumulative number of preemption from the engine
 
     // 新增：上报原始数据，供 Coordinator 加权计算命中率
-    prometheus::Gauge* allRadixMatchNumGauge_ = nullptr;      // 总的 radix match 尝试次数
-    prometheus::Gauge* npuRadixMatchHitNumGauge_ = nullptr;   // radix match 命中次数
+    prometheus::Gauge* allRadixMatchNumGauge_ = nullptr;     // 总的 radix match 尝试次数
+    prometheus::Gauge* npuRadixMatchHitNumGauge_ = nullptr;  // radix match 命中次数
 
     std::chrono::steady_clock::time_point TTFTStartTime_ = std::chrono::steady_clock::time_point();
     std::chrono::steady_clock::time_point TTFTEndTime_ = std::chrono::steady_clock::time_point();
@@ -135,6 +137,6 @@ private:
     std::thread collectThread_;
     std::mutex varMutex;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // PROMETHEUS_METRICS_H
+#endif  // PROMETHEUS_METRICS_H

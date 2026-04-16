@@ -14,11 +14,21 @@ from mindie_llm.utils.log.logging_base import get_logger, Component
 
 _MAX_MSG_LEN = 4096
 _SPECIAL_CHARS = [
-    '\n', '\r', '\f',
-    '\t', '\v', '\b',
-    "//", "\\", "&",
-    '\u000A', '\u000D', '\u000C',
-    '\u000B', '\u0008', '\u007F',
+    "\n",
+    "\r",
+    "\f",
+    "\t",
+    "\v",
+    "\b",
+    "//",
+    "\\",
+    "&",
+    "\u000a",
+    "\u000d",
+    "\u000c",
+    "\u000b",
+    "\u0008",
+    "\u007f",
 ]
 
 
@@ -35,10 +45,10 @@ def message_filter(msg: str):
     Truncate message exceeding the limit and filter special characters.
     """
     if len(msg) > _MAX_MSG_LEN:
-        msg = msg[:_MAX_MSG_LEN] + '...'
+        msg = msg[:_MAX_MSG_LEN] + "..."
     for item in _SPECIAL_CHARS:
-        msg = msg.replace(item, ' ')
-    msg = re.sub(r' {5,}', '    ', msg)
+        msg = msg.replace(item, " ")
+    msg = re.sub(r" {5,}", "    ", msg)
     return msg
 
 

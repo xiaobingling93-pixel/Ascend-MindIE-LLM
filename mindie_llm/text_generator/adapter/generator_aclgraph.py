@@ -11,7 +11,7 @@
 import gc
 import math
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch_npu
@@ -37,22 +37,26 @@ class ExpertParallelDegree(int, Enum):
 
 
 def check_model_config(model_config):
-    model_name = model_config.get('model_name')
+    model_name = model_config.get("model_name")
     if model_name is not None and (len(model_name) < 1 or len(model_name) > MAX_KEY_LENGTH):
-        message = "The length of `model_name` should be in range of [1, 256]. " \
-                  "If you are using MindIE as a service framework, " \
-                  "`model_name` is loaded from $BackendConfig.ModelDeployConfig.ModelConfig.modelName " \
-                  "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        message = (
+            "The length of `model_name` should be in range of [1, 256]. "
+            "If you are using MindIE as a service framework, "
+            "`model_name` is loaded from $BackendConfig.ModelDeployConfig.ModelConfig.modelName "
+            "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        )
         logger.error(message, ErrorCode.TEXT_GENERATOR_PARAM_OUT_OF_RANGE)
         raise ValueError(message)
 
-    max_position_embeddings = model_config.get('max_position_embeddings')
+    max_position_embeddings = model_config.get("max_position_embeddings")
     if max_position_embeddings is not None and max_position_embeddings <= 0:
-        message = "`max_position_embeddings` must be greater than 0. " \
-                  "If you are using MindIE as a service framework, " \
-                  "`max_position_embeddings` is derived from " \
-                  "$BackendConfig.ModelDeployConfig.ModelConfig.max_position_embeddings " \
-                  "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        message = (
+            "`max_position_embeddings` must be greater than 0. "
+            "If you are using MindIE as a service framework, "
+            "`max_position_embeddings` is derived from "
+            "$BackendConfig.ModelDeployConfig.ModelConfig.max_position_embeddings "
+            "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        )
         logger.error(message, ErrorCode.TEXT_GENERATOR_PARAM_OUT_OF_RANGE)
         raise ValueError(message)
 
@@ -86,6 +90,7 @@ class GeneratorAclGraph(GeneratorBackend):
         model_config: A dictionary containing the model configuration as detailed in
             `mindie_llm.text_generator.utils.config.ModelConfig`.
     """
+
     cache_pool: KVCachePool = None
 
     def __init__(self, model_config: Dict[str, Any]) -> None:
@@ -113,7 +118,7 @@ class GeneratorAclGraph(GeneratorBackend):
         if self.mapping.has_attn_cp():
             self.cp_rank = self.mapping.attn_cp.rank
             self.cp_size = self.mapping.attn_cp.group_size
-        
+
         if ENV.model_runner_exp and ENV.async_inference:
             self.sampler = self.model_wrapper.model_runner.sampler
 
@@ -145,8 +150,13 @@ class GeneratorAclGraph(GeneratorBackend):
         return model_input, kwargs
 
     def forward_from_model_inputs(self, model_input: ModelInput, **kwargs):
-        result = self.model_wrapper.forward_from_model_inputs(self.cache_pool.npu_cache,
-            model_input.input_ids, model_input.position_ids, model_input.forward_context, **kwargs)
+        result = self.model_wrapper.forward_from_model_inputs(
+            self.cache_pool.npu_cache,
+            model_input.input_ids,
+            model_input.position_ids,
+            model_input.forward_context,
+            **kwargs,
+        )
 
         if isinstance(result, tuple):
             if len(result) == 2:
@@ -161,19 +171,19 @@ class GeneratorAclGraph(GeneratorBackend):
 
         return model_output
 
-    @timer.track_time('sample')
+    @timer.track_time("sample")
     def sample(
-            self,
-            logits: Any,
-            sampling_metadata: Optional[Union[SamplingMetadata, SamplingData]] = None,
-            sampling_param: Optional[SamplingParam] = None,
-            **kwargs
+        self,
+        logits: Any,
+        sampling_metadata: Optional[Union[SamplingMetadata, SamplingData]] = None,
+        sampling_param: Optional[SamplingParam] = None,
+        **kwargs,
     ) -> Union[SamplingOutput, Tuple[np.ndarray, Optional[np.ndarray]]]:
         sampling_data = None
         if isinstance(sampling_metadata, SamplingData):
             sampling_data = sampling_metadata
-        elif 'sampling_data' in kwargs:
-            sampling_data = kwargs.get('sampling_data')
+        elif "sampling_data" in kwargs:
+            sampling_data = kwargs.get("sampling_data")
         if sampling_data is not None:  # Enter deprecated branch
             sampling_metadata = SamplingMetadata.from_deprecated(sampling_data, sampling_param)
             output = self.sampler(logits, sampling_metadata)
@@ -182,7 +192,7 @@ class GeneratorAclGraph(GeneratorBackend):
             output = self.sampler(logits, sampling_metadata)
         return output
 
-    @timer.track_time('forward')
+    @timer.track_time("forward")
     def forward(self, model_inputs: ModelInput, **kwargs):
         self._prepare_model_inputs(model_inputs, kwargs)  # NOTE：to remove after mixPD server support dp in dp out.
         logits = self.model_wrapper.forward(model_inputs, self.cache_pool.npu_cache, **kwargs)
@@ -232,14 +242,14 @@ class GeneratorAclGraph(GeneratorBackend):
         # NOTE: To ensure compatibility with atb graph, the current warmup procedure is:
         # The first inference process will perform dummy run and capture graph.
         # We will later refactor the warmup procedure to first profile run then capture graph.
-        inference_mode = kwargs.get('inference_mode', None)
+        inference_mode = kwargs.get("inference_mode", None)
         q_lens = None
         if inference_mode.enable_prefill_pa and model_inputs.is_prefill:
             q_lens = list(map(lambda x: int(x / self.mapping.attn_cp.group_size), model_inputs.context_length.tolist()))
         elif inference_mode.enable_decode_pa and not model_inputs.is_prefill:
             q_lens = model_inputs.context_length.tolist()
 
-        sampling_metadata = kwargs.pop('sampling_metadata', None)
+        sampling_metadata = kwargs.pop("sampling_metadata", None)
         logits = self.forward(model_inputs, q_lens=q_lens, **kwargs)
         torch.npu.synchronize()
         if sampling_metadata:
@@ -249,11 +259,13 @@ class GeneratorAclGraph(GeneratorBackend):
                 logits_num_per_batch = [repeat_num] * warmup_logits.shape[0]
                 top_k_idx = self.repeat_sample_param(sampling_metadata.top_k_idx, logits_num_per_batch)
                 sampling_metadata.top_k_idx = top_k_idx
-                top_k_disabled_mask = self.repeat_sample_param(sampling_metadata.top_k_disabled_mask,
-                                                            logits_num_per_batch)
+                top_k_disabled_mask = self.repeat_sample_param(
+                    sampling_metadata.top_k_disabled_mask, logits_num_per_batch
+                )
                 sampling_metadata.top_k_disabled_mask = top_k_disabled_mask
-                repetition_penalty = self.repeat_sample_param(sampling_metadata.repetition_penalty,
-                                                            logits_num_per_batch)
+                repetition_penalty = self.repeat_sample_param(
+                    sampling_metadata.repetition_penalty, logits_num_per_batch
+                )
                 sampling_metadata.repetition_penalty = repetition_penalty
                 frequency_penalty = self.repeat_sample_param(sampling_metadata.frequency_penalty, logits_num_per_batch)
                 sampling_metadata.frequency_penalty = frequency_penalty
@@ -270,15 +282,14 @@ class GeneratorAclGraph(GeneratorBackend):
     def _prepare_model_inputs(self, model_inputs: ModelInput, model_kwargs: Dict[str, Any]):
         # NOTE: Changes to `model_kwargs` will not take effect if `aclgraph_model_wrapper_exp.py` is in use.
         if self.mapping.has_dp() and not self.distributed_enable:
-            tmp_dict = {'q_lens': model_kwargs.get('q_lens', None),
-                            'sub_model': True}
+            tmp_dict = {"q_lens": model_kwargs.get("q_lens", None), "sub_model": True}
             self._dp_partition_data(model_inputs, model_kwargs)
-            sub_model_inputs = model_kwargs.get('sub_model_inputs', None)
+            sub_model_inputs = model_kwargs.get("sub_model_inputs", None)
             if sub_model_inputs is not None:
                 self._dp_partition_data(sub_model_inputs, tmp_dict)
-                model_kwargs['sub_model_inputs'] = sub_model_inputs
-                lm_head_local_dp = tmp_dict.get('lm_head_local_dp', None)
-                model_kwargs['lm_head_local_dp'] = lm_head_local_dp
+                model_kwargs["sub_model_inputs"] = sub_model_inputs
+                lm_head_local_dp = tmp_dict.get("lm_head_local_dp", None)
+                model_kwargs["lm_head_local_dp"] = lm_head_local_dp
 
         if self.mapping.has_attn_cp():
             if model_inputs.is_prefill:
@@ -289,14 +300,16 @@ class GeneratorAclGraph(GeneratorBackend):
         if self.mapping.has_attn_inner_sp() and not model_inputs.is_prefill:
             raise NotImplementedError("Do not support sp currently.")
 
-        has_tp = self.mapping.has_attn_tp() or self.mapping.has_attn_o_proj_tp() or \
-                                self.mapping.lm_head_tp.group_size > 1
+        has_tp = (
+            self.mapping.has_attn_tp() or self.mapping.has_attn_o_proj_tp() or self.mapping.lm_head_tp.group_size > 1
+        )
 
         if model_inputs.is_prefill:
             if has_tp and self.distributed_enable:
                 batch_size = len(model_inputs.context_length)
-                logger.debug(f'Prefill Distributed scenario and TP > 1, generate dp ep padding. '
-                            f'The batch size is {batch_size}')
+                logger.debug(
+                    f"Prefill Distributed scenario and TP > 1, generate dp ep padding. The batch size is {batch_size}"
+                )
                 self._update_lm_head_indices(model_inputs, model_kwargs)
                 self._update_token_size_per_dp_group(model_inputs, model_kwargs)
                 self._update_lm_head_indices_dp_rank_ids(model_inputs, model_kwargs)
@@ -307,20 +320,20 @@ class GeneratorAclGraph(GeneratorBackend):
                 batch_size = len(model_inputs.context_length)
                 token_num_per_batch = self.num_speculative_tokens + 1
 
-                logger.debug(f'Decode Distributed scenario and TP > 1, generate dp ep padding. '
-                            f'The batch size is {batch_size}')
+                logger.debug(
+                    f"Decode Distributed scenario and TP > 1, generate dp ep padding. The batch size is {batch_size}"
+                )
                 dep_inputs = self._get_dp_ep_inputs(batch_size * token_num_per_batch, model_inputs.input_ids)
-                data = {
-                    "dep_inputs": dep_inputs
-                }
+                data = {"dep_inputs": dep_inputs}
                 model_kwargs.update(data)
 
         if self.mapping.has_dp() and not self.distributed_enable:
-            lm_head_indices_dp_rank_ids = model_kwargs.get('lm_head_indices_dp_rank_ids')
+            lm_head_indices_dp_rank_ids = model_kwargs.get("lm_head_indices_dp_rank_ids")
             mtp_logits_gather_indices = torch.arange(0, lm_head_indices_dp_rank_ids.shape[0])
-            mtp_logits_gather_indices = \
-                mtp_logits_gather_indices[lm_head_indices_dp_rank_ids == self.mapping.attn_dp.rank]
-            model_kwargs['mtp_logits_gather_indices'] = mtp_logits_gather_indices
+            mtp_logits_gather_indices = mtp_logits_gather_indices[
+                lm_head_indices_dp_rank_ids == self.mapping.attn_dp.rank
+            ]
+            model_kwargs["mtp_logits_gather_indices"] = mtp_logits_gather_indices
 
     def _dp_partition_data(self, model_inputs, kwargs):
         dp_rank_ids = model_inputs.dp_rank_ids
@@ -332,8 +345,9 @@ class GeneratorAclGraph(GeneratorBackend):
             input_token_num_per_batch = q_lens if q_lens is not None else model_inputs.context_length
             output_token_num_per_batch = [1 for _ in range(len(model_inputs.context_length))]
         else:
-            input_token_num_per_batch = \
+            input_token_num_per_batch = (
                 q_lens if q_lens is not None else [1 for _ in range(len(model_inputs.input_ids))]
+            )
             batch_size = len(model_inputs.context_length)
             output_token_num_per_batch = [1] * batch_size if is_sub_model else input_token_num_per_batch
         input_token_num_per_batch = np.array(input_token_num_per_batch)
@@ -341,8 +355,9 @@ class GeneratorAclGraph(GeneratorBackend):
         slot_num_per_batch = input_token_num_per_batch if not is_sub_model else (2 * (input_token_num_per_batch - 1))
         dp_rank_ids_per_token = np.repeat(dp_rank_ids, input_token_num_per_batch)
         slot_dp_rank_id = np.repeat(dp_rank_ids, slot_num_per_batch)
-        lm_head_local_dp = self._partition_data(slot_dp_rank_id, dp_rank_ids_per_token, model_inputs,
-                                                input_token_num_per_batch, output_token_num_per_batch)
+        lm_head_local_dp = self._partition_data(
+            slot_dp_rank_id, dp_rank_ids_per_token, model_inputs, input_token_num_per_batch, output_token_num_per_batch
+        )
         additional_kwargs = self._gather_dp_data(dp_rank_ids_per_token)
         kwargs.update(additional_kwargs)
 
@@ -351,16 +366,16 @@ class GeneratorAclGraph(GeneratorBackend):
 
         if q_lens is not None:
             q_lens_new, spec_mask_new = self._update_qlen_and_mask_dp_data(model_inputs, q_lens, spec_mask)
-            kwargs['q_lens'] = q_lens_new
-            kwargs['spec_mask'] = spec_mask_new
+            kwargs["q_lens"] = q_lens_new
+            kwargs["spec_mask"] = spec_mask_new
         if hidden_states is not None:
             hidden_states_new = self._update_hidden_states_dp_data(model_inputs, q_lens, hidden_states)
-            kwargs['hidden_states'] = hidden_states_new
+            kwargs["hidden_states"] = hidden_states_new
         if not is_sub_model or model_inputs.is_prefill:
-            kwargs['lm_head_indices_dp_rank_ids'] = dp_rank_ids
-            kwargs['dp_rank_ids'] = torch.tensor(dp_rank_ids).to(self.device)
+            kwargs["lm_head_indices_dp_rank_ids"] = dp_rank_ids
+            kwargs["dp_rank_ids"] = torch.tensor(dp_rank_ids).to(self.device)
         if is_sub_model:
-            kwargs['lm_head_local_dp'] = lm_head_local_dp
+            kwargs["lm_head_local_dp"] = lm_head_local_dp
 
     def _generate_lm_head_for_cp(self, context_lens):
         # 每个seq对应的token个数
@@ -378,21 +393,24 @@ class GeneratorAclGraph(GeneratorBackend):
         rank_ids = np.where(
             chunk_ids >= self.cp_size,
             2 * self.cp_size - chunk_ids - 1,  # 满足条件时的计算
-            chunk_ids  # 不满足条件时的计算
+            chunk_ids,  # 不满足条件时的计算
         )
         # 前缀和，表示相对于seq的偏移（第i+1个batch从前i个batch的总token个数处开始）
         sum_prefix_lens_per_rank = np.insert(np.cumsum(seq_lens / self.cp_size)[:-1], 0, 0)
         # lmhead indices计算结果：rank_id * rank_len + sum(prefix_seq_lens) + chunk_id * chunk_len + offset
-        prefill_head_indices = np.sum(seq_lens) / self.cp_size * rank_ids \
-            + sum_prefix_lens_per_rank + \
-            (chunk_ids / self.cp_size).astype(np.int64) * chunk_lens + offsets
+        prefill_head_indices = (
+            np.sum(seq_lens) / self.cp_size * rank_ids
+            + sum_prefix_lens_per_rank
+            + (chunk_ids / self.cp_size).astype(np.int64) * chunk_lens
+            + offsets
+        )
         return prefill_head_indices
 
     def _cp_partition_data(self, model_inputs: ModelInput):
         # CP 参数切分
         cp_size = self.mapping.attn_cp.group_size
         cp_rank = self.mapping.attn_cp.rank
-        num_chunks = cp_size * 2 # 负载均衡下，需要将序列切 2*cp 份
+        num_chunks = cp_size * 2  # 负载均衡下，需要将序列切 2*cp 份
         input_ids_list = []
         position_ids_list = []
         batch_seq_len = model_inputs.context_length
@@ -411,9 +429,9 @@ class GeneratorAclGraph(GeneratorBackend):
 
             position_ids_list.extend(model_inputs.position_ids[start_idx:end_idx][former_st_idx:former_end_idx])
             position_ids_list.extend(model_inputs.position_ids[start_idx:end_idx][latter_st_idx:latter_end_idx])
-            
+
             cumulative_seq_len += input_length
-        
+
         context_length_without_padding = model_inputs.context_length - model_inputs.pad_token_count
         model_inputs.prefill_head_indices = self._generate_lm_head_for_cp(context_length_without_padding)
         model_inputs.input_ids = np.array(input_ids_list, dtype=np.int64)
@@ -422,7 +440,7 @@ class GeneratorAclGraph(GeneratorBackend):
         model_inputs.context_length = model_inputs.cp_tokens[:, cp_rank].astype(np.int32)
 
     def _cp_update_context_length(self, model_inputs: ModelInput):
-        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size: (self.cp_rank + 1) * self.sp_size]
+        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size : (self.cp_rank + 1) * self.sp_size]
         model_inputs.context_length = all_sp_tokens.sum(axis=1).astype(np.int32)
 
     def _update_lm_head_indices(self, model_inputs: ModelInput, model_kwargs: Dict[str, Any]):
@@ -446,7 +464,7 @@ class GeneratorAclGraph(GeneratorBackend):
         dp_logits_num = np.cumsum(dp_logits_num)
         additional_kwargs = {"dp_logits_num": dp_logits_num}
         model_kwargs.update(additional_kwargs)
-        
+
     def _update_token_size_per_dp_group(self, model_inputs, kwargs):
         len_first = len(model_inputs.position_ids)
         seq_lens_flattened = [len_first] * self.mapping.attn_dp.group_size
@@ -454,7 +472,7 @@ class GeneratorAclGraph(GeneratorBackend):
             seq_lens_flattened = [max(1, sum(dp_seq_len)) for dp_seq_len in model_inputs.seq_lens]
         additional_kwargs = {"token_size_per_dp_group": np.array(seq_lens_flattened)}
         kwargs.update(additional_kwargs)
-            
+
     def _update_lm_head_indices_dp_rank_ids(self, model_inputs, kwargs):
         is_sub_model = kwargs.get("sub_model", False)
         if not is_sub_model or model_inputs.is_prefill:
@@ -474,7 +492,7 @@ class GeneratorAclGraph(GeneratorBackend):
         q_lens_np = np.array(q_lens)
         q_lens_tmp = q_lens_np[cur_dp_rank_id_mask]
         if q_lens_tmp.size == 0:
-            q_lens_new = np.array([1], dtype=np.int32) # q_len为1的list
+            q_lens_new = np.array([1], dtype=np.int32)  # q_len为1的list
             filtered_mask = spec_mask[0] if spec_mask is not None else None
         else:
             # 获取当前dp组的数据
@@ -484,12 +502,12 @@ class GeneratorAclGraph(GeneratorBackend):
             if spec_mask is not None:
                 for qlen, t in zip(q_lens, cur_dp_rank_id_mask):
                     if t:
-                        filtered_mask_rows.append(spec_mask[current_row:current_row + qlen])
+                        filtered_mask_rows.append(spec_mask[current_row : current_row + qlen])
                     current_row += qlen
                 filtered_mask = torch.cat(filtered_mask_rows, dim=0)
         q_lens_new = q_lens_new.tolist()
         return q_lens_new, filtered_mask
-    
+
     def _update_hidden_states_dp_data(self, model_inputs, q_lens, hidden_states):
         dp_rank_ids = model_inputs.dp_rank_ids
         cur_dp_rank_id_mask = dp_rank_ids == self.mapping.attn_dp.rank
@@ -503,25 +521,24 @@ class GeneratorAclGraph(GeneratorBackend):
             current_row = 0
             for qlen, t in zip(q_lens, cur_dp_rank_id_mask):
                 if t:
-                    filtered_hidden_states_rows.append(hidden_states[current_row:current_row + qlen])
+                    filtered_hidden_states_rows.append(hidden_states[current_row : current_row + qlen])
                 current_row += qlen
             filtered_hidden_states = torch.cat(filtered_hidden_states_rows, dim=0)
 
         return filtered_hidden_states
-    
+
     def _update_shard_effective_token_indices(self, model_inputs, kwargs):
         token_size_per_dp_group = kwargs.get("token_size_per_dp_group")
         start_indices = np.cumsum(token_size_per_dp_group, axis=0) - token_size_per_dp_group
         end_indices = np.cumsum(token_size_per_dp_group, axis=0)
         shard_effective_token_indices = np.arange(
-            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank],
-            dtype=np.int64
+            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank], dtype=np.int64
         )
         additional_kwargs = {"shard_effective_token_indices": shard_effective_token_indices}
         kwargs.update(additional_kwargs)
 
     def _get_dp_ep_padding_inputs(self, is_prefill, kwargs):
-        token_size_per_dp_group = kwargs['token_size_per_dp_group']
+        token_size_per_dp_group = kwargs["token_size_per_dp_group"]
         input_ids_len = token_size_per_dp_group[self.mapping.attn_dp.rank]
         max_dp_batch_size = max(token_size_per_dp_group)
         local_token_size = token_size_per_dp_group[self.mapping.attn_dp.rank]
@@ -540,102 +557,129 @@ class GeneratorAclGraph(GeneratorBackend):
         token_size_per_dp_group_startid = np.cumsum(token_size_per_dp_group)
         token_size_per_dp_group_startid[-1] = 0
 
-        lm_head_skip_padding_token_indices = np.concatenate([
-            np.arange(j, dtype=np.int32) + max_token_size_per_dp_group * rank_id
-            for rank_id, j in enumerate(token_size_per_dp_group)
-        ])
+        lm_head_skip_padding_token_indices = np.concatenate(
+            [
+                np.arange(j, dtype=np.int32) + max_token_size_per_dp_group * rank_id
+                for rank_id, j in enumerate(token_size_per_dp_group)
+            ]
+        )
 
         atom_dp_size = max_token_size_per_dp_group // self.mapping.attn_tp.group_size
         input_length_padding = max_token_size_per_dp_group - local_token_size
-        attn_padding_idx = np.concatenate([
-                np.arange(local_token_size, dtype=np.int32),
-                np.zeros(input_length_padding, dtype=np.int32)
-            ]).reshape(-1)
+        attn_padding_idx = np.concatenate(
+            [np.arange(local_token_size, dtype=np.int32), np.zeros(input_length_padding, dtype=np.int32)]
+        ).reshape(-1)
 
         if self.mapping.has_attn_o_proj_tp():
             gather_prenorm_idx = np.arange(atom_dp_size, dtype=np.int32)
         else:
-            gather_prenorm_idx = \
-                        attn_padding_idx[self.mapping.attn_tp.rank * atom_dp_size: \
-                        (self.mapping.attn_tp.rank + 1) * atom_dp_size]
+            gather_prenorm_idx = attn_padding_idx[
+                self.mapping.attn_tp.rank * atom_dp_size : (self.mapping.attn_tp.rank + 1) * atom_dp_size
+            ]
 
-        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or \
-        (expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill):
+        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or (
+            expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill
+        ):
             attn_unpadding_idx = np.arange(atom_dp_size, dtype=np.int32)
             ffn_padding_idx = attn_unpadding_idx
         else:
             attn_unpadding_idx = np.concatenate(
-                [np.arange(s) + max_token_size_per_dp_group * i
-                    for i, s in enumerate(token_size_per_dp_group)])
-            ffn_padding_idx = np.concatenate([
-                np.concatenate([np.arange(j) + token_size_per_dp_group_startid[rank_id - 1],
-                np.zeros(max_token_size_per_dp_group - j, dtype=np.int32)]) \
-                    for rank_id, j in enumerate(token_size_per_dp_group)], axis=0)
+                [np.arange(s) + max_token_size_per_dp_group * i for i, s in enumerate(token_size_per_dp_group)]
+            )
+            ffn_padding_idx = np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.arange(j) + token_size_per_dp_group_startid[rank_id - 1],
+                            np.zeros(max_token_size_per_dp_group - j, dtype=np.int32),
+                        ]
+                    )
+                    for rank_id, j in enumerate(token_size_per_dp_group)
+                ],
+                axis=0,
+            )
 
         ffn_unpadding_idx = np.arange(token_size_per_dp_group[self.mapping.attn_dp.rank], dtype=np.int32)
 
         dynamic_ep_idx = np.zeros(1, dtype=np.int32)
         moe_idx = np.zeros(1, dtype=np.int32)
 
-        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or \
-            (expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill):
+        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or (
+            expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill
+        ):
             if self.mapping.attn_tp.group_size == 1:
-                dynamic_ep_idx = np.arange(input_ids_len * self.model_wrapper.config.num_experts_per_tok, 
-                                            dtype=np.int32)
-                dynamic_ep_idx_padding = \
-                    np.arange(attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, 
-                                dtype=np.int32)
+                dynamic_ep_idx = np.arange(
+                    input_ids_len * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
+                dynamic_ep_idx_padding = np.arange(
+                    attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
             else:
-                dynamic_ep_idx = np.arange(attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, 
-                                            dtype=np.int32)
+                dynamic_ep_idx = np.arange(
+                    attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
                 dynamic_ep_idx_padding = dynamic_ep_idx
 
-            ep_input_length = \
-                int(dynamic_ep_idx_padding.shape[0] * self._get_all2all_buffer_factor(dynamic_ep_idx_padding.shape[0]))
+            ep_input_length = int(
+                dynamic_ep_idx_padding.shape[0] * self._get_all2all_buffer_factor(dynamic_ep_idx_padding.shape[0])
+            )
             all2all_padding = ep_input_length % self.mapping.moe_ep.group_size
             ep_input_length_padding = (self.mapping.moe_ep.group_size - all2all_padding) if all2all_padding != 0 else 0
             ep_input_length_padding += ep_input_length
             moe_idx = np.arange(1, ep_input_length_padding + 1, dtype=np.int32)
 
         post_lmhead_gather_indices = np.array([1], dtype=np.int32)
-        dep_inputs = [attn_padding_idx, attn_unpadding_idx, ffn_padding_idx,
-                ffn_unpadding_idx, lm_head_skip_padding_token_indices, gather_prenorm_idx,
-                dynamic_ep_idx, moe_idx, post_lmhead_gather_indices]
+        dep_inputs = [
+            attn_padding_idx,
+            attn_unpadding_idx,
+            ffn_padding_idx,
+            ffn_unpadding_idx,
+            lm_head_skip_padding_token_indices,
+            gather_prenorm_idx,
+            dynamic_ep_idx,
+            moe_idx,
+            post_lmhead_gather_indices,
+        ]
 
         additional_kwargs = dict(dep_inputs=dep_inputs, max_dp_batch_size=max_dp_batch_size)
 
         kwargs.update(additional_kwargs)
 
     def _get_dp_ep_inputs(self, batch_size, input_ids):
-        if self.mapping.has_lm_head_local_tp() or self.mapping.has_attn_o_proj_tp() or \
-                self.model_wrapper.config.ep_level == 1:
+        if (
+            self.mapping.has_lm_head_local_tp()
+            or self.mapping.has_attn_o_proj_tp()
+            or self.model_wrapper.config.ep_level == 1
+        ):
             max_decode_dp_token_size = self.max_batch_size * (self.num_speculative_tokens + 1)
             padding_batch_size = max_decode_dp_token_size - batch_size
-        elif batch_size % self.mapping.attn_tp.group_size != 0:   
+        elif batch_size % self.mapping.attn_tp.group_size != 0:
             padding_batch_size = self.mapping.attn_tp.group_size - batch_size % self.mapping.attn_tp.group_size
         else:
             padding_batch_size = 0
-        
-        attn_padding_idx = np.concatenate([
-                np.arange(batch_size, dtype=np.int32),
-                np.zeros(padding_batch_size, dtype=np.int32)
-            ]).reshape(-1)
+
+        attn_padding_idx = np.concatenate(
+            [np.arange(batch_size, dtype=np.int32), np.zeros(padding_batch_size, dtype=np.int32)]
+        ).reshape(-1)
         if self.model_wrapper.config.ep_level == 1:
-            attn_unpadding_idx = np.arange((batch_size + padding_batch_size) * \
-                            self.mapping.attn_dp.group_size, dtype=np.int32)
+            attn_unpadding_idx = np.arange(
+                (batch_size + padding_batch_size) * self.mapping.attn_dp.group_size, dtype=np.int32
+            )
         else:
-            attn_unpadding_idx = np.arange((batch_size + padding_batch_size) // \
-                            self.mapping.attn_tp.group_size, dtype=np.int32)
+            attn_unpadding_idx = np.arange(
+                (batch_size + padding_batch_size) // self.mapping.attn_tp.group_size, dtype=np.int32
+            )
         ffn_padding_idx = attn_unpadding_idx
         ffn_unpadding_idx = np.arange(batch_size, dtype=np.int32)
         lm_head_skip_padding_token_indices = ffn_unpadding_idx
         if self.mapping.has_lm_head_local_tp():
-            lm_head_skip_padding_token_indices = \
-                            np.arange(max_decode_dp_token_size * self.mapping.lm_head_tp.group_size, dtype=np.int32)
+            lm_head_skip_padding_token_indices = np.arange(
+                max_decode_dp_token_size * self.mapping.lm_head_tp.group_size, dtype=np.int32
+            )
 
         tp_rank = self.mapping.attn_tp.rank
         token_size_per_tp_rank = (batch_size + padding_batch_size) // self.mapping.attn_tp.group_size
-        gather_prenorm_idx = attn_padding_idx[tp_rank * token_size_per_tp_rank: (tp_rank + 1) * token_size_per_tp_rank]
+        gather_prenorm_idx = attn_padding_idx[tp_rank * token_size_per_tp_rank : (tp_rank + 1) * token_size_per_tp_rank]
         if self.mapping.has_attn_o_proj_tp():
             gather_prenorm_idx = np.arange(len(input_ids), dtype=np.int32)
 
@@ -643,19 +687,25 @@ class GeneratorAclGraph(GeneratorBackend):
         moe_idx = np.array([1], dtype=np.int32)
         post_lmhead_gather_indices = np.array([1], dtype=np.int32)
         if self.mapping.has_lm_head_local_tp():
-            post_lmhead_gather_indices = np.arange(
-                len(input_ids), 
-                dtype=np.int32
-            )
+            post_lmhead_gather_indices = np.arange(len(input_ids), dtype=np.int32)
 
-        dep_inputs = [attn_padding_idx, attn_unpadding_idx, ffn_padding_idx,
-            ffn_unpadding_idx, lm_head_skip_padding_token_indices, gather_prenorm_idx,
-            dynamic_ep_idx, moe_idx, post_lmhead_gather_indices]
+        dep_inputs = [
+            attn_padding_idx,
+            attn_unpadding_idx,
+            ffn_padding_idx,
+            ffn_unpadding_idx,
+            lm_head_skip_padding_token_indices,
+            gather_prenorm_idx,
+            dynamic_ep_idx,
+            moe_idx,
+            post_lmhead_gather_indices,
+        ]
 
         return dep_inputs
 
-    def _partition_data(self, slot_dp_rank_id, dp_rank_ids_per_token, model_inputs,
-                        token_size_per_request, output_token_num_per_batch):
+    def _partition_data(
+        self, slot_dp_rank_id, dp_rank_ids_per_token, model_inputs, token_size_per_request, output_token_num_per_batch
+    ):
         dp_rank_ids = model_inputs.dp_rank_ids
         cur_dp_rank_id_per_token_mask = dp_rank_ids_per_token == self.mapping.attn_dp.rank
         cur_dp_slot_mask = slot_dp_rank_id == self.mapping.attn_dp.rank
@@ -715,11 +765,13 @@ class GeneratorAclGraph(GeneratorBackend):
             cur_shard_input_lengths = token_size_per_request[dp_rank_ids == i]
             cur_shared_output_lengths = output_token_num_per_batch[dp_rank_ids == i]
             cur_num_request = cur_shard_input_lengths.shape[0]
-            if cur_num_request == 0: # 当前进程上没有这个dp组，会构造一个陪跑数据，那么从这个位置开始往后的所有lm_head都+1
+            if (
+                cur_num_request == 0
+            ):  # 当前进程上没有这个dp组，会构造一个陪跑数据，那么从这个位置开始往后的所有lm_head都+1
                 lm_head_indices_with_dp[cur_idx:] += 1
             else:
                 cur_idx += sum(cur_shared_output_lengths)
-        
+
         # 刷新后重新反排
         reverse_indices = np.argsort(sorted_indices, kind=STABLE_SORT_TYPE)
         lm_head_indices_with_dp = lm_head_indices_with_dp[reverse_indices]
@@ -729,8 +781,9 @@ class GeneratorAclGraph(GeneratorBackend):
         lm_head_indices_with_dp = lm_head_indices_with_dp - delta_offset
 
         # 额外计算一个当前dp组的lmhead输出（用于MTP的多轮抽取）
-        lm_head_local_dp = self._lm_head_local_dp_calc(dp_rank_ids, dp_rank_ids_per_token,
-                                                       model_inputs.prefill_head_indices)
+        lm_head_local_dp = self._lm_head_local_dp_calc(
+            dp_rank_ids, dp_rank_ids_per_token, model_inputs.prefill_head_indices
+        )
 
         model_inputs.input_ids = shard_input_ids
         model_inputs.position_ids = shard_position_ids
@@ -746,7 +799,7 @@ class GeneratorAclGraph(GeneratorBackend):
             model_inputs.cp_tokens = model_inputs.cp_tokens[cur_dp_rank_id_mask]
 
         return lm_head_local_dp
-    
+
     def _gather_dp_data(self, dp_rank_ids_per_token):
         # attn dp + mlp tp场景下，构造额外输入用于tp前收集所有dp组的输入，dp前进行数据切分
         token_size_per_dp_group = np.bincount(dp_rank_ids_per_token, minlength=self.mapping.attn_dp.group_size)
@@ -756,8 +809,7 @@ class GeneratorAclGraph(GeneratorBackend):
         start_indices = np.cumsum(token_size_per_dp_group, axis=0) - token_size_per_dp_group
         end_indices = np.cumsum(token_size_per_dp_group, axis=0)
         shard_effective_token_indices = np.arange(
-            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank],
-            dtype=np.int64
+            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank], dtype=np.int64
         )
 
         max_token_size_per_dp_group = token_size_per_dp_group.max().item()
@@ -765,9 +817,11 @@ class GeneratorAclGraph(GeneratorBackend):
             self.mapping.attn_dp.group_size * max_token_size_per_dp_group, dtype=np.int64
         ).reshape((self.mapping.attn_dp.group_size, max_token_size_per_dp_group))
         token_offset_per_dp_group = np.arange(
-            0, (self.mapping.attn_dp.group_size - 1) * max_token_size_per_dp_group + 1,
+            0,
+            (self.mapping.attn_dp.group_size - 1) * max_token_size_per_dp_group + 1,
             step=max_token_size_per_dp_group,
-            dtype=np.int64)
+            dtype=np.int64,
+        )
         token_index_with_padding = skip_padding_token_indices - token_offset_per_dp_group.reshape((-1, 1))
         padding_mask = token_index_with_padding >= token_size_per_dp_group.reshape((-1, 1))
 
@@ -784,7 +838,7 @@ class GeneratorAclGraph(GeneratorBackend):
             "token_index_with_padding": token_index_with_padding,
             "skip_padding_token_indices": skip_padding_token_indices,
         }
-    
+
     def _lm_head_local_dp_calc(self, dp_rank_ids, dp_rank_ids_per_token, prefill_head_indices_alias):
         if prefill_head_indices_alias is None:
             return None

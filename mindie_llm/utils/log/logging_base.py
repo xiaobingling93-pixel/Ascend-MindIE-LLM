@@ -24,7 +24,7 @@ Basic usage example:
     >>> logger.info("This goes to all handlers")
 
 Advanced usage example:
-    >>> logger.info("This goes to specific handlers", 
+    >>> logger.info("This goes to specific handlers",
     ...            extra={"handler_ids": HandlerType.TOKEN})
 """
 
@@ -54,7 +54,7 @@ _ALL_SWITCHES = _SWITCH_ON + _SWITCH_OFF
 MINDIE = "mindie"
 LOG = "log"
 DEBUG_PATH = "debug"
-EXTRA = 'extra'
+EXTRA = "extra"
 
 
 class Component(Enum):
@@ -71,15 +71,16 @@ class HandlerType(Enum):
 
 class CustomLogger(logging.Logger):
     """Logger with error code support"""
+
     def log(self, level, msg, *args, **kwargs):
         if level in [logging.ERROR, logging.CRITICAL]:
             if len(args) > 0 and isinstance(args[0], ErrorCode):
                 error_code = args[0]
                 kwargs[EXTRA] = kwargs.get(EXTRA, {})
-                kwargs[EXTRA]['error_code'] = error_code
+                kwargs[EXTRA]["error_code"] = error_code
                 args = args[1:]
 
-        kwargs['stacklevel'] = kwargs.get('stacklevel', 1) + 1
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
         super().log(level, msg, *args, **kwargs)
 
 
@@ -88,20 +89,20 @@ setLoggerClass(CustomLogger)
 
 class CustomLoggerAdapter(logging.LoggerAdapter):
     """Custom LoggerAdapter that properly handles extra information"""
-    
+
     def process(self, msg, kwargs):
         # Get existing extra
-        extra = kwargs.get('extra', {})
-        
+        extra = kwargs.get("extra", {})
+
         # Merge self.extra and passed extra
         if self.extra:
             if not extra:
                 extra = self.extra.copy()
             else:
                 extra = {**self.extra, **extra}
-        
+
         # Update kwargs
-        kwargs['extra'] = extra
+        kwargs["extra"] = extra
         return msg, kwargs
 
 
@@ -113,30 +114,26 @@ class ErrorCodeFormatter(logging.Formatter):
         log_verbose = get_component_config(ENV.log_verbose, self.component.value)
         self.verbose = str(log_verbose).upper() in _SWITCH_ON or str(log_verbose).upper() not in _ALL_SWITCHES
 
-        logging.addLevelName(logging.WARNING, 'WARN')
+        logging.addLevelName(logging.WARNING, "WARN")
         self.error_fmt_verbose = logging.Formatter(
-        '[%(asctime)s] [%(process)d] [%(thread)d] [%(name)s] [%(levelname)s] '
-        '[%(filename)s-%(lineno)d] : [%(error_code)s] %(message)s'
+            "[%(asctime)s] [%(process)d] [%(thread)d] [%(name)s] [%(levelname)s] "
+            "[%(filename)s-%(lineno)d] : [%(error_code)s] %(message)s"
         )
         self.default_fmt_verbose = logging.Formatter(
-        '[%(asctime)s] [%(process)d] [%(thread)d] [%(name)s] [%(levelname)s] '
-        '[%(filename)s-%(lineno)d] : %(message)s'
+            "[%(asctime)s] [%(process)d] [%(thread)d] [%(name)s] [%(levelname)s] "
+            "[%(filename)s-%(lineno)d] : %(message)s"
         )
-        self.error_fmt = logging.Formatter(
-        '[%(asctime)s] : [%(levelname)s] [%(error_code)s] %(message)s'
-        )
-        self.default_fmt = logging.Formatter(
-        '[%(asctime)s] : [%(levelname)s] %(message)s'
-        )
+        self.error_fmt = logging.Formatter("[%(asctime)s] : [%(levelname)s] [%(error_code)s] %(message)s")
+        self.default_fmt = logging.Formatter("[%(asctime)s] : [%(levelname)s] %(message)s")
 
     def format(self, record):
         if self.verbose:
-            if record.levelno >= logging.ERROR and hasattr(record, 'error_code'):
+            if record.levelno >= logging.ERROR and hasattr(record, "error_code"):
                 formatter = self.error_fmt_verbose
             else:
-                formatter = self.default_fmt_verbose   
+                formatter = self.default_fmt_verbose
         else:
-            if record.levelno >= logging.ERROR and hasattr(record, 'error_code'):
+            if record.levelno >= logging.ERROR and hasattr(record, "error_code"):
                 formatter = self.error_fmt
             else:
                 formatter = self.default_fmt
@@ -150,25 +147,32 @@ class SelectiveConsoleHandler(logging.StreamHandler):
 
     def emit(self, record: logging.LogRecord) -> None:
         # HandlerType.TOKEN does not output to console
-        active_handlers = getattr(record, 'handler_ids', None)
+        active_handlers = getattr(record, "handler_ids", None)
         if active_handlers == HandlerType.TOKEN:
             return
-        
+
         self.setFormatter(record.formatter)
         super().emit(record)
 
-        
+
 class SelectiveRotatingFileHandler(RotatingFileHandler):
     """File handler that can be selectively enabled/disabled via context."""
-    
-    def __init__(self, handler_type: HandlerType, filename: str, max_bytes: int = 0, 
-                 backup_count: int = 0, encoding: str = None, delay: bool = False):
+
+    def __init__(
+        self,
+        handler_type: HandlerType,
+        filename: str,
+        max_bytes: int = 0,
+        backup_count: int = 0,
+        encoding: str = None,
+        delay: bool = False,
+    ):
         super().__init__(filename, "a", max_bytes, backup_count, encoding, delay)
         self.handler_type = handler_type
 
     def emit(self, record: logging.LogRecord) -> None:
         """Only emit if this handler is selected in the current context."""
-        active_handlers = getattr(record, 'handler_ids', None)
+        active_handlers = getattr(record, "handler_ids", None)
 
         should_emit = False
         # If no specific handlers are selected
@@ -283,9 +287,11 @@ class LoggerManager:
         if len(home_dir) >= MAX_KEY_LENGTH:
             home_dir = home_dir[:MAX_KEY_LENGTH]
         if not os.path.exists(home_dir):
-            raise FileNotFoundError(f"Home directory {home_dir} does not exist or access denied! "
-                                "Please manually set the log storage path "
-                                f"or change the home directory {home_dir} permission.")
+            raise FileNotFoundError(
+                f"Home directory {home_dir} does not exist or access denied! "
+                "Please manually set the log storage path "
+                f"or change the home directory {home_dir} permission."
+            )
         home_dir = file_utils.standardize_path(home_dir)
         file_utils.check_path_permission(home_dir)
 
@@ -335,7 +341,7 @@ class LoggerManager:
             logging.warning(
                 "Note: The old environment variable PYTHON_LOG_MAXSIZE will be deprecated on 2026/12/31.\n"
                 "Please use the new environment variable MINDIE_LOG_ROTATE instead.\n"
-                "Usage: export MINDIE_LOG_ROTATE=\"-fs 20 -r 10\"\n"
+                'Usage: export MINDIE_LOG_ROTATE="-fs 20 -r 10"\n'
                 "Where:\n"
                 "  -fs: maximum size of each log file in MB (range: [1, 500])\n"
                 "  -r : maximum number of log files per process (range: [1, 64])"
@@ -367,7 +373,7 @@ class LoggerManager:
         extra_info = {
             "component": component,
             "default_file_handler": self._logger_to_handlers_map.get(component, [HandlerType.LLM])[0],
-            "formatter": ErrorCodeFormatter(component)
+            "formatter": ErrorCodeFormatter(component),
         }
         logger_ins = logging.getLogger(component.value)
 
@@ -393,7 +399,7 @@ class LoggerManager:
 
             # Get log directory
             file_dir = self._get_log_dir(component)
-            
+
             # Check if file sharing is needed
             shared_filename = None
             if handler_type in [HandlerType.LLM, HandlerType.LLMMODELS]:
@@ -423,11 +429,11 @@ class LoggerManager:
                 log_file_maxsize, log_file_maxnum = self._get_log_rotate_config(component)
 
             handler = SelectiveRotatingFileHandler(
-                handler_type=handler_type, 
+                handler_type=handler_type,
                 filename=file_path,
                 max_bytes=log_file_maxsize,
                 backup_count=log_file_maxnum,
-                delay=True
+                delay=True,
             )
 
             self._handlers[handler_type] = handler

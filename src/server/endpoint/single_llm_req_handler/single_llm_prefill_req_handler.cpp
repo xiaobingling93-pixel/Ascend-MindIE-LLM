@@ -10,37 +10,36 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "single_llm_prefill_req_handler.h"
-#include <boost/thread/mutex.hpp>
+
+#include <algorithm>
+#include <boost/chrono.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/condition_variable.hpp>
-#include <boost/chrono.hpp>
-#include <algorithm>
+#include <boost/thread/mutex.hpp>
 #include <chrono>
 #include <cstdint>
 
-#include "httplib.h"
-#include "prometheus_metrics.h"
-#include "log.h"
+#include "config_manager_impl.h"
+#include "dmi_role.h"
 #include "endpoint_def.h"
 #include "env_util.h"
-#include "dmi_role.h"
-#include "config_manager_impl.h"
+#include "httplib.h"
 #include "json_util.h"
+#include "log.h"
+#include "prometheus_metrics.h"
 
 using namespace prefillAndDecodeCommunication;
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
 SingleLLMPrefillReqHandler::SingleLLMPrefillReqHandler(ReqCtxPtr& ctx, uint16_t msgType, bool isRecompute)
-    : SingleLLMReqHandlerBase(ctx)
-{
+    : SingleLLMReqHandlerBase(ctx) {
     msgType_ = msgType;
     isRecompute_ = isRecompute;
-    reqType_ =  InferReqType::REQ_PREFILL;
+    reqType_ = InferReqType::REQ_PREFILL;
 }
 
-void SingleLLMPrefillReqHandler::Process(RequestSPtr request, const std::string &requestId, const uint64_t &timestamp)
-{
+void SingleLLMPrefillReqHandler::Process(RequestSPtr request, const std::string& requestId, const uint64_t& timestamp) {
     (void)timestamp;
     PROF(INFO, Domain("Communication").Resource(requestId.c_str()).Event("receiveReq"));
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[P Node] Receive a request. requestId: " << requestId);
@@ -52,24 +51,25 @@ void SingleLLMPrefillReqHandler::Process(RequestSPtr request, const std::string 
     Status status = GetInferInstance()->Process(request);
     if (!status.IsOk()) {
         auto errMsg = "Failed to enqueue inferRequest. " + status.StatusMsg();
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            ABNORMAL_TRANSMISSION_ERROR), "requestId: " << requestId << ". " << errMsg);
-        int errCode = status.StatusCode() == Error::Code::INVALID_ARG ?
-            httplib::StatusCode::FailedDependency_424 : httplib::StatusCode::InternalServerError_500;
-        std::string errType = status.StatusCode() == Error::Code::INVALID_ARG ?
-            g_exceptionInfo.at(httplib::StatusCode::FailedDependency_424) :
-            g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
+                   "requestId: " << requestId << ". " << errMsg);
+        int errCode = status.StatusCode() == Error::Code::INVALID_ARG ? httplib::StatusCode::FailedDependency_424
+                                                                      : httplib::StatusCode::InternalServerError_500;
+        std::string errType = status.StatusCode() == Error::Code::INVALID_ARG
+                                  ? g_exceptionInfo.at(httplib::StatusCode::FailedDependency_424)
+                                  : g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500);
         SendResponseInfo(errCode, HttpRestResource::WrapperJson(errMsg, errType));
         constructOneResponseCallBack_ = nullptr;
         return;
     }
-    auto &serverConfig = GetServerConfig();
+    auto& serverConfig = GetServerConfig();
     boost::unique_lock<boost::mutex> locker(lock);
-    auto res = cv.wait_until(locker,
-        boost::chrono::steady_clock::now() + boost::chrono::seconds(serverConfig.tokenTimeout));
+    auto res =
+        cv.wait_until(locker, boost::chrono::steady_clock::now() + boost::chrono::seconds(serverConfig.tokenTimeout));
     if (res == boost::cv_status::timeout) {
-        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
-            TIMEOUT_WARNING), "Call response callback timeout! requestId: " << requestId);
+        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, TIMEOUT_WARNING),
+                  "Call response callback timeout! requestId: " << requestId);
         bool expect = false;
         // if has not send control request
         if (!AtomicReadWriteFinish(expect)) {
@@ -78,74 +78,73 @@ void SingleLLMPrefillReqHandler::Process(RequestSPtr request, const std::string 
 
         Status status = GetInferInstance()->ControlRequest(requestId, OperationV2::STOP);
         if (status.StatusCode() != Error::Code::OK) {
-            ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
-                TIMEOUT_WARNING), "Fail to stop timeout. requestId: " << requestId);
+            ULOG_WARN(SUBMODLE_NAME_ENDPOINT,
+                      GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, TIMEOUT_WARNING),
+                      "Fail to stop timeout. requestId: " << requestId);
         } else {
             ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "Succeed to stop timeout. requestId: " << requestId);
         }
-        SendResponseInfo(httplib::StatusCode::InternalServerError_500,
+        SendResponseInfo(
+            httplib::StatusCode::InternalServerError_500,
             HttpRestResource::WrapperJson("Engine callback timeout.",
-            g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
+                                          g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
     }
 }
 
-bool SingleLLMPrefillReqHandler::GetContextJsonBody(OrderedJson& body)
-{
+bool SingleLLMPrefillReqHandler::GetContextJsonBody(OrderedJson& body) {
     try {
         std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> convertor;
         auto converted = convertor.to_bytes(convertor.from_bytes(ctx->MsgBody()));
         if (!OrderedJson::accept(converted)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                JSON_PARSE_ERROR), "Convert string to json object exception. CallbackId is " << ctx->CallbackId());
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, JSON_PARSE_ERROR),
+                       "Convert string to json object exception. CallbackId is " << ctx->CallbackId());
             return false;
         }
         body = OrderedJson::parse(converted, CheckOrderedJsonDepthCallback);
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            JSON_PARSE_ERROR), "Convert string to json object exception. CallbackId is " << ctx->CallbackId());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, JSON_PARSE_ERROR),
+                   "Convert string to json object exception. CallbackId is " << ctx->CallbackId());
         return false;
     }
     return true;
 }
 
-bool SingleLLMPrefillReqHandler::GetContextRequestId(std::string& requestId)
-{
+bool SingleLLMPrefillReqHandler::GetContextRequestId(std::string& requestId) {
     requestId = ctx->Req().get_header_value("req-id");
     return !requestId.empty();
 }
 
-void SingleLLMPrefillReqHandler::UpdateInferRequest(const std::vector<int64_t> &reqTokens, const int64_t &tokenLen,
-                                                    RequestSPtr request)
-{
+void SingleLLMPrefillReqHandler::UpdateInferRequest(const std::vector<int64_t>& reqTokens, const int64_t& tokenLen,
+                                                    RequestSPtr request) {
     inputTokens_ = reqTokens;
     oriReqTokenLen = tokenLen;
     request->reqType = mindie_llm::InferReqType::REQ_PREFILL;
     request->isRecompute = isRecompute_;
 }
 
-void SingleLLMPrefillReqHandler::UpdateInferParam(RequestSPtr request, const InferParamSPtr &inferParam)
-{
+void SingleLLMPrefillReqHandler::UpdateInferParam(RequestSPtr request, const InferParamSPtr& inferParam) {
     request_ = request;
     inferParam_ = inferParam;
     modelName_ = inferParam->model_;
 }
 
-bool SingleLLMPrefillReqHandler::GenerateFirstToken(ResponseSPtr response, bool expect)
-{
+bool SingleLLMPrefillReqHandler::GenerateFirstToken(ResponseSPtr response, bool expect) {
     firstToken_.clear();
     // 1.1 get first token from response
     std::vector<BestNTokens> firstToken;
     if (!ParseTokensFromResponse(response, firstToken)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            ABNORMAL_TRANSMISSION_ERROR), "[P Node] Failed to get tokenIds from inferResponse. requestId: "
-            << reqId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
+                   "[P Node] Failed to get tokenIds from inferResponse. requestId: " << reqId_);
         if (!AtomicReadWriteFinish(expect)) {
             constructOneResponseCallBack_ = nullptr;
             return false;
         }
-        SendResponseInfo(httplib::StatusCode::InternalServerError_500,
+        SendResponseInfo(
+            httplib::StatusCode::InternalServerError_500,
             HttpRestResource::WrapperJson("[P Node] Failed to get tokenIds from inferResponse.",
-            g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
+                                          g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
         cv.notify_one();
         constructOneResponseCallBack_ = nullptr;
         return false;
@@ -158,15 +157,17 @@ bool SingleLLMPrefillReqHandler::GenerateFirstToken(ResponseSPtr response, bool 
     }
     firstToken_ = firstToken[0].tokens;
     if (constructOneResponseCallBack_ == nullptr || !constructOneResponseCallBack_(response, firstToken, respStr_)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-            ENCODE_DECODE_ERROR), "[P Node] Failed to decode tokenIds. requestId: " << reqId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ENCODE_DECODE_ERROR),
+                   "[P Node] Failed to decode tokenIds. requestId: " << reqId_);
         if (!AtomicReadWriteFinish(expect)) {
             constructOneResponseCallBack_ = nullptr;
             return false;
         }
-        SendResponseInfo(httplib::StatusCode::InternalServerError_500,
+        SendResponseInfo(
+            httplib::StatusCode::InternalServerError_500,
             HttpRestResource::WrapperJson("[P Node] Failed to decode tokenIds to respStr.",
-            g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
+                                          g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
         cv.notify_one();
         constructOneResponseCallBack_ = nullptr;
         return false;
@@ -176,27 +177,24 @@ bool SingleLLMPrefillReqHandler::GenerateFirstToken(ResponseSPtr response, bool 
     return true;
 }
 
-void SingleLLMPrefillReqHandler::GetPNodeAddr(bool containPort)
-{
-    auto &serverConfig = GetServerConfig();
+void SingleLLMPrefillReqHandler::GetPNodeAddr(bool containPort) {
+    auto& serverConfig = GetServerConfig();
     prefillNodeAddr_ = serverConfig.ipAddress;
     if (containPort) {
         prefillNodeAddr_.append(IP_PORT_DELIMITER).append(std::to_string(serverConfig.interCommPort));
     }
-    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[SingleLLMPrefillReqHandler] GetPNodeAddr success. Prefill node ip is "
-        << prefillNodeAddr_);
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT,
+               "[SingleLLMPrefillReqHandler] GetPNodeAddr success. Prefill node ip is " << prefillNodeAddr_);
 }
 
-void SingleLLMPrefillReqHandler::GetSingleLLMPrefillReqHandlerId()
-{
+void SingleLLMPrefillReqHandler::GetSingleLLMPrefillReqHandlerId() {
     pInstanceId_ = DmiRole::GetInstance()->GetLocalInstanceId();
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT,
                "[SingleLLMPrefillReqHandler] GetSingleLLMPrefillReqHandlerId success. Prefill instance id is "
                    << pInstanceId_);
 }
 
-void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
-{
+void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request) {
     // 使用weak_ptr避免因request与handler之间循环引用导致的内存泄漏
     std::weak_ptr<SingleLLMPrefillReqHandler> weakSelf = shared_from_this();
     std::string dTargetAddr = ctx->Req().get_header_value("d-target");
@@ -210,8 +208,8 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
         }
         std::unique_lock lock(self->prefillCbMutex);
         if (response == nullptr) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                CHECK_ERROR), "[P Node] Invoke callback failed: response is null");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
+                       "[P Node] Invoke callback failed: response is null");
             self->constructOneResponseCallBack_ = nullptr;
             return;
         }
@@ -220,8 +218,7 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
         /* 3. receive a cancel response, with a high possibility to be a release kvcache response */
         if (response->inferStatusFlag == InferStatusType::RELEASE_KV_COMPLETE) {
             PROF(INFO, Domain("Communication").Resource(self->reqId_.c_str()).Event("releaseKvcacheRes"));
-            ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[P Node] Got a release kvcache response. requestId: "
-                << self->reqId_);
+            ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "[P Node] Got a release kvcache response. requestId: " << self->reqId_);
             self->constructOneResponseCallBack_ = nullptr;
             return;
         }
@@ -235,8 +232,9 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
         }
 
         if (self->isFinish_.load()) {
-            ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
-                CHECK_WARNING), "[P Node] has finished! requestId: " << self->reqId_);
+            ULOG_WARN(SUBMODLE_NAME_ENDPOINT,
+                      GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, CHECK_WARNING),
+                      "[P Node] has finished! requestId: " << self->reqId_);
             self->constructOneResponseCallBack_ = nullptr;
             return;
         }
@@ -249,10 +247,11 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
             PrometheusMetrics::GetInstance()->ResponseNumberCount();
             PrometheusMetrics::GetInstance()->FailedRequestRateGaugeCollect();
             uint64_t e2eTime = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() -
-                self->GetMetrics().e2eStartingTime).count();
+                                                                                     self->GetMetrics().e2eStartingTime)
+                                   .count();
             PrometheusMetrics::GetInstance()->E2EObserve(e2eTime);
             ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT,
-                "[P Node] Send first end token to coordinator. requestId: " << self->reqId_);
+                       "[P Node] Send first end token to coordinator. requestId: " << self->reqId_);
             if (!self->AtomicReadWriteFinish(expect)) {
                 return;
             }
@@ -268,7 +267,7 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
             }
         } else if (response->transferStatusFlag == TransferStatusType::PUBLISH_KV_COMPLETE) {
             /* note: send to D and coordinator.
-            */
+             */
             auto isReqStopped = self->stopReqSet_.find(self->reqId_) != self->stopReqSet_.end() ? true : false;
             ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "P requestId: " << self->reqId_
                                                               << " is ready for kv-cache publish, stop flag is "
@@ -282,23 +281,26 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
                            << self->prefillNodeAddr_ << ", singleLLMPrefillReqHandlerId is " << self->pInstanceId_
                            << ", dTargetAddr is " << dTargetAddr);
             std::string errMsg;
-            if (isReqStopped || !GrpcCommunicationMng::GetInstance().SendDecodeRequest(
-                decodeParams, dTargetAddr, self->reqId_, errMsg)) {
+            if (isReqStopped || !GrpcCommunicationMng::GetInstance().SendDecodeRequest(decodeParams, dTargetAddr,
+                                                                                       self->reqId_, errMsg)) {
                 if (isReqStopped) {
-                    ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "[P Node] requestId:  "<< self->reqId_ <<
-                        " has stop, do not send to D and coordinator.");
+                    ULOG_INFO(
+                        SUBMODLE_NAME_ENDPOINT,
+                        "[P Node] requestId:  " << self->reqId_ << " has stop, do not send to D and coordinator.");
                     self->stopReqSet_.erase(self->reqId_);
                     return;
                 }
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                    ABNORMAL_TRANSMISSION_ERROR), "[P Node] Failed to send decode msg to decode node:" << errMsg
-                    << " requestId: " << self->reqId_);
+                ULOG_ERROR(
+                    SUBMODLE_NAME_ENDPOINT,
+                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, ABNORMAL_TRANSMISSION_ERROR),
+                    "[P Node] Failed to send decode msg to decode node:" << errMsg << " requestId: " << self->reqId_);
                 if (!self->AtomicReadWriteFinish(expect)) {
                     return;
                 }
-                self->SendResponseInfo(httplib::StatusCode::InternalServerError_500,
+                self->SendResponseInfo(
+                    httplib::StatusCode::InternalServerError_500,
                     HttpRestResource::WrapperJson("[P Node] Send D request failed:" + errMsg,
-                    g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
+                                                  g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
                 self->cv.notify_one();
                 return;
             }
@@ -311,23 +313,24 @@ void SingleLLMPrefillReqHandler::SetBackManagerCallBack(RequestSPtr request)
             self->cv.notify_one();
         } else {
             self->constructOneResponseCallBack_ = nullptr;
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                UNKNOWN_ERROR), "[P Node] Unknown transfer flag. requestId: " << self->reqId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, UNKNOWN_ERROR),
+                       "[P Node] Unknown transfer flag. requestId: " << self->reqId_);
             if (!self->AtomicReadWriteFinish(expect)) {
                 return;
             }
-            self->SendResponseInfo(httplib::StatusCode::InternalServerError_500,
+            self->SendResponseInfo(
+                httplib::StatusCode::InternalServerError_500,
                 HttpRestResource::WrapperJson("[P Node] Unknown transfer flag",
-                g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
+                                              g_exceptionInfo.at(httplib::StatusCode::InternalServerError_500)));
             self->cv.notify_one();
         }
     };
 }
 
 // 发送响应信息
-void SingleLLMPrefillReqHandler::SendResponseInfo(int code, const std::string &responseStr,
-                                                  [[maybe_unused]] bool needMetricsCollect)
-{
+void SingleLLMPrefillReqHandler::SendResponseInfo(int code, const std::string& responseStr,
+                                                  [[maybe_unused]] bool needMetricsCollect) {
     // set failed request prometheus metrics
     if (needMetricsCollect && code != httplib::StatusCode::OK_200) {
         ProcessFailedResponsePrometheusMetrics();
@@ -335,15 +338,13 @@ void SingleLLMPrefillReqHandler::SendResponseInfo(int code, const std::string &r
     SendResponse(code, responseStr);
 }
 
-void SingleLLMPrefillReqHandler::SendResponse(int code, const std::string& responseStr)
-{
+void SingleLLMPrefillReqHandler::SendResponse(int code, const std::string& responseStr) {
     HttpRestResource::ResponseJsonBody(ctx, code, responseStr);
 }
 
-void SingleLLMPrefillReqHandler::SendResponseStream(bool isEnd, const std::string& responseStr)
-{
-    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Send first token for requestId: " << reqId_ << " which is "
-        << (isEnd ? "" : "not") << " the end");
+void SingleLLMPrefillReqHandler::SendResponseStream(bool isEnd, const std::string& responseStr) {
+    ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT,
+               "Send first token for requestId: " << reqId_ << " which is " << (isEnd ? "" : "not") << " the end");
     OrderedJson respBody;
     respBody["reqId"] = this->reqId_;
     respBody["isStream"] = this->streamMode_;
@@ -355,8 +356,7 @@ void SingleLLMPrefillReqHandler::SendResponseStream(bool isEnd, const std::strin
     PROF(INFO, Domain("Communication").Resource(reqId_.c_str()).Event("prefillRes"));
 }
 
-void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, DecodeParameters& params)
-{
+void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, DecodeParameters& params) {
     params.set_pnodeaddr(prefillNodeAddr_);
     params.set_pinstanceid(pInstanceId_);
     params.set_reqid(reqId_);
@@ -367,12 +367,12 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
 
     // adaptor recompute
     oriReqTokenLen = std::min(oriReqTokenLen, inputTokens_.size());
-    for (size_t i = 0; i < oriReqTokenLen ; i++) {
+    for (size_t i = 0; i < oriReqTokenLen; i++) {
         params.add_tokens(inputTokens_[i]);
     }
     PROF(prof.NumArrayAttr("tokens", &inputTokens_[0] + 0, &inputTokens_[0] + oriReqTokenLen));
 
-    for (size_t i = oriReqTokenLen; i < inputTokens_.size() ; i++) {
+    for (size_t i = oriReqTokenLen; i < inputTokens_.size(); i++) {
         params.add_firsttoken(inputTokens_[i]);
     }
     PROF(prof.NumArrayAttr("first_tokens", &inputTokens_[0] + oriReqTokenLen, &inputTokens_[0] + inputTokens_.size()));
@@ -384,13 +384,13 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
 
     params.set_prefilltokennum(firstToken_.size());
 
-    for (std::string outputName: inferParam_->outputNames) {
+    for (std::string outputName : inferParam_->outputNames) {
         params.add_outputnames(outputName);
     }
     PROF(prof.ArrayAttr("outputnames", inferParam_->outputNames.begin(), inferParam_->outputNames.end(),
-        [](decltype(prof)* pColl, decltype(inferParam_->outputNames.begin()) item) -> void {
-            pColl->Attr("name", *item);
-        }));
+                        [](decltype(prof)* pColl, decltype(inferParam_->outputNames.begin()) item) -> void {
+                            pColl->Attr("name", *item);
+                        }));
 
     params.set_batchsize(inferParam_->batchSize);
     // The number of tokens needed for inference at node d
@@ -411,7 +411,7 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
     params.set_details(inferParam_->showDetails);
     params.set_id(request_->requestId);
     params.set_usetoolcall(inferParam_->useToolsCall);
-    
+
     PROF(prof.Attr("truncate", inferParam_->truncate));
     PROF(prof.Attr("tools", inferParam_->tools));
     PROF(prof.Attr("toolchoice", inferParam_->toolChoice));
@@ -424,15 +424,15 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
     PROF(prof.Attr("usetoolscall", inferParam_->useToolsCall));
 
     auto prefillE2EStartTime = GetMetrics().sysE2eStartingTime;
-    auto durationInMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-        prefillE2EStartTime.time_since_epoch());
+    auto durationInMicroseconds =
+        std::chrono::duration_cast<std::chrono::microseconds>(prefillE2EStartTime.time_since_epoch());
     uint64_t e2eStartTimeNs = static_cast<uint64_t>(durationInMicroseconds.count());
     params.set_e2estarttime(e2eStartTimeNs);
     PROF(prof.Attr("e2estarttime", e2eStartTimeNs));
 
     std::vector<std::vector<int64_t>> blockTables = response->responseContents[0].srcBlockTable;
     for (const auto& blockTable : blockTables) {
-        auto *blockIds = params.add_blocktable();
+        auto* blockIds = params.add_blocktable();
         for (int64_t block : blockTable) {
             blockIds->add_blockid(block);
         }
@@ -479,8 +479,7 @@ void SingleLLMPrefillReqHandler::BuildDecodeParameters(ResponseSPtr response, De
     BuildMetricsParameters(params);
 }
 
-void SingleLLMPrefillReqHandler::BuildSamplingParametersFirst(DecodeParameters& params)
-{
+void SingleLLMPrefillReqHandler::BuildSamplingParametersFirst(DecodeParameters& params) {
     if (request_->temperature.has_value()) {
         params.mutable_samplingparams()->mutable_temperature()->set_value(request_->temperature.value());
     }
@@ -507,8 +506,7 @@ void SingleLLMPrefillReqHandler::BuildSamplingParametersFirst(DecodeParameters& 
     }
 }
 
-void SingleLLMPrefillReqHandler::BuildSamplingParametersNext(DecodeParameters& params)
-{
+void SingleLLMPrefillReqHandler::BuildSamplingParametersNext(DecodeParameters& params) {
     if (request_->frequencyPenalty.has_value()) {
         params.mutable_samplingparams()->mutable_frequencypenalty()->set_value(request_->frequencyPenalty.value());
     }
@@ -529,8 +527,8 @@ void SingleLLMPrefillReqHandler::BuildSamplingParametersNext(DecodeParameters& p
         }
     }
     if (request_->includeStopStrInOutput.has_value()) {
-        params.mutable_samplingparams()->mutable_includestopstrinoutput()
-            ->set_value(request_->includeStopStrInOutput.value());
+        params.mutable_samplingparams()->mutable_includestopstrinoutput()->set_value(
+            request_->includeStopStrInOutput.value());
     }
     if (request_->skipSpecialTokens.has_value()) {
         params.mutable_samplingparams()->mutable_skipspecialtokens()->set_value(request_->skipSpecialTokens.value());
@@ -555,15 +553,13 @@ void SingleLLMPrefillReqHandler::BuildSamplingParametersNext(DecodeParameters& p
     }
 }
 
-void SingleLLMPrefillReqHandler::BuildInferParameters(DecodeParameters& params)
-{
+void SingleLLMPrefillReqHandler::BuildInferParameters(DecodeParameters& params) {
     // infer parameter
     params.mutable_inferparams()->set_priority(request_->priority);
     params.mutable_inferparams()->set_timeout(inferParam_->timeout);
 }
 
-void SingleLLMPrefillReqHandler::BuildMetricsParameters(DecodeParameters &params)
-{
+void SingleLLMPrefillReqHandler::BuildMetricsParameters(DecodeParameters& params) {
     params.mutable_metrics()->set_firsttokencost(metrics.firstTokenCost);
     params.mutable_metrics()->set_lasttokencost(metrics.lastTokenCost);
     for (size_t time : metrics.decodeTime) {
@@ -571,13 +567,12 @@ void SingleLLMPrefillReqHandler::BuildMetricsParameters(DecodeParameters &params
     }
     *params.mutable_metrics()->mutable_batchsize() = {metrics.batchSize.begin(), metrics.batchSize.end()};
     *params.mutable_metrics()->mutable_queuewaittime() = {metrics.queueWaitTime.begin(), metrics.queueWaitTime.end()};
-    *params.mutable_metrics()->mutable_prefixcachedtokennums() = {
-        metrics.prefixCachedTokenNums.begin(), metrics.prefixCachedTokenNums.end()};
+    *params.mutable_metrics()->mutable_prefixcachedtokennums() = {metrics.prefixCachedTokenNums.begin(),
+                                                                  metrics.prefixCachedTokenNums.end()};
     params.mutable_metrics()->set_callbackindex(metrics.callbackIndex);
 }
 
-void SingleLLMPrefillReqHandler::ProcessResponseStream(bool isEnd)
-{
+void SingleLLMPrefillReqHandler::ProcessResponseStream(bool isEnd) {
     // post a empty message to coordinator which would be ignored by coordinator
     // because coordinator need to record the first token
     if (respStr_.empty()) {
@@ -596,16 +591,14 @@ void SingleLLMPrefillReqHandler::ProcessResponseStream(bool isEnd)
     SendResponseStream(isEnd, totalMsg);
 }
 
-bool SingleLLMPrefillReqHandler::AtomicReadWriteFinish(bool &expect)
-{
-    auto ret = isFinish_.compare_exchange_strong(expect, true,
-        std::memory_order_release, std::memory_order_relaxed);
+bool SingleLLMPrefillReqHandler::AtomicReadWriteFinish(bool& expect) {
+    auto ret = isFinish_.compare_exchange_strong(expect, true, std::memory_order_release, std::memory_order_relaxed);
     if (!ret) {
-        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE,
-            CHECK_WARNING), "Has finished before! requestId: " << this->reqId_);
+        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(WARNING, SUBMODLE_FEATURE_SPLITWISE, CHECK_WARNING),
+                  "Has finished before! requestId: " << this->reqId_);
     } else {
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Set finished flag. requestId: " << this->reqId_);
     }
     return ret;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

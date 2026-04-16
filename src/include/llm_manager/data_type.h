@@ -14,9 +14,10 @@
 #define MINDIE_LLM_COMMON_H
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
 #include "utils/concurrent_deque.h"
 
 namespace mindie_llm {
@@ -33,7 +34,7 @@ enum class InferDataType {
     TYPE_UINT8 = 2,
 
     TYPE_UINT16 = 3,
- 
+
     TYPE_UINT32 = 4,
 
     TYPE_UINT64 = 5,
@@ -70,27 +71,23 @@ const std::unordered_map<InferDataType, size_t> BYTE_SIZE_MAP = {
     {InferDataType::TYPE_INT16, sizeof(int16_t)},
     {InferDataType::TYPE_INT32, sizeof(int32_t)},
     {InferDataType::TYPE_INT64, sizeof(int64_t)},
-    {InferDataType::TYPE_FP16, sizeof(int16_t)},    // float16 类型不一定支持
+    {InferDataType::TYPE_FP16, sizeof(int16_t)},  // float16 类型不一定支持
     {InferDataType::TYPE_FP32, sizeof(float)},
     {InferDataType::TYPE_FP64, sizeof(double)},
-    {InferDataType::TYPE_STRING, 0},                // 长度不确定
-    {InferDataType::TYPE_BF16, sizeof(int16_t)},    // bfloat16 类型不一定支持
+    {InferDataType::TYPE_STRING, 0},              // 长度不确定
+    {InferDataType::TYPE_BF16, sizeof(int16_t)},  // bfloat16 类型不一定支持
 };
 
 /// This function can get the byte size of the data type.
 size_t GetTypeByteSize(InferDataType dataType);
 
 /// The type of the infer request.
-enum class InferReqType {
-    REQ_STAND_INFER = 0,
-    REQ_PREFILL = 1,
-    REQ_DECODE = 2
-};
+enum class InferReqType { REQ_STAND_INFER = 0, REQ_PREFILL = 1, REQ_DECODE = 2 };
 struct FlexSwitchInfo {
     uint32_t flexPrefillPercentage;
 };
 
-enum FaultRecoveryCmd: int32_t {
+enum FaultRecoveryCmd : int32_t {
     CMD_UNKNOWN = -1,
     CMD_PAUSE_ENGINE = 0,
     CMD_REINIT_NPU = 1,
@@ -99,9 +96,9 @@ enum FaultRecoveryCmd: int32_t {
 };
 
 struct NPUExecutionResult {
-    int32_t npuDeviceId = -1;           // 设备 ID
-    int32_t commandResult = -1;         // 1: success, 0: failure, -1: not executed
-    std::string errorMsg;              // 仅当 result == 0 时有效
+    int32_t npuDeviceId = -1;    // 设备 ID
+    int32_t commandResult = -1;  // 1: success, 0: failure, -1: not executed
+    std::string errorMsg;        // 仅当 result == 0 时有效
 };
 
 struct RecoverCommandInfo {
@@ -110,5 +107,5 @@ struct RecoverCommandInfo {
     explicit RecoverCommandInfo(std::string command) : command(command) {}
 };
 
-}
-#endif // MINDIE_LLM_COMMON_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_COMMON_H

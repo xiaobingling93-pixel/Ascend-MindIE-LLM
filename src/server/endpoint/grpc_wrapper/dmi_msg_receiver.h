@@ -9,18 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef PD_MSG_RECEIVER_H
 #define PD_MSG_RECEIVER_H
 
-#include <memory>
-#include <string>
-#include <functional>
-#include <vector>
-
+#include <grpcpp/grpcpp.h>
 #include <grpcpp/server.h>
 #include <grpcpp/server_context.h>
-#include <grpcpp/grpcpp.h>
+
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "prefillAndDecodeCommunication.grpc.pb.h"
 
 using DecodeRequestHandler = std::function<void(const prefillAndDecodeCommunication::DecodeParameters& request,
@@ -29,43 +30,43 @@ using DecodeRequestHandler = std::function<void(const prefillAndDecodeCommunicat
 using KVReleaseHandler = std::function<void(const std::string& requestID)>;
 
 namespace mindie_llm {
-        class DecodeRequestReceiver : public prefillAndDecodeCommunication::DecodeService::Service {
-        public:
-            explicit DecodeRequestReceiver(std::string localAddr): localAddr_(localAddr) {}
+class DecodeRequestReceiver : public prefillAndDecodeCommunication::DecodeService::Service {
+   public:
+    explicit DecodeRequestReceiver(std::string localAddr) : localAddr_(localAddr) {}
 
-            grpc::Status DecodeRequestChannel(grpc::ServerContext* context,
-                                              const prefillAndDecodeCommunication::DecodeParameters* request,
-                                              prefillAndDecodeCommunication::DecodeRequestResponse* response) override;
+    grpc::Status DecodeRequestChannel(grpc::ServerContext* context,
+                                      const prefillAndDecodeCommunication::DecodeParameters* request,
+                                      prefillAndDecodeCommunication::DecodeRequestResponse* response) override;
 
-            bool RegisterMsgHandler(DecodeRequestHandler callback);
+    bool RegisterMsgHandler(DecodeRequestHandler callback);
 
-        private:
-            bool isValidRequest(const prefillAndDecodeCommunication::DecodeParameters* request,
-                                prefillAndDecodeCommunication::DecodeRequestResponse* response, std::string& errMsg);
+   private:
+    bool isValidRequest(const prefillAndDecodeCommunication::DecodeParameters* request,
+                        prefillAndDecodeCommunication::DecodeRequestResponse* response, std::string& errMsg);
 
-            std::string localAddr_;
+    std::string localAddr_;
 
-            DecodeRequestHandler decodeRequestHandler_{nullptr};
-        };
+    DecodeRequestHandler decodeRequestHandler_{nullptr};
+};
 
-        class KvReleaseReceiver : public prefillAndDecodeCommunication::PrefillService::Service {
-        public:
-            explicit KvReleaseReceiver(std::string localAddr): localAddr_(localAddr) {}
+class KvReleaseReceiver : public prefillAndDecodeCommunication::PrefillService::Service {
+   public:
+    explicit KvReleaseReceiver(std::string localAddr) : localAddr_(localAddr) {}
 
-            grpc::Status ReleaseKVCacheChannel(grpc::ServerContext* context,
-                                          const prefillAndDecodeCommunication::RequestId* request,
-                                          google::protobuf::Empty* response) override;
+    grpc::Status ReleaseKVCacheChannel(grpc::ServerContext* context,
+                                       const prefillAndDecodeCommunication::RequestId* request,
+                                       google::protobuf::Empty* response) override;
 
-            bool RegisterMsgHandler(KVReleaseHandler callback);
+    bool RegisterMsgHandler(KVReleaseHandler callback);
 
-        private:
-            bool isValidRequest(const prefillAndDecodeCommunication::RequestId* request);
+   private:
+    bool isValidRequest(const prefillAndDecodeCommunication::RequestId* request);
 
-            std::string localAddr_;
+    std::string localAddr_;
 
-            KVReleaseHandler kvReleaseHandler_{nullptr};
-        };
+    KVReleaseHandler kvReleaseHandler_{nullptr};
+};
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // PD_MSG_RECEIVER_H
+#endif  // PD_MSG_RECEIVER_H

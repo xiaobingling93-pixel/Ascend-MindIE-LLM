@@ -9,6 +9,7 @@
 # See the Mulan PSL v2 for more details.
 def send_model_execute_response(proto, is_binary=False):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
     if is_binary:
         SharedMemCommunication.send_model_execute_binary_data_cls(proto)
     else:
@@ -17,19 +18,23 @@ def send_model_execute_response(proto, is_binary=False):
 
 def send_transfer_response(proto):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
     SharedMemCommunication.send_transfer_response_cls(proto)
 
 
 def send_command_response(proto):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
     SharedMemCommunication.send_command_response_cls(proto)
 
 
 def send_link_response(proto):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
     SharedMemCommunication.send_link_response_cls(proto)
 
 
 def send_recover_command_response(proto):
     from mindie_llm.connector.request_listener.shared_mem_communication import SharedMemCommunication
+
     SharedMemCommunication.send_recover_command_response_cls(proto)

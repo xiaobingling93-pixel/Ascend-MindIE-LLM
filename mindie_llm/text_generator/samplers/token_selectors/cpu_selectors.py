@@ -38,7 +38,7 @@ def register_class(name):
     return decorator
 
 
-@register_class('top_k_top_p_sampling')
+@register_class("top_k_top_p_sampling")
 class TopKTopPSamplingTokenSelector(TokenSelector):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -50,19 +50,23 @@ class TopKTopPSamplingTokenSelector(TokenSelector):
         seeds = None
         if metadata.is_prefill and not metadata.is_mix:
             if logits.shape[0] != len(metadata.batch_sequence_ids):
-                message = ('The batch size of batch_sequence_ids and logits are inconsistent. This may occur if '
-                           'incorrect batch_sequence_ids are provided when calling the sample method of the '
-                           'generator_backend or when directly invoking the sampler. Please check the shapes of '
-                           'batch_sequence_ids and logits before making these calls.')
+                message = (
+                    "The batch size of batch_sequence_ids and logits are inconsistent. This may occur if "
+                    "incorrect batch_sequence_ids are provided when calling the sample method of the "
+                    "generator_backend or when directly invoking the sampler. Please check the shapes of "
+                    "batch_sequence_ids and logits before making these calls."
+                )
                 logger.error(message, ErrorCode.TEXT_GENERATOR_LOGITS_SHAPE_MISMATCH)
                 raise ValueError("The batch size of batch_sequence_ids and logits not equal.")
             self.configure(metadata)
             seeds = metadata.seed_array
         elif logits.shape[0] != len(metadata.all_sequence_ids):
-            message = ('The batch size of all_sequence_ids and logits are inconsistent. This may occur if incorrect '
-                       'all_sequence_ids are provided when calling the sample method of the generator_backend or when '
-                       'directly invoking the sampler. Please check the shapes of all_sequence_ids and logits before '
-                       'making these calls.')
+            message = (
+                "The batch size of all_sequence_ids and logits are inconsistent. This may occur if incorrect "
+                "all_sequence_ids are provided when calling the sample method of the generator_backend or when "
+                "directly invoking the sampler. Please check the shapes of all_sequence_ids and logits before "
+                "making these calls."
+            )
             logger.error(message, ErrorCode.TEXT_GENERATOR_LOGITS_SHAPE_MISMATCH)
             raise ValueError("The batch size of all_sequence_ids and logits not equal.")
 
@@ -73,13 +77,23 @@ class TopKTopPSamplingTokenSelector(TokenSelector):
         torch_npu.npu.current_stream().synchronize()
         logits_addr = logits.data_ptr()
         index_addr = index.data_ptr()
-        host_dtype = "float32" if (logits.dtype == torch.float32) else (
-            "bfloat16" if (logits.dtype == torch.bfloat16) else "float16")
+        host_dtype = (
+            "float32"
+            if (logits.dtype == torch.float32)
+            else ("bfloat16" if (logits.dtype == torch.bfloat16) else "float16")
+        )
         batch_size = len(metadata.all_sequence_ids)
-        token_ids_array, logprobs = self.processor.next_token_chooser(metadata.all_sequence_ids, logits_addr,
-                                                                      index_addr, batch_size, logits.shape[1],
-                                                                      metadata.max_logprobs, host_dtype,
-                                                                      self.speed_mode, self.use_approx)
+        token_ids_array, logprobs = self.processor.next_token_chooser(
+            metadata.all_sequence_ids,
+            logits_addr,
+            index_addr,
+            batch_size,
+            logits.shape[1],
+            metadata.max_logprobs,
+            host_dtype,
+            self.speed_mode,
+            self.use_approx,
+        )
         if self.speed_mode:
             index_array = index.cpu().numpy()
             token_ids_array = index_array[np.arange(index_array.shape[0]).reshape(-1, 1), token_ids_array]
@@ -102,7 +116,7 @@ class TopKTopPSamplingTokenSelector(TokenSelector):
             repeating_indices=repeating_indices,
             num_new_tokens=np.ones(batch_size, dtype=np.int64),
             num_top_tokens=num_top_tokens,
-            seeds=seeds
+            seeds=seeds,
         )
         return sampling_output
 
@@ -138,7 +152,7 @@ class TopKTopPSamplingTokenSelector(TokenSelector):
             for i, (best_of) in enumerate(metadata.best_of_array):
                 if best_of > 1:
                     rng = random.Random(int(metadata.seed_array[i]))
-                    sequence_seeds = [rng.randint(0, 2 ** 63 - 1) for _ in range(best_of)]
+                    sequence_seeds = [rng.randint(0, 2**63 - 1) for _ in range(best_of)]
                     seeds.extend(sequence_seeds)
                 else:
                     seeds.append(metadata.seed_array[i])
@@ -147,21 +161,25 @@ class TopKTopPSamplingTokenSelector(TokenSelector):
             repeating_indices = np.repeat(np.arange(len(metadata.batch_sequence_ids)), metadata.best_of_array)
             metadata.repeating_indices_array = repeating_indices
             metadata.repeating_indices = metadata.to_tensor(repeating_indices)
-            self.processor.set_batch_configs(metadata.all_sequence_ids,
-                                             metadata.top_k_array[repeating_indices],
-                                             metadata.top_p_array[repeating_indices],
-                                             metadata.do_sample_array[repeating_indices],
-                                             metadata.top_logprobs_array[repeating_indices],
-                                             metadata.seed_array,
-                                             self.params.sampling_method)
+            self.processor.set_batch_configs(
+                metadata.all_sequence_ids,
+                metadata.top_k_array[repeating_indices],
+                metadata.top_p_array[repeating_indices],
+                metadata.do_sample_array[repeating_indices],
+                metadata.top_logprobs_array[repeating_indices],
+                metadata.seed_array,
+                self.params.sampling_method,
+            )
         else:
-            self.processor.set_batch_configs(metadata.all_sequence_ids,
-                                             metadata.top_k_array,
-                                             metadata.top_p_array,
-                                             metadata.do_sample_array,
-                                             metadata.top_logprobs_array,
-                                             metadata.seed_array,
-                                             self.params.sampling_method)
+            self.processor.set_batch_configs(
+                metadata.all_sequence_ids,
+                metadata.top_k_array,
+                metadata.top_p_array,
+                metadata.do_sample_array,
+                metadata.top_logprobs_array,
+                metadata.seed_array,
+                self.params.sampling_method,
+            )
 
     def preprocess_top_k(self, logits: torch.Tensor, metadata: SamplingMetadata):
         if metadata.max_top_k > 0:

@@ -14,30 +14,30 @@
 #define OCK_ENDPOINT_H
 
 #include "endpoint_def.h"
-#include "http_rest_resource.h"
 #include "health_checker/health_checker.h"
+#include "http_rest_resource.h"
 
 namespace mindie_llm {
 class HttpWrapper;
 class EngineWrapper;
 
 class EndPoint {
-public:
+   public:
     int32_t Start(std::unordered_map<std::string, std::string> args);
     HealthChecker& GetHealthcheckerInstance() const;
     void Stop();
 
-private:
+   private:
     int StartEndpoint();
     bool StartDynamicConfigHandler() const;
     int StartHealthChecker();
     std::mutex mMutex;
-    bool mExpertParallel { false };
-    bool mHealthcheckerStarted { false };
-    bool mEngineStarted { false };
-    bool mServerStarted { false };
-    bool mTokenizerStarted { false };
+    bool mExpertParallel{false};
+    bool mHealthcheckerStarted{false};
+    bool mEngineStarted{false};
+    bool mServerStarted{false};
+    bool mTokenizerStarted{false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // OCK_ENDPOINT_H
+#endif  // OCK_ENDPOINT_H

@@ -14,21 +14,22 @@
 #ifndef OCK_HEALTH_CHECKER_H
 #define OCK_HEALTH_CHECKER_H
 
-#include <vector>
-#include <utility>
-#include <shared_mutex>
-#include <thread>
 #include <atomic>
 #include <chrono>
-#include <string>
-#include <set>
-#include <unordered_map>
-#include <mutex>
 #include <memory>
-#include "log.h"
+#include <mutex>
+#include <set>
+#include <shared_mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "config_manager.h"
 #include "error_queue.h"
 #include "infer_instances.h"
-#include "config_manager.h"
+#include "log.h"
 #include "simulate_task_runner.h"
 
 namespace mindie_llm {
@@ -43,7 +44,7 @@ enum ServiceStatus : uint32_t {
 };
 
 class HealthChecker {
-public:
+   public:
     static HealthChecker &GetInstance();
     ~HealthChecker();
     ServiceStatus GetServiceStatus();
@@ -65,9 +66,9 @@ public:
     HealthChecker(HealthChecker &&) = delete;
     HealthChecker &operator=(HealthChecker &&) = delete;
 
-private:
+   private:
     std::atomic<ServiceStatus> mServiceStatus;
-    int mChipPerCard = 1;    // A2: 1, A3: 2
+    int mChipPerCard = 1;  // A2: 1, A3: 2
     int llmNotReadyCount = 0;
     bool mFirstSimulateAbnormalSuppressed = false;
     bool mIsCentralizedNode = false;
@@ -79,7 +80,7 @@ private:
     std::thread mCheckerThread;
     std::atomic<bool> mRunning;
     std::atomic<bool> mSendingMessage{false};
-    std::mutex mStatusMutex; // 状态锁
+    std::mutex mStatusMutex;  // 状态锁
     std::unordered_map<int, std::vector<int>> statusTransferMap;
     static constexpr int checkIntervalSeconds = 5;
 
@@ -115,20 +116,21 @@ private:
     int mNPUThreshold = 0;  // 默认为0，表示不开启虚推健康探测
     std::atomic<bool> mSimulateTaskEnable{false};
 
-private:
+   private:
     HealthChecker();
 };
 
 class SendingMessageScope {
-public:
+   public:
     explicit SendingMessageScope(HealthChecker &checker) noexcept;
     ~SendingMessageScope() noexcept;
     SendingMessageScope(const SendingMessageScope &) = delete;
     SendingMessageScope &operator=(const SendingMessageScope &) = delete;
-private:
+
+   private:
     HealthChecker &checker_;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

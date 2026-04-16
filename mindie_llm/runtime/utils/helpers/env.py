@@ -29,6 +29,7 @@ class EnvVar:
     on Huawei Ascend NPU devices. It includes checks for valid ranges, IP addresses, and
     rank table file structure.
     """
+
     visible_devices: Optional[str] = os.getenv("ASCEND_RT_VISIBLE_DEVICES", None)
     bind_cpu: bool = os.getenv("BIND_CPU", "1") == "1"
     cpu_binding_num: Optional[str] = os.getenv("CPU_BINDING_NUM", None)
@@ -51,18 +52,19 @@ class EnvVar:
 
         if self.visible_devices is not None:
             try:
-                self.visible_devices = [int(x) for x in self.visible_devices.split(',')]
+                self.visible_devices = [int(x) for x in self.visible_devices.split(",")]
             except ValueError as e:
-                raise ValueError("ASCEND_RT_VISIBLE_DEVICES should be in format "
-                                 "{device_id},{device_id},...,{device_id}") from e
+                raise ValueError(
+                    "ASCEND_RT_VISIBLE_DEVICES should be in format {device_id},{device_id},...,{device_id}"
+                ) from e
 
         # Check rank table file structure
         self.check_rank_table(self.rank_table_file)
-        
+
         if self.rank_table_file:
-            rank_table_file = json.load(safe_open(self.rank_table_file, 'r', encoding='utf-8'))
-            self.master_ip = rank_table_file[SERVER_LIST][0]['container_ip']
-        
+            rank_table_file = json.load(safe_open(self.rank_table_file, "r", encoding="utf-8"))
+            self.master_ip = rank_table_file[SERVER_LIST][0]["container_ip"]
+
         if self.master_ip is not None and not self.is_valid_ip(self.master_ip):
             raise ValueError(f"MASTER_IP '{self.master_ip}' is invalid")
 
@@ -70,7 +72,6 @@ class EnvVar:
             self.master_port = int(self.master_port)
         if self.master_port is not None and (self.master_port < 0 or self.master_port > 65535):
             raise ValueError(f"MASTER_PORT {self.master_port} must be in range [0, 65535]")
-
 
     @staticmethod
     def is_valid_ip(ip: str) -> bool:
@@ -104,7 +105,7 @@ class EnvVar:
         if not rank_table_file:
             return
 
-        with safe_open(rank_table_file, 'r', encoding='utf-8') as device_file:
+        with safe_open(rank_table_file, "r", encoding="utf-8") as device_file:
             ranktable = json.load(device_file)
 
         # Calculate total world_size from rank table

@@ -62,18 +62,12 @@ class FusedMoE(CustomLayer):
 
         self.parallel_info = get_parallel_info_manager()
         self.moe_tp_rank = get_parallel_info_manager().get(ParallelType.MOE_TP).rank
-        self.moe_tp_size = (
-            get_parallel_info_manager().get(ParallelType.MOE_TP).group_size
-        )
+        self.moe_tp_size = get_parallel_info_manager().get(ParallelType.MOE_TP).group_size
         self.moe_ep_rank = get_parallel_info_manager().get(ParallelType.MOE_EP).rank
-        self.moe_ep_size = (
-            get_parallel_info_manager().get(ParallelType.MOE_EP).group_size
-        )
+        self.moe_ep_size = get_parallel_info_manager().get(ParallelType.MOE_EP).group_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.intermediate_size_per_partition = even_divide(
-            self.intermediate_size, self.moe_tp_size
-        )
+        self.intermediate_size_per_partition = even_divide(self.intermediate_size, self.moe_tp_size)
         self.bias = bias
         self.weight_dtype = weight_dtype or torch.get_default_dtype()
         self.quant_config = quant_config
@@ -81,25 +75,17 @@ class FusedMoE(CustomLayer):
         self.suffix = suffix
         self.activation = activation
         self.num_experts = num_experts
-        self._num_experts_per_ep_rank = (
-            self.num_experts + self.moe_ep_size - 1
-        ) // self.moe_ep_size
+        self._num_experts_per_ep_rank = (self.num_experts + self.moe_ep_size - 1) // self.moe_ep_size
         self.topk = topk_num
-        self.expert_list = assign_experts(self.num_experts, self.moe_ep_size)[
-            self.moe_ep_rank
-        ]
+        self.expert_list = assign_experts(self.num_experts, self.moe_ep_size)[self.moe_ep_rank]
         self.num_local_experts = len(self.expert_list)
-        self.expert_map = torch.full(
-            size=(self.num_experts,), fill_value=-1, device="npu"
-        )
+        self.expert_map = torch.full(size=(self.num_experts,), fill_value=-1, device="npu")
         self.expert_map[self.expert_list] = 1
         if self.quant_config is None:
             self.quant_method = UnquantizedFusedMoEMethod()
         else:
             # Get moe quant method through gate proj weights of expert 0
-            self.quant_method = self.quant_config.get_quant_method(
-                self, prefix=f"{self.prefix}.0.{self.suffix[0]}"
-            )
+            self.quant_method = self.quant_config.get_quant_method(self, prefix=f"{self.prefix}.0.{self.suffix[0]}")
         # Only created when MC2 used fused op
         self._moe_ep_group = None
 
@@ -116,16 +102,11 @@ class FusedMoE(CustomLayer):
         param = getattr(self, self.weight_map.get(module_suffix) + weight_name)
         shard_size = self.intermediate_size_per_partition
         loaded_expert_id = self.expert_list.index(expert_id)
-        if (
-            isinstance(self.quant_method, W4A8PerTokenFusedMoEMethod)
-            and weight_name == "weight"
-        ):
+        if isinstance(self.quant_method, W4A8PerTokenFusedMoEMethod) and weight_name == "weight":
             # w4a8 quantization: pack two int4 values into one int8 unit; shard size halved
             shard_size = shard_size // 2
         if isinstance(param, RowParameter):
-            param.load_expert_row_parallel_weight(
-                loaded_weight, loaded_expert_id, self.moe_tp_rank
-            )
+            param.load_expert_row_parallel_weight(loaded_weight, loaded_expert_id, self.moe_tp_rank)
         elif isinstance(param, ColumnParameter):
             if module_suffix == self.suffix[0]:
                 param.load_expert_column_parallel_weight(
@@ -173,9 +154,7 @@ class FusedMoE(CustomLayer):
 
         dispatcher = get_cached_dispatcher(moe_comm_type=moe_comm_type)
 
-        moe_comm_args = self._build_moe_comm_args(
-            moe_comm_type, hidden_states, topk_weights, topk_ids
-        )
+        moe_comm_args = self._build_moe_comm_args(moe_comm_type, hidden_states, topk_weights, topk_ids)
 
         moe_dispatch_output, dispatch_context = dispatcher.token_dispatch(moe_comm_args)
 
@@ -187,18 +166,14 @@ class FusedMoE(CustomLayer):
             dynamic_scale=moe_dispatch_output["dynamic_scale"],
         )
 
-        final_hidden_states = dispatcher.token_combine(
-            hidden_states=moe_mlp_out, ctx=dispatch_context
-        )
+        final_hidden_states = dispatcher.token_combine(hidden_states=moe_mlp_out, ctx=dispatch_context)
 
         if moe_comm_type == MoECommType.ALLGATHER:
             # In ALLGATHER-based MoE communication, expert outputs are gathered
             # back to all ranks, but the hidden states are still sharded across
             # Tensor Parallel (TP) ranks. Therefore, an all-reduce over the MLP TP
             # group is needed to merge TP-partial hidden states into a full result.
-            dist.all_reduce(
-                final_hidden_states, group=self.parallel_info.world.process_group
-            )
+            dist.all_reduce(final_hidden_states, group=self.parallel_info.world.process_group)
         return final_hidden_states
 
     def _post_init(self):

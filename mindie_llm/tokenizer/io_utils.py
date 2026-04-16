@@ -34,39 +34,40 @@ _READ_TIMEOUT = 30
 _MAX_TOKENIZER_NUMBER = 32
 
 _STANDARD_S3_PATTERNS = [
-    re.compile(r'^[a-z0-9.\-]+\.s3[.-][a-z0-9\-]+\.amazonaws\.com$'),
-    re.compile(r'^s3[.-][a-z0-9\-]+\.amazonaws\.com$'),
-    re.compile(r'^[a-z0-9.\-]+\.s3\.amazonaws\.com$'),
-    re.compile(r'^s3\.amazonaws\.com$'),
-    re.compile(r'^[a-z0-9.\-]+\.s3-website[.-][a-z0-9\-]+\.amazonaws\.com$'),
+    re.compile(r"^[a-z0-9.\-]+\.s3[.-][a-z0-9\-]+\.amazonaws\.com$"),
+    re.compile(r"^s3[.-][a-z0-9\-]+\.amazonaws\.com$"),
+    re.compile(r"^[a-z0-9.\-]+\.s3\.amazonaws\.com$"),
+    re.compile(r"^s3\.amazonaws\.com$"),
+    re.compile(r"^[a-z0-9.\-]+\.s3-website[.-][a-z0-9\-]+\.amazonaws\.com$"),
 ]
 _S3_COMPATIBLE_PATTERNS = [
-    re.compile(r'^[a-z0-9.\-]+\.([a-z0-9\-]+\.)?digitaloceanspaces\.com$'),
-    re.compile(r'^[a-z0-9.\-]+\.minio([-.][a-z0-9\-]+)?\.[a-z0-9\-]+$'),
-    re.compile(r'^[a-z0-9.\-]+\.([a-z0-9\-]+\.)?(storage|objectstorage|s3)\.[a-z0-9\-]+\.[a-z0-9\-]+$')
+    re.compile(r"^[a-z0-9.\-]+\.([a-z0-9\-]+\.)?digitaloceanspaces\.com$"),
+    re.compile(r"^[a-z0-9.\-]+\.minio([-.][a-z0-9\-]+)?\.[a-z0-9\-]+$"),
+    re.compile(r"^[a-z0-9.\-]+\.([a-z0-9\-]+\.)?(storage|objectstorage|s3)\.[a-z0-9\-]+\.[a-z0-9\-]+$"),
 ]
-_S3_SIGNATURE_PATTERNS = frozenset([
-    'x-amz-algorithm',
-    'x-amz-credential',
-    'x-amz-date',
-    'x-amz-expires',
-    'x-amz-signedheaders',
-    'x-amz-signature',
-    'awsaccesskeyid',
-    'signature',
-    'x-amz-security-token'
-])
-_S3_DOMAINS = frozenset(['s3.amazonaws.com', 's3.us-east-1.amazonaws.com'])
-_S3_KEYWORDS = frozenset(['amazonaws', 's3', 'storage', 'objectstorage', 'spaces', 'minio'])
+_S3_SIGNATURE_PATTERNS = frozenset(
+    [
+        "x-amz-algorithm",
+        "x-amz-credential",
+        "x-amz-date",
+        "x-amz-expires",
+        "x-amz-signedheaders",
+        "x-amz-signature",
+        "awsaccesskeyid",
+        "signature",
+        "x-amz-security-token",
+    ]
+)
+_S3_DOMAINS = frozenset(["s3.amazonaws.com", "s3.us-east-1.amazonaws.com"])
+_S3_KEYWORDS = frozenset(["amazonaws", "s3", "storage", "objectstorage", "spaces", "minio"])
 
 
-def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple,
-                    media_type_dict: dict[str, list[str]]):
+def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple, media_type_dict: dict[str, list[str]]):
     if ext.lower() not in media_type_dict.get(input_type):
         raise ValueError(f"The media type is {input_type}, url must end with one of {media_type_dict.get(input_type)}.")
     size_limit, total_start_time = limit_params
     if size_limit <= 0:
-        raise ValueError(f'Invalid size limit for input type: {input_type}.')
+        raise ValueError(f"Invalid size limit for input type: {input_type}.")
 
     current_memory = psutil.virtual_memory()
     if current_memory.available < size_limit * _MAX_TOKENIZER_NUMBER * 2:
@@ -103,8 +104,9 @@ def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple,
                         raise ValueError("Insufficient system memory for download.")
                     if total_size > size_limit:
                         media_content = bytearray()
-                        raise ValueError(f'The size of {input_type} exceeds the limit '
-                                         f'of {size_limit / (1024 * 1024):.2f} MB.')
+                        raise ValueError(
+                            f"The size of {input_type} exceeds the limit of {size_limit / (1024 * 1024):.2f} MB."
+                        )
                     media_content.extend(chunk)
             return bytes(media_content), total_size
     except requests.exceptions.ConnectTimeout as e:
@@ -120,18 +122,16 @@ def fetch_media_url(image_url, input_type: str, ext: str, limit_params: tuple,
 
 def save_image(image_byte_data, image_save_path, size_limit: int):
     if size_limit <= 0:
-        raise ValueError('Invalid size limit for image.')
+        raise ValueError("Invalid size limit for image.")
     if len(image_byte_data) > size_limit:
-        raise ValueError(
-            f'The size of image cannot exceed {size_limit / (1024 * 1024)} MB'
-        )
+        raise ValueError(f"The size of image cannot exceed {size_limit / (1024 * 1024)} MB")
     try:
         # Image.open will check whether the binary content is a valid picture content.
         # verify() can check the integrity of content.
         # Both are used here to validate content.
         with Image.open(BytesIO(image_byte_data)) as img:
             img.verify()
-        with file_utils.safe_open(image_save_path, mode='wb') as f:
+        with file_utils.safe_open(image_save_path, mode="wb") as f:
             f.write(image_byte_data)
     except IOError as e:
         raise RuntimeError("Invalid image content, check the input image") from e
@@ -168,7 +168,7 @@ def save_media(content, cache_dir, ext):
     new_filename = f"{file_count + 1}{ext}"
     save_path = os.path.join(cache_dir, new_filename)
     try:
-        with file_utils.safe_open(save_path, mode='wb', permission_mode=0o640) as fd:
+        with file_utils.safe_open(save_path, mode="wb", permission_mode=0o640) as fd:
             fd.write(content)
     except FileNotFoundError as file_not_found_error:
         raise IOError("Error when save media, file not found.") from file_not_found_error
@@ -181,7 +181,7 @@ def create_cache_dir(dir_path):
         dir_path,
         os.path.join(dir_path, "image"),
         os.path.join(dir_path, "video"),
-        os.path.join(dir_path, "audio")
+        os.path.join(dir_path, "audio"),
     ]
     shm_save_path = os.path.join(dir_path, "shm_name.txt")
 
@@ -193,7 +193,7 @@ def create_cache_dir(dir_path):
             else:
                 os.makedirs(single_dir, exist_ok=True)
                 os.chmod(single_dir, 0o750)
-        with file_utils.safe_open(shm_save_path, mode='wb', permission_mode=0o640):
+        with file_utils.safe_open(shm_save_path, mode="wb", permission_mode=0o640):
             pass
     except FileNotFoundError as file_not_found_error:
         raise IOError("Error when create cache dir, file not found.") from file_not_found_error
@@ -207,7 +207,7 @@ def release_shared_memory(file_path):
 
     file_path = file_utils.standardize_path(file_path)
     file_utils.check_path_permission(file_path, mode=0o640)
-    with file_utils.safe_open(file_path, mode='r', permission_mode=0o640) as f:
+    with file_utils.safe_open(file_path, mode="r", permission_mode=0o640) as f:
         shm_names = [line.strip() for line in file_utils.safe_readlines(f)]
         for name in shm_names:
             try:
@@ -230,7 +230,7 @@ def remove_cache_dir(dir_path):
     else:
         os.makedirs(dir_path, exist_ok=True)
         os.chmod(dir_path, 0o640)
-    shm_save_path = os.path.join(dir_path, "shm_name.txt") 
+    shm_save_path = os.path.join(dir_path, "shm_name.txt")
     release_shared_memory(shm_save_path)
 
     try:
@@ -252,7 +252,7 @@ def clear_meida_cache(dir_path: str):
     try:
         dir_path = file_utils.standardize_path(dir_path)
         file_utils.check_path_permission(dir_path)
-        for media_type in ['image', 'video', 'audio']:
+        for media_type in ["image", "video", "audio"]:
             media_dir = os.path.join(dir_path, media_type)
             if not file_utils.is_path_exists(media_dir):
                 continue
@@ -280,13 +280,13 @@ def is_s3_compatible_url(url):
     """
     try:
         parsed_url = parse_url(url)
-        scheme = parsed_url.scheme or ''
-        netloc = parsed_url.netloc or ''
-        query = parsed_url.query or ''
-        path = parsed_url.path or ''
+        scheme = parsed_url.scheme or ""
+        netloc = parsed_url.netloc or ""
+        query = parsed_url.query or ""
+        path = parsed_url.path or ""
         netloc_lower = netloc.lower()
         query_lower = query.lower()
-        path_count = sum(1 for p in path.strip('/').split('/') if p)
+        path_count = sum(1 for p in path.strip("/").split("/") if p)
         if not scheme or not netloc:
             return False
         # 1. Check for standard S3 URL patterns using regex
@@ -306,7 +306,7 @@ def is_s3_compatible_url(url):
             logger.warning(f"Path-style S3 URL detected: {url}")
             return True
         # 5. Fallback check for S3-like keywords in domain
-        if (any(keyword in netloc_lower for keyword in _S3_KEYWORDS) and path_count >= 2):
+        if any(keyword in netloc_lower for keyword in _S3_KEYWORDS) and path_count >= 2:
             logger.info(f"S3-like domain detected: {url}")
             return True
         logger.info("This URL is not S3-compatible.")
@@ -326,20 +326,20 @@ def extract_s3file_extension(url):
     """
     try:
         parsed_url = parse_url(url)
-        path = parsed_url.path or ''
+        path = parsed_url.path or ""
         if not path:
-            return ''
-        filename = path.rstrip('/').split('/')[-1]
+            return ""
+        filename = path.rstrip("/").split("/")[-1]
         if not filename:
-            return ''
-        last_dot_index = filename.rfind('.')
+            return ""
+        last_dot_index = filename.rfind(".")
         if last_dot_index > 0 and last_dot_index < len(filename) - 1:
             file_extension = filename[last_dot_index:].lower()
             return file_extension
-        return ''
+        return ""
     except Exception as e:
         logger.warning(f"Invalid URL: {url}, error: {e}")
-        return ''
+        return ""
 
 
 def extract_extension_from_url(ext):
@@ -347,7 +347,7 @@ def extract_extension_from_url(ext):
     Determine whether the input ext represents a regular file path or an S3 URL, and extract the file extension.
     """
     if not isinstance(ext, str) or not ext:
-        return ''
+        return ""
     if is_s3_compatible_url(ext):
         extension = extract_s3file_extension(ext)
         if extension:

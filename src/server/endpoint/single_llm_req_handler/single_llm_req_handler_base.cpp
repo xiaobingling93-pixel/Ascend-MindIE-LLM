@@ -11,10 +11,11 @@
  */
 
 #include "single_llm_req_handler_base.h"
+
 #include "endpoint_def.h"
-#include "single_req_infer_interface_base.h"
-#include "prometheus_metrics.h"
 #include "log.h"
+#include "prometheus_metrics.h"
+#include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 std::unordered_set<std::string> SingleLLMReqHandlerBase::stopReqSet_ = {};
@@ -22,20 +23,17 @@ std::unordered_set<std::string> SingleLLMReqHandlerBase::stopReqSet_ = {};
 SingleLLMReqHandlerBase::SingleLLMReqHandlerBase(ReqCtxPtr &ctx) : ctx{ctx} {}
 
 void SingleLLMReqHandlerBase::SetConstructOneResponseCallBack(
-    const ConstructOneResponseCallBack &constructOneResponseCallBack)
-{
+    const ConstructOneResponseCallBack &constructOneResponseCallBack) {
     constructOneResponseCallBack_ = constructOneResponseCallBack;
 }
 
-void SingleLLMReqHandlerBase::SetDMIReComputeBuildCallBack(const DMIReComputeBuildMethod &reComputeBuildMethod)
-{
+void SingleLLMReqHandlerBase::SetDMIReComputeBuildCallBack(const DMIReComputeBuildMethod &reComputeBuildMethod) {
     this->dmiReCompBuildMethod_ = reComputeBuildMethod;
 }
 
 void SingleLLMReqHandlerBase::SetStreamMode(bool streamMode) { streamMode_ = streamMode; }
 
-void SingleLLMReqHandlerBase::UpdateInferParam(RequestSPtr request, const InferParamSPtr &inferParam)
-{
+void SingleLLMReqHandlerBase::UpdateInferParam(RequestSPtr request, const InferParamSPtr &inferParam) {
     request_ = request;
     inferParam_ = inferParam;
 }
@@ -45,13 +43,12 @@ bool SingleLLMReqHandlerBase::GetContextJsonBody([[maybe_unused]] nlohmann::orde
 bool SingleLLMReqHandlerBase::GetContextJsonBody([[maybe_unused]] InferParamSPtr inputParam,
                                                  [[maybe_unused]] RequestSPtr request,
                                                  [[maybe_unused]] std::vector<int64_t> &reqTokens,
-                                                 [[maybe_unused]] std::vector<int64_t> &respTokens)
-{
+                                                 [[maybe_unused]] std::vector<int64_t> &respTokens) {
     return true;
 };
 
-bool SingleLLMReqHandlerBase::ParseSeqIdFromResponse(const ResponseSPtr &response, std::vector<BestNTokens> &postToken)
-{
+bool SingleLLMReqHandlerBase::ParseSeqIdFromResponse(const ResponseSPtr &response,
+                                                     std::vector<BestNTokens> &postToken) {
     auto seqId = 0;
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         seqId = response->responseContents[i].seqId;
@@ -71,8 +68,7 @@ bool SingleLLMReqHandlerBase::ParseSeqIdFromResponse(const ResponseSPtr &respons
 }
 
 bool SingleLLMReqHandlerBase::ParseParentSeqIdFromResponse(const ResponseSPtr &response,
-                                                           std::vector<BestNTokens> &postToken) const
-{
+                                                           std::vector<BestNTokens> &postToken) const {
     auto parentSeqId = 0;
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         parentSeqId = response->responseContents[i].parentSeqId;
@@ -89,8 +85,7 @@ bool SingleLLMReqHandlerBase::ParseParentSeqIdFromResponse(const ResponseSPtr &r
 }
 
 bool SingleLLMReqHandlerBase::ParseOutTokenIdFromResponse(const ResponseSPtr &response,
-                                                          std::vector<BestNTokens> &postToken) const
-{
+                                                          std::vector<BestNTokens> &postToken) const {
     auto outTokenIds = std::vector<TokenId>();
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         outTokenIds = response->responseContents[i].outTokenIds;
@@ -111,8 +106,7 @@ bool SingleLLMReqHandlerBase::ParseOutTokenIdFromResponse(const ResponseSPtr &re
 }
 
 bool SingleLLMReqHandlerBase::ParseCumLogProbsFromResponse(const ResponseSPtr &response,
-                                                           std::vector<BestNTokens> &postToken) const
-{
+                                                           std::vector<BestNTokens> &postToken) const {
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         postToken.at(i).cumLogprobs = response->responseContents[i].cumLogProb;
     }
@@ -120,15 +114,14 @@ bool SingleLLMReqHandlerBase::ParseCumLogProbsFromResponse(const ResponseSPtr &r
 }
 
 bool SingleLLMReqHandlerBase::ParseFinishReasonAndTruncationIdFromResponse(const ResponseSPtr &response,
-                                                                           std::vector<BestNTokens> &postToken) const
-{
+                                                                           std::vector<BestNTokens> &postToken) const {
     bool hasEndedSequence = false;
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         postToken.at(i).finishReason = response->responseContents[i].finishReason;
         hasEndedSequence = hasEndedSequence || postToken.at(i).finishReason != InferStatusType::ITERATION_CONTINUE;
     }
 
-    if (!hasEndedSequence) { // truncate only when sequence has not ended yet !
+    if (!hasEndedSequence) {  // truncate only when sequence has not ended yet !
         return true;
     }
     for (size_t i = 0; i < response->responseContents.size(); i++) {
@@ -144,8 +137,7 @@ bool SingleLLMReqHandlerBase::ParseFinishReasonAndTruncationIdFromResponse(const
 }
 
 bool SingleLLMReqHandlerBase::ParseOutLogprobFromResponse(const ResponseSPtr &response,
-                                                          std::vector<BestNTokens> &postToken) const
-{
+                                                          std::vector<BestNTokens> &postToken) const {
     for (size_t i = 0; i < response->responseContents.size(); i++) {
         postToken.at(i).logprob = response->responseContents[i].outLogProbs;
     }
@@ -153,8 +145,7 @@ bool SingleLLMReqHandlerBase::ParseOutLogprobFromResponse(const ResponseSPtr &re
 }
 
 bool SingleLLMReqHandlerBase::ParseTopLogProbsFromResponse(const ResponseSPtr &response,
-                                                           std::vector<BestNTokens> &postToken) const
-{
+                                                           std::vector<BestNTokens> &postToken) const {
     size_t topLogprobs = request_->topLogprobs.value();
     for (size_t i = 0; i < response->responseContents.size(); ++i) {
         const ResponseContent &content = response->responseContents[i];
@@ -165,8 +156,9 @@ bool SingleLLMReqHandlerBase::ParseTopLogProbsFromResponse(const ResponseSPtr &r
                               std::to_string(content.topLogProbTokenIds.size()) +
                               std::string(" does not match topLogprobs * content.speculativeTokenNum = ") +
                               std::to_string(topLogprobs * content.speculativeTokenNum);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    ABNORMAL_TRANSMISSION_ERROR), err);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       err);
             return false;
         }
         if (content.topLogProbs.size() != topLogprobs * content.speculativeTokenNum) {
@@ -174,8 +166,9 @@ bool SingleLLMReqHandlerBase::ParseTopLogProbsFromResponse(const ResponseSPtr &r
                               std::to_string(content.topLogProbs.size()) +
                               std::string(" does not match topLogprobs * content.speculativeTokenNum = ") +
                               std::to_string(topLogprobs * content.speculativeTokenNum);
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    ABNORMAL_TRANSMISSION_ERROR), err);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       err);
             return false;
         }
 
@@ -186,8 +179,7 @@ bool SingleLLMReqHandlerBase::ParseTopLogProbsFromResponse(const ResponseSPtr &r
 }
 
 bool SingleLLMReqHandlerBase::ParseLogProbsFromResponse(const ResponseSPtr &response,
-                                                        std::vector<BestNTokens> &postToken) const
-{
+                                                        std::vector<BestNTokens> &postToken) const {
     // check parameters
     if (!request_->logprobs.has_value() || !request_->logprobs.value() || !request_->topLogprobs.has_value()) {
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Do not need logprobs in response.");
@@ -214,8 +206,8 @@ bool SingleLLMReqHandlerBase::ParseLogProbsFromResponse(const ResponseSPtr &resp
     return true;
 }
 
-bool SingleLLMReqHandlerBase::ParseTokensFromResponse(const ResponseSPtr &response, std::vector<BestNTokens> &postToken)
-{
+bool SingleLLMReqHandlerBase::ParseTokensFromResponse(const ResponseSPtr &response,
+                                                      std::vector<BestNTokens> &postToken) {
     size_t parallelResponseSize = response->responseContents.size();
     // check whether the response contains sequences
     if (parallelResponseSize == 0) {
@@ -228,13 +220,15 @@ bool SingleLLMReqHandlerBase::ParseTokensFromResponse(const ResponseSPtr &respon
     // Resize postToken to fit the number of responseContents
     try {
         postToken.resize(parallelResponseSize);
-    } catch (const std::bad_alloc& e) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Memory allocation failed during postToken resize: " << e.what());
+    } catch (const std::bad_alloc &e) {
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Memory allocation failed during postToken resize: " << e.what());
         return false;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Unknown exception during postToken resize");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Unknown exception during postToken resize");
         return false;
     }
 
@@ -290,8 +284,7 @@ void SingleLLMReqHandlerBase::InsertStopRequest(std::string stopReqId) const { s
 
 Metrics &SingleLLMReqHandlerBase::GetMetrics() { return metrics; }
 
-void SingleLLMReqHandlerBase::SetRecomputeMetrics(Metrics &reMetrics)
-{
+void SingleLLMReqHandlerBase::SetRecomputeMetrics(Metrics &reMetrics) {
     uint64_t decodeTimeNum = reMetrics.decodeTime.size();
     for (uint64_t i = 0; i < decodeTimeNum; i++) {
         metrics.decodeTime.push_back(reMetrics.decodeTime[i]);
@@ -299,8 +292,7 @@ void SingleLLMReqHandlerBase::SetRecomputeMetrics(Metrics &reMetrics)
     metrics.firstTokenCost = reMetrics.firstTokenCost;
 }
 
-void SingleLLMReqHandlerBase::MetricsCallback(const ResponseSPtr &response)
-{
+void SingleLLMReqHandlerBase::MetricsCallback(const ResponseSPtr &response) {
     // 生成token数
     auto reqId = response->reqId;
     uint64_t decodeTime = 0;
@@ -324,16 +316,16 @@ void SingleLLMReqHandlerBase::MetricsCallback(const ResponseSPtr &response)
                                                .count());
         if (isRecompute_) {
             metrics.decodeTime.push_back(decodeTime);
-            metrics.callbackIndexQue.push(DECODE_CALLBACK_METRICS_TAG); // decode
+            metrics.callbackIndexQue.push(DECODE_CALLBACK_METRICS_TAG);  // decode
         } else {
             metrics.firstTokenCost = decodeTime;
-            metrics.callbackIndexQue.push(PREFILL_CALLBACK_METRICS_TAG); // prefill
+            metrics.callbackIndexQue.push(PREFILL_CALLBACK_METRICS_TAG);  // prefill
         }
         if (reqType_ != InferReqType::REQ_DECODE) {
             PrometheusMetrics::GetInstance()->TTFTObserve(decodeTime);
         }
     } else {
-        metrics.callbackIndexQue.push(DECODE_CALLBACK_METRICS_TAG); // decode
+        metrics.callbackIndexQue.push(DECODE_CALLBACK_METRICS_TAG);  // decode
         // decode 记录每次decode的时间
         decodeTime = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                                std::chrono::steady_clock::now() - metrics.lastTokenTime)
@@ -356,14 +348,12 @@ void SingleLLMReqHandlerBase::MetricsCallback(const ResponseSPtr &response)
 
 void SingleLLMReqHandlerBase::SetMetricParams(const ResponseSPtr &response) { MetricsCallback(response); }
 
-void SingleLLMReqHandlerBase::ProcessFailedResponsePrometheusMetrics() const
-{
+void SingleLLMReqHandlerBase::ProcessFailedResponsePrometheusMetrics() const {
     PrometheusMetrics::GetInstance()->FailedResponseNumberCount();
     PrometheusMetrics::GetInstance()->FailedRequestRateGaugeCollect();
 }
 
-void SingleLLMReqHandlerBase::DumpInferParam(const RequestSPtr request)
-{
+void SingleLLMReqHandlerBase::DumpInferParam(const RequestSPtr request) {
     OrderedJson paramJson;
 
     auto setParam = [&paramJson](const std::string &key, const auto &param) {
@@ -395,4 +385,4 @@ void SingleLLMReqHandlerBase::DumpInferParam(const RequestSPtr request)
     std::string msg = "Sampling parameters for request id: " + request->requestId + "\n" + paramJson.dump(4);
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, msg);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

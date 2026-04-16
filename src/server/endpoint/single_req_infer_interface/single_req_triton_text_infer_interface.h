@@ -15,37 +15,39 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
+#include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 /**
  * @brief Triton text 格式的推理请求处理类
  */
 class SingleReqTritonTextInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqTritonTextInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                                bool stream = false, std::string model = "", bool isReCompute = false,
                                                const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool BuildResponseJson(ResponseSPtr response, const std::vector<BestNTokens> &tokenIdList,
-                            RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
+                           RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
     void SetDMIReComputeBuilder() override;
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
-protected:
+
+   protected:
     bool ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp) override;
 
-private:
+   private:
     bool ParseRequestId(std::string &error) noexcept;
-    void FillResponseBody(const uint64_t& curSeqId, nlohmann::ordered_json &respBody,
-        const std::string &textOutput, uint32_t tokenCnt) noexcept;
+    void FillResponseBody(const uint64_t &curSeqId, nlohmann::ordered_json &respBody, const std::string &textOutput,
+                          uint32_t tokenCnt) noexcept;
     Status DecodeOutputText(const uint64_t &curSeqId, std::string &textOutput, std::vector<int64_t> &tokens,
-                                        bool showFullText = false, const uint64_t &timestamp = 0);
+                            bool showFullText = false, const uint64_t &timestamp = 0);
     void TruncateOutputText(const ResponseSPtr &response, std::string &textOutput);
-    std::string BuildTritonTextReComputeBody(const std::vector<BestNTokens>& tokens);
-    void UpdateResponseBody(const uint64_t& curSeqId, nlohmann::ordered_json &jsonObj,
-        std::string &textOutput, std::string &jsonString);
+    std::string BuildTritonTextReComputeBody(const std::vector<BestNTokens> &tokens);
+    void UpdateResponseBody(const uint64_t &curSeqId, nlohmann::ordered_json &jsonObj, std::string &textOutput,
+                            std::string &jsonString);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // ENDPOINT_TRITON_TEXT_INFER_H

@@ -92,8 +92,7 @@ def fused_gdn_gating(
         progs = num_cores
         FACTOR = 8 * num_heads
         calc_blk_batches = (
-            triton.next_power_of_2(triton.cdiv(int(UNIFIED_BUFFER_SIZE * 0.95), 
-                                               FACTOR * BLK_HEADS * elem_size)) // 2
+            triton.next_power_of_2(triton.cdiv(int(UNIFIED_BUFFER_SIZE * 0.95), FACTOR * BLK_HEADS * elem_size)) // 2
         )
         BLK_BATCHES = max(1, min(calc_blk_batches, max_ub_batches, 64))
         row_per_core = triton.cdiv(batch, progs)

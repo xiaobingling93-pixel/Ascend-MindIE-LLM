@@ -9,13 +9,14 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MIES_DRESULT_EVENT_DISPATCHER_H
 #define MIES_DRESULT_EVENT_DISPATCHER_H
 
-#include <queue>
-#include <boost/lockfree/queue.hpp>
 #include <boost/atomic.hpp>
+#include <boost/lockfree/queue.hpp>
+#include <queue>
+
 #include "event_dispatcher.h"
 #include "httplib.h"
 namespace mindie_llm {
@@ -27,7 +28,7 @@ struct DResultWrapParam {
 };
 
 class DResultEventDispatcher {
-public:
+   public:
     explicit DResultEventDispatcher();
     ~DResultEventDispatcher();
 
@@ -35,16 +36,17 @@ public:
     void SendEvent(const std::string &message, bool finishFlag, std::string reqInfo);
     static void WrapChunkedDResponse(std::string &msg, const DResultWrapParam &param);
     boost::chrono::nanoseconds GetIntervalFromPrevSend() const;
-private:
+
+   private:
     void ClearQueue();
     void WriteStreamMessage(httplib::DataSink *sink);
     std::mutex qMutex_;
     std::condition_variable cv_;
-    std::atomic_bool isFinish_ {false};
-    std::atomic_bool isDestroyed_ {false};
+    std::atomic_bool isFinish_{false};
+    std::atomic_bool isDestroyed_{false};
     boost::chrono::time_point<boost::chrono::steady_clock> lastTimestamp_{boost::chrono::steady_clock::now()};
-    boost::lockfree::queue<std::string*> queue_{10000};
+    boost::lockfree::queue<std::string *> queue_{10000};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

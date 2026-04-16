@@ -28,7 +28,7 @@ class ATBTokenizerWrapper(BaseTokenizerWrapper):
         self.vocab_size = self.config.vocab_size
         self.toolscallprocessor = self.tokenizer_wrapper.tool_calls_parser
         self.tokenize = self.tokenizer_wrapper.tokenize
-    
+
     def encode(self, inputs, **kwargs):
         try:
             token_ids = self.tokenizer_wrapper.encode(inputs, **kwargs)
@@ -37,11 +37,19 @@ class ATBTokenizerWrapper(BaseTokenizerWrapper):
             raise e
         return token_ids
 
-    def decode(self, all_token_ids: list[int], skip_special_tokens: bool, use_tool_calls: bool, is_chat_req: bool,
-                   stream: bool, **kwargs):
+    def decode(
+        self,
+        all_token_ids: list[int],
+        skip_special_tokens: bool,
+        use_tool_calls: bool,
+        is_chat_req: bool,
+        stream: bool,
+        **kwargs,
+    ):
         try:
-            decoded_text = self.tokenizer_wrapper.decode(all_token_ids, skip_special_tokens, use_tool_calls,
-                                                         is_chat_req, stream, **kwargs)
+            decoded_text = self.tokenizer_wrapper.decode(
+                all_token_ids, skip_special_tokens, use_tool_calls, is_chat_req, stream, **kwargs
+            )
         except Exception as e:
             logger.error(f"Error in decode: {e}")
             raise e

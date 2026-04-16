@@ -25,10 +25,10 @@ from .config import CacheConfig, ContextParams, SpCpParallelInfo
 
 
 def prepare_cp_input(metadata: InputMetadata, cp_size: int):
-    '''
+    """
     generate pad_token_count and cp_tokens
     update metadata for cp
-    '''
+    """
     pad_token_count = (-metadata.batch_seq_len) % (2 * cp_size)
     metadata.batch_seq_len += pad_token_count
     metadata.sp_tokens[np.arange(metadata.batch_size), metadata.sp_rank_id] += pad_token_count
@@ -75,7 +75,7 @@ class TGInferContextStore:
         if spcp_parallel_info is not None:
             self.spcp_parallel_info = SpCpParallelInfo(spcp_parallel_info[0], spcp_parallel_info[1])
         else:
-            self.spcp_parallel_info = SpCpParallelInfo() # for mindspore backend
+            self.spcp_parallel_info = SpCpParallelInfo()  # for mindspore backend
         self.context_params = context_params
         self.device = device
         self._batch_context = BatchContext(
@@ -110,9 +110,7 @@ class TGInferContextStore:
                 context_handles[i] = self._batch_context.get_context_slot(sequence_id, metadata.is_prefill)
         return context_handles
 
-    def compose_model_inputs(
-            self, metadata: InputMetadata, context_handles: Optional[np.ndarray], **kwargs
-    ) -> Tuple:
+    def compose_model_inputs(self, metadata: InputMetadata, context_handles: Optional[np.ndarray], **kwargs) -> Tuple:
         """
         originally concatenate, add context when prefilling or join context when decoding
         kwargs:
@@ -132,8 +130,9 @@ class TGInferContextStore:
                         "BOS token ID is invalid (-1). This token is required for proper sequence processing. "
                         "Please check your model configuration and ensure a valid BOS token ID is provided."
                     )
-                metadata.input_ids = np.where(metadata.input_ids == -1, self.cache_config.bos_token_id,
-                                            metadata.input_ids)
+                metadata.input_ids = np.where(
+                    metadata.input_ids == -1, self.cache_config.bos_token_id, metadata.input_ids
+                )
             last_input_ids, position_ids, all_tokens_kv_slots, seq_lengths, prefill_head_indices = (
                 self._update_context_before_prefill(
                     context_handles,
@@ -157,9 +156,7 @@ class TGInferContextStore:
             prefill_head_indices = None
 
             if metadata.has_sampling:
-                sampling_metadata = self.last_sampling_metadata.get_from_cache(
-                    sequence_ids=metadata.all_sequence_ids
-                )
+                sampling_metadata = self.last_sampling_metadata.get_from_cache(sequence_ids=metadata.all_sequence_ids)
                 if sampling_metadata is None or sampling_metadata.is_prefill:
                     sampling_metadata = self._batch_context.build_sampling_meta(
                         context_handles, metadata, is_prefill=False
@@ -187,7 +184,7 @@ class TGInferContextStore:
             sp_tokens=metadata.sp_tokens,
             cp_tokens=cp_tokens,
             seq_lens=metadata.seq_lens,
-            pad_token_count=pad_token_count
+            pad_token_count=pad_token_count,
         )
         res = (model_inputs, sampling_metadata, trace_ids)
         # compose model inputs !!!!
@@ -257,7 +254,7 @@ class TGInferContextStore:
             context_handles,
             updated_ndarrays=None,
             input_metadata=input_metadata,
-            sampling_args=(sampling_metadata, sampling_output)
+            sampling_args=(sampling_metadata, sampling_output),
         )
 
         finished_context_handles = np.array([], dtype=np.int32)
@@ -280,7 +277,7 @@ class TGInferContextStore:
         - If it already has a context (e.g., kept beam), reuse it.
         - If it's a new child, allocate a new context slot via get_context_slot(prefill=True).
         - Then, if it has a valid parent, fork the parent's context to it.
-        
+
         Args:
             sampling_output (SamplingOutput): Contains sequence_ids and parent_sequence_ids.
 
@@ -325,7 +322,7 @@ class TGInferContextStore:
                 children_context_handles=np.array(child_handles, dtype=np.int32),
                 parents_context_handles=np.array(parent_handles, dtype=np.int32),
             )
-            
+
         return result_handles
 
     def get_last_block_idx(self, context_handles):
@@ -417,11 +414,13 @@ class TGInferContextStore:
     def splitfuse_concatenate(self, metadata: InputMetadata, context_handles, warmup=False, hit_mask=None):
         is_prefill = metadata.is_prefill
         if is_prefill:
-            model_inputs, sampling_metadata, q_len, trace_ids = \
-                self.concatenate_mix(metadata, context_handles, warmup=warmup, hit_mask=hit_mask)
+            model_inputs, sampling_metadata, q_len, trace_ids = self.concatenate_mix(
+                metadata, context_handles, warmup=warmup, hit_mask=hit_mask
+            )
         else:
-            model_inputs, sampling_metadata, trace_ids = \
-                self.compose_model_inputs(metadata, context_handles, warmup=warmup, hit_mask=hit_mask)
+            model_inputs, sampling_metadata, trace_ids = self.compose_model_inputs(
+                metadata, context_handles, warmup=warmup, hit_mask=hit_mask
+            )
             q_len = None
             sampling_metadata.is_seq_prefill = metadata.batch_is_prefill
         q_lens = q_len.tolist() if q_len is not None else None
@@ -466,17 +465,17 @@ class TGInferContextStore:
             input_lengths[prefill_seq_idx] = metadata.split_end_position[prefill_seq_idx]
             q_lens[prefill_seq_idx] = prefill_seq_lens
             for _, (i, start_idx, end_idx) in enumerate(zip(prefill_seq_idx, start_positions, end_positions)):
-                position_ids[start_idx:end_idx] = \
-                    range(metadata.split_start_position[i], metadata.split_end_position[i])
+                position_ids[start_idx:end_idx] = range(
+                    metadata.split_start_position[i], metadata.split_end_position[i]
+                )
 
                 if not warmup:
-                    slots[start_idx:end_idx] = \
-                        self.block_table_to_slots(metadata.batch_block_tables[i]).reshape(-1)[
-                            metadata.split_start_position[i]:metadata.split_end_position[i]
-                        ]
+                    slots[start_idx:end_idx] = self.block_table_to_slots(metadata.batch_block_tables[i]).reshape(-1)[
+                        metadata.split_start_position[i] : metadata.split_end_position[i]
+                    ]
                 else:
                     slots[start_idx] = 0
-                    slots[start_idx + 1:end_idx] = -1
+                    slots[start_idx + 1 : end_idx] = -1
 
         self._batch_context.update_context_for_splitfuse(metadata, context_handles, input_lengths, last_position_ids)
         trace_ids = None
@@ -492,16 +491,18 @@ class TGInferContextStore:
             )
             self.last_sampling_metadata.add_to_cache(metadata.all_sequence_ids, sampling_metadata)
 
-        model_inputs = ModelInput(input_ids=input_ids,
-                                  position_ids=position_ids,
-                                  block_tables=metadata.batch_block_tables,
-                                  slots=slots,
-                                  context_length=input_lengths,
-                                  cached_context_length=input_lengths,
-                                  max_seq_len=max_seq_len,
-                                  prefill_head_indices=prefill_head_indices,
-                                  is_prefill=True,
-                                  dp_rank_ids=metadata.batch_dp_rank_ids)
+        model_inputs = ModelInput(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            block_tables=metadata.batch_block_tables,
+            slots=slots,
+            context_length=input_lengths,
+            cached_context_length=input_lengths,
+            max_seq_len=max_seq_len,
+            prefill_head_indices=prefill_head_indices,
+            is_prefill=True,
+            dp_rank_ids=metadata.batch_dp_rank_ids,
+        )
         res = (model_inputs, sampling_metadata, q_lens, trace_ids)
         return res
 
@@ -528,8 +529,9 @@ class TGInferContextStore:
         cumulative_seq_len = 0
         input_ids = metadata.input_ids  # flattened input_ids for the batch
         # prompt last token id
-        prefill_new_tokens = np.zeros(metadata.batch_size, dtype=np.int32) \
-            if kwargs.get("is_pd_separate", False) else None
+        prefill_new_tokens = (
+            np.zeros(metadata.batch_size, dtype=np.int32) if kwargs.get("is_pd_separate", False) else None
+        )
         for i in range(metadata.batch_size):
             seq_len = metadata.batch_seq_len[i]
             start_idx = cumulative_seq_len
@@ -557,14 +559,14 @@ class TGInferContextStore:
             sampling_args=(None, None),
             is_first_update=True,
             pad_token_count=pad_token_count,
-            is_pd_separate=kwargs.get("is_pd_separate", False)
+            is_pd_separate=kwargs.get("is_pd_separate", False),
         )
         # 虚推请求不写入 KV cache，设置 slots = -1 跳过 ReshapeAndCache
         cumulative_idx = 0
         for i in range(metadata.batch_size):
             seq_len = metadata.batch_seq_len[i]
             if metadata.all_sequence_ids[i] == SIMULATE_SEQUENCE_ID:
-                all_tokens_kv_slots[cumulative_idx:cumulative_idx + seq_len] = -1
+                all_tokens_kv_slots[cumulative_idx : cumulative_idx + seq_len] = -1
             cumulative_idx += seq_len
         return input_ids, position_ids, all_tokens_kv_slots, seq_lengths, prefill_head_indices
 
@@ -575,14 +577,16 @@ class TGInferContextStore:
             if block_table == -1 or sp_len <= 0:
                 break
             sp_len_i = min(sp_len, self.block_size)
-            slots[sp_start_idx: sp_start_idx + sp_len_i] = \
-                self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+            slots[sp_start_idx : sp_start_idx + sp_len_i] = self._batch_context.block_table_to_slots(
+                block_table
+            ).reshape(-1)[:sp_len_i]
             sp_len -= self.block_size
             sp_start_idx += self.spcp_parallel_info.scp_size * self.block_size
         return slots
 
     def _gen_scp_slots_last_rank(
-            self, start_idx, seq_sp_tokens, slots: Optional[np.ndarray], block_tables) -> np.ndarray:
+        self, start_idx, seq_sp_tokens, slots: Optional[np.ndarray], block_tables
+    ) -> np.ndarray:
         sp_start_idx = start_idx + self.spcp_parallel_info.scp_rank * self.block_size
         sp_len = seq_sp_tokens[self.spcp_parallel_info.scp_rank]
         seq_len = np.sum(seq_sp_tokens)
@@ -591,11 +595,13 @@ class TGInferContextStore:
                 break
             sp_len_i = min(sp_len, self.block_size)
             if sp_len <= self.block_size:
-                slots[start_idx + seq_len - sp_len_i: start_idx + seq_len] = \
-                    self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+                slots[start_idx + seq_len - sp_len_i : start_idx + seq_len] = self._batch_context.block_table_to_slots(
+                    block_table
+                ).reshape(-1)[:sp_len_i]
             else:
-                slots[sp_start_idx: sp_start_idx + sp_len_i] = \
-                    self._batch_context.block_table_to_slots(block_table).reshape(-1)[:sp_len_i]
+                slots[sp_start_idx : sp_start_idx + sp_len_i] = self._batch_context.block_table_to_slots(
+                    block_table
+                ).reshape(-1)[:sp_len_i]
             sp_len -= self.block_size
             sp_start_idx += self.spcp_parallel_info.scp_size * self.block_size
         return slots
@@ -617,11 +623,13 @@ class TGInferContextStore:
             return
         if self.spcp_parallel_info.scp_size > 1:
             if self.spcp_parallel_info.scp_rank == self.spcp_parallel_info.scp_size - 1:
-                all_tokens_kv_slots = \
-                    self._gen_scp_slots_last_rank(start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table)
+                all_tokens_kv_slots = self._gen_scp_slots_last_rank(
+                    start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table
+                )
             else:
-                all_tokens_kv_slots = \
-                    self._gen_scp_slots(start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table)
+                all_tokens_kv_slots = self._gen_scp_slots(
+                    start_idx, seq_sp_chunk_lens, all_tokens_kv_slots, block_table
+                )
 
         else:
             all_tokens_kv_slots[start_idx:end_idx] = self._batch_context.block_table_to_slots(block_table).reshape(-1)[

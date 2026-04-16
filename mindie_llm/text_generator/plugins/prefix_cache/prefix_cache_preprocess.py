@@ -25,11 +25,11 @@ class PrefixCachePreprocess:
         if not metadata.is_prefill or metadata.remote_computed_blocks is None:
             return model_inputs
         remote_computed_blocks = metadata.remote_computed_blocks
-        
+
         decode_len = 0
         batch_size = metadata.batch_size
         prefill_idx = list(range(0, metadata.batch_size))
-        if metadata.batch_is_prefill is not None: # prefix_cache + splitfuse
+        if metadata.batch_is_prefill is not None:  # prefix_cache + splitfuse
             decode_len = metadata.batch_is_prefill.shape[0] - np.sum(metadata.batch_is_prefill)
             batch_size = metadata.batch_is_prefill.shape[0]
             prefill_idx = list(range(decode_len, batch_size))
@@ -40,15 +40,15 @@ class PrefixCachePreprocess:
                 computed_blocks.append(remote_computed_blocks[i])
 
         if self.scp_size > 1:
-            batch_computed_blocks = metadata.remote_computed_blocks  # shape: [batch_size, csp_size] 
-            computed_blocks = np.sum(batch_computed_blocks, axis=1)  # shape: [batch_size] 
+            batch_computed_blocks = metadata.remote_computed_blocks  # shape: [batch_size, csp_size]
+            computed_blocks = np.sum(batch_computed_blocks, axis=1)  # shape: [batch_size]
         else:
             batch_computed_blocks = None
 
         # 需要刷新的参数包括input_ids, position_ids, slots, prefill_head_indices
         # 首先提取需要刷新的参数
         input_ids = model_inputs.input_ids
-        position_ids = model_inputs.position_ids        
+        position_ids = model_inputs.position_ids
         slots = model_inputs.slots
         prefill_head_indices = model_inputs.prefill_head_indices
 
@@ -81,30 +81,35 @@ class PrefixCachePreprocess:
             if metadata.split_start_position is None or split_start_position_i == 0:
                 cached_size = computed_blocks[i] * self.block_size
                 seq_len -= cached_size  # 减去已有缓存的seq_len
-                no_cache_blocks = metadata.batch_block_tables[i][computed_blocks[i]:]
+                no_cache_blocks = metadata.batch_block_tables[i][computed_blocks[i] :]
                 if seq_len <= 0:  # 若有缓存导致seq_len<=0，少用一个block的缓存，保证输入大于0
                     seq_len += self.block_size
-                    no_cache_blocks = metadata.batch_block_tables[i][computed_blocks[i] - 1:]
+                    no_cache_blocks = metadata.batch_block_tables[i][computed_blocks[i] - 1 :]
             else:
                 # 和splitfuse 叠加时, 被切分的第2，3, 4...块 的 computed_blocks 不再生效。
                 no_cache_blocks = metadata.batch_block_tables[i]
 
             new_total_seq_num += seq_len
-            new_input_ids[input_start_idx:input_start_idx + seq_len] = input_ids[batch_end_idx - seq_len:batch_end_idx]
-            new_position_ids[input_start_idx:input_start_idx + seq_len] = \
-                                                                    position_ids[batch_end_idx - seq_len:batch_end_idx]
+            new_input_ids[input_start_idx : input_start_idx + seq_len] = input_ids[
+                batch_end_idx - seq_len : batch_end_idx
+            ]
+            new_position_ids[input_start_idx : input_start_idx + seq_len] = position_ids[
+                batch_end_idx - seq_len : batch_end_idx
+            ]
             if metadata.split_start_position is not None:  # 和splitfuse 叠加时，slot的起点不是0
                 position_end_idx = split_start_position_i + seq_len
-                new_slots[input_start_idx:input_start_idx + seq_len] = self.infer_context.block_table_to_slots(
+                new_slots[input_start_idx : input_start_idx + seq_len] = self.infer_context.block_table_to_slots(
                     no_cache_blocks
                 ).reshape(-1)[split_start_position_i:position_end_idx]
             elif self.scp_size > 1:
-                new_slots[input_start_idx:input_start_idx + seq_len] = \
-                    model_inputs.slots[slots_start_idx + model_inputs.context_length[i] - seq_len:
-                                       slots_start_idx + model_inputs.context_length[i]]
+                new_slots[input_start_idx : input_start_idx + seq_len] = model_inputs.slots[
+                    slots_start_idx + model_inputs.context_length[i] - seq_len : slots_start_idx
+                    + model_inputs.context_length[i]
+                ]
             else:
-                new_slots[input_start_idx:input_start_idx + seq_len] = \
-                    self.infer_context.block_table_to_slots(no_cache_blocks).reshape(-1)[:seq_len]
+                new_slots[input_start_idx : input_start_idx + seq_len] = self.infer_context.block_table_to_slots(
+                    no_cache_blocks
+                ).reshape(-1)[:seq_len]
             q_lens[i] = seq_len // self.cp_size
             if model_inputs.pad_token_count is not None:
                 # scp 场景，需要去掉padding， pad_token_count 是每个请求padding的长度
@@ -122,30 +127,31 @@ class PrefixCachePreprocess:
         new_slots = new_slots[:new_total_seq_num]
 
         sp_computed_slots_padding_idx = self.get_sp_computed_slots_padding_idx(batch_computed_blocks)
-        sp_computed_slots_order = \
-            self.get_scp_computed_slots_order(batch_computed_blocks)
+        sp_computed_slots_order = self.get_scp_computed_slots_order(batch_computed_blocks)
         all_rank_prefix_lens = self.get_all_rank_prefix_lens(batch_computed_blocks)
         per_rank_prefix_lens = self.get_per_rank_prefix_lens(batch_computed_blocks)
 
-        model_inputs_new = ModelInput(input_ids=new_input_ids,
-                                      position_ids=new_position_ids,
-                                      block_tables=model_inputs.block_tables,
-                                      slots=new_slots,
-                                      context_length=model_inputs.context_length,
-                                      max_seq_len=model_inputs.max_seq_len,
-                                      prefill_head_indices=new_prefill_head_indices,
-                                      is_prefill=model_inputs.is_prefill,
-                                      query_length=q_lens,
-                                      adapter_ids=metadata.adapter_ids,
-                                      dp_rank_ids=metadata.batch_dp_rank_ids,
-                                      sp_tokens=metadata.sp_tokens,
-                                      cp_tokens=model_inputs.cp_tokens,
-                                      pad_token_count=model_inputs.pad_token_count,
-                                      seq_lens=metadata.seq_lens,
-                                      sp_computed_slots_padding_idx=sp_computed_slots_padding_idx,
-                                      sp_computed_slots_order=sp_computed_slots_order,
-                                      all_rank_prefix_lens=all_rank_prefix_lens,
-                                      per_rank_prefix_lens=per_rank_prefix_lens)
+        model_inputs_new = ModelInput(
+            input_ids=new_input_ids,
+            position_ids=new_position_ids,
+            block_tables=model_inputs.block_tables,
+            slots=new_slots,
+            context_length=model_inputs.context_length,
+            max_seq_len=model_inputs.max_seq_len,
+            prefill_head_indices=new_prefill_head_indices,
+            is_prefill=model_inputs.is_prefill,
+            query_length=q_lens,
+            adapter_ids=metadata.adapter_ids,
+            dp_rank_ids=metadata.batch_dp_rank_ids,
+            sp_tokens=metadata.sp_tokens,
+            cp_tokens=model_inputs.cp_tokens,
+            pad_token_count=model_inputs.pad_token_count,
+            seq_lens=metadata.seq_lens,
+            sp_computed_slots_padding_idx=sp_computed_slots_padding_idx,
+            sp_computed_slots_order=sp_computed_slots_order,
+            all_rank_prefix_lens=all_rank_prefix_lens,
+            per_rank_prefix_lens=per_rank_prefix_lens,
+        )
         return model_inputs_new
 
     def get_sp_computed_slots_padding_idx(self, batch_computed_blocks):
@@ -153,14 +159,15 @@ class PrefixCachePreprocess:
             return None
         rank_computed_block_nums = np.sum(batch_computed_blocks, axis=0)
         max_block_num = rank_computed_block_nums.max()
-        sp_computed_slots_padding_idx = np.concatenate([
-            np.arange(self.block_size * rank_computed_block_nums[self.scp_rank], dtype=np.int32),
-            np.zeros(self.block_size * (max_block_num - rank_computed_block_nums[self.scp_rank]), dtype=np.int32)
-        ]).reshape(-1)
+        sp_computed_slots_padding_idx = np.concatenate(
+            [
+                np.arange(self.block_size * rank_computed_block_nums[self.scp_rank], dtype=np.int32),
+                np.zeros(self.block_size * (max_block_num - rank_computed_block_nums[self.scp_rank]), dtype=np.int32),
+            ]
+        ).reshape(-1)
         return sp_computed_slots_padding_idx
-        
-    def gen_computed_block_order(self, scp_rank_computed_blocks):
 
+    def gen_computed_block_order(self, scp_rank_computed_blocks):
         computed_block_order = []
         for _, c_blocks in enumerate(scp_rank_computed_blocks):
             temp = []

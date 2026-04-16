@@ -12,12 +12,13 @@
 
 #pragma once
 #include <thread>
+
+#include "base_config_manager.h"
 #include "cmath"
 #include "common_util.h"
-#include "base_config_manager.h"
-#include "env_util.h"
-#include "config_manager.h"
 #include "config_interaction.h"
+#include "config_manager.h"
+#include "env_util.h"
 
 namespace mindie_llm {
 
@@ -29,7 +30,7 @@ const std::vector<LoraConfig> &GetLoraConfig();
 const RanktableParam &GetRanktableParam();
 
 class ConfigManager::Impl {
-public:
+   public:
     Impl() = delete;
 
     explicit Impl(const std::string &jsonPath);
@@ -38,16 +39,14 @@ public:
 
     Impl operator=(const Impl &) = delete;
 
-    ~Impl()
-    {
+    ~Impl() {
         running_ = false;
         if (task_.joinable()) {
             task_.join();
         }
     }
 
-    [[nodiscard]] const BackendConfig &GetBackendConfig() const
-    {
+    [[nodiscard]] const BackendConfig &GetBackendConfig() const {
         return std::atomic_load(&backendConfig_)->GetParam();
     }
 
@@ -55,23 +54,19 @@ public:
 
     [[nodiscard]] const ServerConfig &GetServerConfig() const { return std::atomic_load(&serverConfig_)->GetParam(); }
 
-    [[nodiscard]] const std::vector<ModelDeployConfig> &GetModelDeployConfig() const
-    {
+    [[nodiscard]] const std::vector<ModelDeployConfig> &GetModelDeployConfig() const {
         return std::atomic_load(&modelDeployConfig_)->GetParam();
     }
 
-    [[nodiscard]] const std::vector<LoraConfig> &GetLoraConfig() const
-    {
+    [[nodiscard]] const std::vector<LoraConfig> &GetLoraConfig() const {
         return std::atomic_load(&modelDeployConfig_)->GetLoraConfig();
     }
 
-    [[nodiscard]] const ScheduleConfig &GetScheduleConfig() const
-    {
+    [[nodiscard]] const ScheduleConfig &GetScheduleConfig() const {
         return std::atomic_load(&scheduleConfig_)->GetParam();
     }
 
-    [[nodiscard]] const RanktableParam &GetRanktableParam() const
-    {
+    [[nodiscard]] const RanktableParam &GetRanktableParam() const {
         return std::atomic_load(&ranktableConfig_)->GetParam();
     }
 
@@ -83,28 +78,20 @@ public:
 
     static ConfigManager::Impl &GetInstance();
 
-    void SetBlockNum(uint32_t cpuBlockNum, uint32_t npuBlockNum)
-    {
+    void SetBlockNum(uint32_t cpuBlockNum, uint32_t npuBlockNum) {
         scheduleConfig_->SetBlockNum(cpuBlockNum, npuBlockNum);
     }
 
-    void SetMaxPositionEmbeddings(uint32_t maxPositionEmbeddings)
-    {
+    void SetMaxPositionEmbeddings(uint32_t maxPositionEmbeddings) {
         if (maxPositionEmbeddings > modelDeployConfig_->GetParam()[0].maxPositionEmbeddings) {
             modelDeployConfig_->SetMaxPositionEmbeddings(maxPositionEmbeddings);
         }
     }
 
     // dump超时参数动态调整相关接口
-    void SetTokenTimeout(uint64_t tokenTimeout)
-    {
-        serverConfig_->SetTokenTimeout(tokenTimeout);
-    }
+    void SetTokenTimeout(uint64_t tokenTimeout) { serverConfig_->SetTokenTimeout(tokenTimeout); }
 
-    void SetE2eTimeout(uint64_t e2eTimeout)
-    {
-        serverConfig_->SetE2eTimeout(e2eTimeout);
-    }
+    void SetE2eTimeout(uint64_t e2eTimeout) { serverConfig_->SetE2eTimeout(e2eTimeout); }
 
     std::string GetConfigJsonStr();
 
@@ -120,7 +107,7 @@ public:
     // 配置交互方法
     void ExecuteConfigInteractions();
 
-private:
+   private:
     [[nodiscard]] bool PreCheck() const;
 
     [[nodiscard]] bool CheckLayerwiseDisaggregatedParam();
@@ -138,4 +125,4 @@ private:
     std::atomic<bool> running_{true};
     std::thread task_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -22,7 +22,7 @@ class EdgeCloudInputMetadata:
         if cls._instance is None:
             cls._instance = super(EdgeCloudInputMetadata, cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         self.decode_input_metadata_composite = None
         self.prefill_input_metadata_composite = None
@@ -30,19 +30,12 @@ class EdgeCloudInputMetadata:
 
     @staticmethod
     def have_input_metadata(exe_stage: LwdMetadata):
-        is_last_layer = (
-            exe_stage.start_exec_layer == 1 
-            and exe_stage.end_exec_layer == 1
-        )
-        is_prefill_with_offset = (
-            exe_stage.is_prefill 
-            and (
-                exe_stage.start_exec_layer != 0 
-                or exe_stage.long_seq_start_idx != 0
-            )
+        is_last_layer = exe_stage.start_exec_layer == 1 and exe_stage.end_exec_layer == 1
+        is_prefill_with_offset = exe_stage.is_prefill and (
+            exe_stage.start_exec_layer != 0 or exe_stage.long_seq_start_idx != 0
         )
         return is_last_layer or is_prefill_with_offset
-    
+
     @staticmethod
     def need_storage_input_metadata(exe_stage: LwdMetadata):
         stage = exe_stage
@@ -52,7 +45,7 @@ class EdgeCloudInputMetadata:
         is_prefill = stage.is_prefill
         is_not_prefill_chunk = not stage.is_long_seq
         is_prefill_offset_0 = stage.long_seq_start_idx == 0
-        
+
         is_valid_prefill = is_prefill and (is_not_prefill_chunk or is_prefill_offset_0)
         return is_start_layer_0 and ((is_end_layer_0 and not is_prefill) or is_valid_prefill)
 
@@ -61,7 +54,7 @@ class EdgeCloudInputMetadata:
         if is_prefill:
             if self.prefill_input_metadata_composite is None:
                 self.prefill_input_metadata_composite = self.prefill_input_metadata_composite_queue.get(block=False)
-            
+
             input_metadata_composite = self.prefill_input_metadata_composite
             if exe_stage.end_of_generate_token:
                 self.prefill_input_metadata_composite = None
@@ -74,5 +67,6 @@ class EdgeCloudInputMetadata:
             self.prefill_input_metadata_composite_queue.put(input_metadata_composite)
         else:
             self.decode_input_metadata_composite = input_metadata_composite
+
 
 pd_exec_matadata_instance = EdgeCloudInputMetadata()
