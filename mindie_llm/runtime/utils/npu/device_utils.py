@@ -142,6 +142,15 @@ class _NPUNodeInfo:
             "Ascend310P5",
             "Ascend310P7",
         }
+
+        self._nz_beneficial_soc_set = {
+            "Ascend910B3",
+            "Ascend910B4-1",
+            "Ascend910_9362",
+            "Ascend910_9382",
+            "Ascend910_9392",
+        }
+
         if self.soc_name in nz_only_names:
             self.only_supports_nz = True
             self.need_nz = True
@@ -191,6 +200,10 @@ class _NPUNodeInfo:
                 devices = ENV.visible_devices
             self._visible_device_ids = devices
         return self._visible_device_ids
+
+    def is_nz_format_beneficial(self) -> bool:
+        """Return True if current soc_name benefits from NZ format conversion."""
+        return self.soc_name in self._nz_beneficial_soc_set
 
     def get_device_info_map(self) -> dict[int, _DeviceInfo]:
         """Retrieve a mapping of logical NPU chip IDs to their device information.

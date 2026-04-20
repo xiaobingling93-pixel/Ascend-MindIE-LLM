@@ -43,7 +43,6 @@ from mindie_llm.runtime.utils.distributed.utils import even_divide
 from mindie_llm.utils.log.logging import logger
 
 
-SUPPORT_NZ_NPU_LIST = ("Ascend910B3", "Ascend910B4-1", "Ascend910_9382", "Ascend910_9362")
 MXFP8_GROUP_SIZE = 32
 
 
@@ -160,8 +159,7 @@ class W8A8PerTensorLinearMethod(LinearMethodBase):
         )
         layer.weight.data = layer.weight.data.transpose(0, 1).contiguous()
 
-        soc_name = get_npu_node_info().soc_name
-        if soc_name in SUPPORT_NZ_NPU_LIST:
+        if get_npu_node_info().is_nz_format_beneficial():
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
             logger.debug(
                 "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
@@ -249,8 +247,7 @@ class W8A8PerTokenLinearMethod(LinearMethodBase):
         layer.weight.data = layer.weight.data.transpose(0, 1).contiguous()
         layer.weight_scale.data = layer.weight_scale.data.flatten()
 
-        soc_name = get_npu_node_info().soc_name
-        if soc_name in SUPPORT_NZ_NPU_LIST:
+        if get_npu_node_info().is_nz_format_beneficial():
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
             logger.debug(
                 "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
@@ -324,8 +321,7 @@ class W8A8MixLinearMethod(LinearMethodBase):
         layer.weight.data = layer.weight.data.transpose(0, 1).contiguous()
         layer.weight_scale.data = layer.weight_scale.data.flatten()
 
-        soc_name = get_npu_node_info().soc_name
-        if soc_name in SUPPORT_NZ_NPU_LIST:
+        if get_npu_node_info().is_nz_format_beneficial():
             layer.weight.data = torch_npu.npu_format_cast(layer.weight.data, 29)
             logger.debug(
                 "Convert weight to FRACTAL_NZ done, current format is %s", torch_npu.get_npu_format(layer.weight.data)
@@ -534,8 +530,7 @@ class W8A8PerTokenFusedMoEMethod(FusedMoEMethodBase):
             "fused_down_weight_scale", ScalerParameter(scale_from_float_to_int64(layer.down_weight_scale.data))
         )
 
-        soc_name = get_npu_node_info().soc_name
-        if soc_name in SUPPORT_NZ_NPU_LIST:
+        if get_npu_node_info().is_nz_format_beneficial():
             layer.gate_up_weight.data = torch_npu.npu_format_cast(layer.gate_up_weight.data, 29)
             logger.debug(
                 "Convert weight to FRACTAL_NZ done, current format is %s",
