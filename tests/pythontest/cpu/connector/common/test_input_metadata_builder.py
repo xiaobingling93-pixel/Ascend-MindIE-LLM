@@ -7,18 +7,20 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
+
+
 import array
-import unittest
-from unittest.mock import Mock, patch
-from dataclasses import dataclass
 import struct
+import unittest
 import numpy as np
+from dataclasses import dataclass
+from unittest.mock import Mock, patch
 
 from mindie_llm.connector.common.model_execute_data_pb2 import (
     SequenceGroupMetadata,
     SamplingParams,
     ExecuteModelRequest,
-    PullKVRequest
+    PullKVRequest,
 )
 from mindie_llm.text_generator.utils.input_metadata import SIMULATE_SEQUENCE_ID
 from mindie_llm.connector.common.input_metadata_builder import (
@@ -58,7 +60,6 @@ class MockModelConfig:
 
 
 class TestInputMetadataBuilder(unittest.TestCase):
-
     def setUp(self):
         self.execute_model_request = ExecuteModelRequest()
         seq_group_metadata = SequenceGroupMetadata()
@@ -74,16 +75,14 @@ class TestInputMetadataBuilder(unittest.TestCase):
         seq_group_metadata.sampling_params.n = 1
         seq_group_metadata.do_sample = True
         seq_group_metadata.sampling_params.seed = 52516453
-        s64_array = array.array('q',
-                                [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        s64_array = array.array("q", [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
         seq_group_metadata.block_tables.append(s64_array.tobytes())
 
-        seq_group_metadata.seqIds = struct.pack('<1q', 1)
+        seq_group_metadata.seqIds = struct.pack("<1q", 1)
 
-        prompt_len_array = array.array('q', [34])
+        prompt_len_array = array.array("q", [34])
         seq_group_metadata.prompt_lens = prompt_len_array.tobytes()
-        prompt_array = array.array('q',
-                                   [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
+        prompt_array = array.array("q", [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
         seq_group_metadata.prompt_token_ids = prompt_array.tobytes()
         self.execute_model_request.seq_group_metadata_list.append(seq_group_metadata)
 
@@ -91,10 +90,10 @@ class TestInputMetadataBuilder(unittest.TestCase):
         self.sp_seq_group_metadata.request_id = "2"
         self.sp_seq_group_metadata.sp_rank_token_num.extend([10, 20, 30])
         self.sp_seq_group_metadata.sp_rank_block_num.extend([2, 2, 2])
-        sp_block_array = array.array('q', [1, 2, 3, 4, 5, 6])
+        sp_block_array = array.array("q", [1, 2, 3, 4, 5, 6])
         self.sp_seq_group_metadata.block_tables.append(sp_block_array.tobytes())
-        self.sp_seq_group_metadata.seqIds = struct.pack('<2q', 2, 3)
-        self.sp_seq_group_metadata.prompt_lens = struct.pack('<2q', 10, 20)
+        self.sp_seq_group_metadata.seqIds = struct.pack("<2q", 2, 3)
+        self.sp_seq_group_metadata.prompt_lens = struct.pack("<2q", 10, 20)
         self.sp_seq_group_metadata.sampling_params.seed = 12345
 
         self.num_npu_blocks = 8
@@ -157,19 +156,12 @@ class TestInputMetadataBuilder(unittest.TestCase):
             def __init__(self, seq_lens):
                 self.seq_lens = seq_lens
 
-        all_dp_batches = [
-            MockDPBatch([10, 20]),
-            MockDPBatch([30, 40])
-        ]
+        all_dp_batches = [MockDPBatch([10, 20]), MockDPBatch([30, 40])]
         result = parse_all_dp_batches_seq_lens(all_dp_batches)
         self.assertEqual(result, [[10, 20], [30, 40]])
 
     def test_parse_sampling_parameters(self):
-        sampling_params = SamplingParams(
-            repetition_penalty=1.2,
-            temperature=0.8,
-            top_k=50
-        )
+        sampling_params = SamplingParams(repetition_penalty=1.2, temperature=0.8, top_k=50)
         seq_group_metadata = SequenceGroupMetadata(do_sample=True, sampling_params=sampling_params)
         result = parse_sampling_parameters(seq_group_metadata)
         self.assertAlmostEqual(result[0][REPETITION_PENALTY_INDEX], 1.2, places=4)
@@ -213,14 +205,12 @@ class TestInputMetadataBuilder(unittest.TestCase):
             sp_size=3,
             cp_size=1,
             speculation_gamma=0,
-            enable_mtp=False
+            enable_mtp=False,
         )
         num_npu_blocks = 50
 
         metadata = make_dummy_input_metadata(
-            execute_request=self.execute_request,
-            num_npu_blocks=num_npu_blocks,
-            model_config=model_config
+            execute_request=self.execute_request, num_npu_blocks=num_npu_blocks, model_config=model_config
         )
 
         block_padding = model_config.max_seq_len // model_config.cache_block_size
@@ -246,14 +236,12 @@ class TestInputMetadataBuilder(unittest.TestCase):
             sp_size=2,
             cp_size=1,
             speculation_gamma=0,
-            enable_mtp=False
+            enable_mtp=False,
         )
         num_npu_blocks = 20
 
         metadata = make_dummy_input_metadata_dmi_decoder(
-            source_input_metadata=source_metadata,
-            num_npu_blocks=num_npu_blocks,
-            model_config=model_config
+            source_input_metadata=source_metadata, num_npu_blocks=num_npu_blocks, model_config=model_config
         )
 
         block_padding = model_config.max_seq_len // model_config.cache_block_size
@@ -267,9 +255,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
 
     def test_convert_proto_normal_prefill(self):
         composite = convert_execute_model_request_to_input_metadata_composite(
-            request=self.execute_model_request,
-            num_npu_blocks=self.num_npu_blocks,
-            block_size=self.block_size
+            request=self.execute_model_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
         )
 
         self.assertTrue(hasattr(composite, "input_metadata"))
@@ -288,8 +274,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         self.assertTrue(input_metadata.has_sampling)
         self.assertAlmostEqual(input_metadata.batch_sampling_params[0]["repetition_penalty"], 1.05, places=4)
         self.assertAlmostEqual(input_metadata.batch_sampling_params[0]["temperature"], 0.7, places=4)
-        self.assertEqual(input_metadata.input_ids.tolist(),
-                         [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
+        self.assertEqual(input_metadata.input_ids.tolist(), [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
 
         self.assertEqual(input_metadata.batch_block_tables.shape, (1, 1))
 
@@ -298,20 +283,16 @@ class TestInputMetadataBuilder(unittest.TestCase):
         seq_group_metadata.request_id = "1"
         seq_group_metadata.is_prompt = True
         seq_group_metadata.sampling_params.temperature = 0
-        s64_array = array.array('q',
-                                [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
+        s64_array = array.array("q", [0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1])
         seq_group_metadata.block_tables.append(s64_array.tobytes())
-        seq_group_metadata.seqIds = struct.pack('<1q', 1)
-        prompt_len_array = array.array('q', [34])
+        seq_group_metadata.seqIds = struct.pack("<1q", 1)
+        prompt_len_array = array.array("q", [34])
         seq_group_metadata.prompt_lens = prompt_len_array.tobytes()
-        prompt_array = array.array('q',
-                                   [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
+        prompt_array = array.array("q", [151644, 8948, 198, 2610, 525, 1207, 16948, 11, 3465, 553])
         seq_group_metadata.prompt_token_ids = prompt_array.tobytes()
         request2.seq_group_metadata_list.append(seq_group_metadata)
         composite2 = convert_execute_model_request_to_input_metadata_composite(
-            request=request2,
-            num_npu_blocks=self.num_npu_blocks,
-            block_size=self.block_size
+            request=request2, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
         )
         self.assertEqual(composite2.input_metadata.batch_logprobs[0], None)
 
@@ -321,8 +302,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
 
         sp_seq_group_metadata = SequenceGroupMetadata()
         sp_seq_group_metadata.request_id = "1"
-        prompt_array = array.array('q',
-                                   [151644, 8948, 198, 2610, 525, 1207, 16948, 11])
+        prompt_array = array.array("q", [151644, 8948, 198, 2610, 525, 1207, 16948, 11])
         sp_seq_group_metadata.prompt_token_ids = prompt_array.tobytes()
         config = MockModelConfig(
             max_seq_len=1024,
@@ -341,20 +321,17 @@ class TestInputMetadataBuilder(unittest.TestCase):
         sp_seq_group_metadata.do_sample = False
         sp_seq_group_metadata.sp_rank_token_num.extend([1, 1, 1, 1, 1, 1, 1, 1])
         sp_seq_group_metadata.sp_rank_block_num.extend([1, 1, 1, 1, 1, 1, 1, 1])
-        sp_block_array = array.array('q', [0] * 8)
+        sp_block_array = array.array("q", [0] * 8)
         sp_seq_group_metadata.block_tables.append(sp_block_array.tobytes())
-        prompt_len_array = array.array('q', [8])
+        prompt_len_array = array.array("q", [8])
         sp_seq_group_metadata.prompt_lens = prompt_len_array.tobytes()
-        sp_seq_group_metadata.seqIds = struct.pack('<1q', 100)
+        sp_seq_group_metadata.seqIds = struct.pack("<1q", 100)
 
         request.seq_group_metadata_list.append(sp_seq_group_metadata)
 
         # 调用转换函数
         composite = convert_execute_model_request_to_input_metadata_composite(
-            request=request,
-            num_npu_blocks=self.num_npu_blocks,
-            block_size=self.block_size,
-            config=config
+            request=request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size, config=config
         )
 
         self.assertTrue(hasattr(composite, "input_metadata"))
@@ -369,8 +346,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         self.assertEqual(input_metadata.batch_request_ids[0], "1")
         self.assertEqual(input_metadata.batch_sequence_ids[0].tolist(), [100])
         self.assertEqual(input_metadata.batch_seq_len.tolist(), [8])
-        self.assertEqual(input_metadata.input_ids.tolist(),
-                         [151644, 8948, 198, 2610, 525, 1207, 16948, 11])
+        self.assertEqual(input_metadata.input_ids.tolist(), [151644, 8948, 198, 2610, 525, 1207, 16948, 11])
 
         self.assertEqual(input_metadata.batch_block_tables.shape, (1, 8, 1))
 
@@ -380,11 +356,9 @@ class TestInputMetadataBuilder(unittest.TestCase):
 
         from mindie_llm.text_generator.utils.input_metadata import InputMetadata
 
-        with patch.object(InputMetadata, '__post_init__', new=lambda self: None):
+        with patch.object(InputMetadata, "__post_init__", new=lambda self: None):
             composite = convert_pull_kv_request_to_input_metadata_composite(
-                request=self.pull_kv_request,
-                num_npu_blocks=self.num_npu_blocks,
-                block_size=self.block_size
+                request=self.pull_kv_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
             )
 
             self.assertEqual(composite.input_metadata.batch_size, 2)
@@ -392,13 +366,11 @@ class TestInputMetadataBuilder(unittest.TestCase):
             self.assertEqual(composite.input_metadata.batch_request_ids.tolist(), ["1", "2"])
 
             for pull_kv_info in self.pull_kv_request.pull_kv_infos:
-                pull_kv_info.seq_group_metadata.computed_block_lens = struct.pack('<2q', 0, 0)
-                pull_kv_info.seq_group_metadata.remote_computed_block_lens = struct.pack('<2q', 0, 0)
+                pull_kv_info.seq_group_metadata.computed_block_lens = struct.pack("<2q", 0, 0)
+                pull_kv_info.seq_group_metadata.remote_computed_block_lens = struct.pack("<2q", 0, 0)
 
             composite_empty = convert_pull_kv_request_to_input_metadata_composite(
-                request=self.pull_kv_request,
-                num_npu_blocks=self.num_npu_blocks,
-                block_size=self.block_size
+                request=self.pull_kv_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
             )
             self.assertIsNone(composite_empty.input_metadata.computed_blocks)
             self.assertIsNone(composite_empty.input_metadata.remote_computed_blocks)
@@ -413,7 +385,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
             num_npu_blocks=self.num_npu_blocks,
             block_size=self.block_size,
             convert_para=ConvertPara(is_prefill=False, is_mix=True),
-            is_mix_model=True
+            is_mix_model=True,
         )
         input_metadata = composite.input_metadata
 
@@ -424,9 +396,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
     def test_convert_proto_empty_request(self):
         with self.assertRaises(ValueError, msg="No sequence group metadata in request"):
             convert_execute_model_request_to_input_metadata_composite(
-                request=self.empty_execute_model_request,
-                num_npu_blocks=self.num_npu_blocks,
-                block_size=self.block_size
+                request=self.empty_execute_model_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
             )
 
     def test_prefill_role_no_super_id(self):
@@ -458,17 +428,15 @@ class TestInputMetadataBuilder(unittest.TestCase):
         self.assertTrue(np.array_equal(device_data[0, 0], [192, 168, 1, 1, -1, -1, -1, -1, 100, 10]))
         self.assertTrue(np.array_equal(device_data[0, 1], [10, 0, 0, 1, -1, -1, -1, -1, 0, 20]))
         self.assertTrue(np.array_equal(policy, np.array([[1, 8, 1], [2, 16, 1]], dtype=np.int64)))
-        
+
     def test_convert_proto_simulate_inference(self):
         """Test simulate inference with special seqId SIMULATE_SEQUENCE_ID"""
         # Modify the seqId to simulate inference value
         seq_group_metadata = self.execute_model_request.seq_group_metadata_list[0]
-        seq_group_metadata.seqIds = struct.pack('<1q', 9223372036854774)
+        seq_group_metadata.seqIds = struct.pack("<1q", 9223372036854774)
 
         composite = convert_execute_model_request_to_input_metadata_composite(
-            request=self.execute_model_request,
-            num_npu_blocks=self.num_npu_blocks,
-            block_size=self.block_size
+            request=self.execute_model_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size
         )
 
         input_metadata = composite.input_metadata
@@ -481,7 +449,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
 
     def test_convert_proto_simulate_inference_sp_cp_with_normal_request_batch(self):
         """Test simulate inference in SP/CP scenario batched with normal requests.
-        
+
         This test verifies that when a simulate inference request (with SIMULATE_SEQUENCE_ID)
         is batched together with normal SP/CP requests, the numpy array dimensions align correctly.
         The virtual block table should have the correct length matching sp_rank_block_num.
@@ -497,7 +465,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
             sp_size=4,
             cp_size=1,
             speculation_gamma=0,
-            enable_mtp=False
+            enable_mtp=False,
         )
 
         normal_sp_request = SequenceGroupMetadata()
@@ -505,11 +473,11 @@ class TestInputMetadataBuilder(unittest.TestCase):
         normal_sp_request.sp_rank_id = 0
         normal_sp_request.sp_rank_token_num.extend([10, 20, 30, 0])  # sp_size = 4
         normal_sp_request.sp_rank_block_num.extend([2, 1, 2, 0])  # total_blocks = 5
-        normal_block_array = array.array('q', [1, 2, 3, 4, 5])  # 5 blocks
+        normal_block_array = array.array("q", [1, 2, 3, 4, 5])  # 5 blocks
         normal_sp_request.block_tables.append(normal_block_array.tobytes())
-        normal_sp_request.seqIds = struct.pack('<1q', 100)
-        normal_sp_request.prompt_lens = struct.pack('<1q', 60)
-        normal_prompt_array = array.array('q', [1, 2, 3, 4, 5])  # non-empty prompt tokens
+        normal_sp_request.seqIds = struct.pack("<1q", 100)
+        normal_sp_request.prompt_lens = struct.pack("<1q", 60)
+        normal_prompt_array = array.array("q", [1, 2, 3, 4, 5])  # non-empty prompt tokens
         normal_sp_request.prompt_token_ids = normal_prompt_array.tobytes()
         normal_sp_request.sampling_params.seed = 12345
         normal_sp_request.sampling_params.max_output_len = 100
@@ -520,10 +488,10 @@ class TestInputMetadataBuilder(unittest.TestCase):
         simulate_sp_request.sp_rank_token_num.extend([10, 20, 30, 0])  # sp_size = 4, same as normal
         simulate_sp_request.sp_rank_block_num.extend([2, 1, 2, 0])  # total_blocks = 5, same as normal
         # Keep one empty bytes element so upper layer can safely index [0]
-        simulate_sp_request.block_tables.append(b'')
-        simulate_sp_request.seqIds = struct.pack('<1q', SIMULATE_SEQUENCE_ID)  # Use simulate sequence id
-        simulate_sp_request.prompt_lens = struct.pack('<1q', 60)
-        simulate_prompt_array = array.array('q', [1, 2, 3])  # non-empty prompt tokens
+        simulate_sp_request.block_tables.append(b"")
+        simulate_sp_request.seqIds = struct.pack("<1q", SIMULATE_SEQUENCE_ID)  # Use simulate sequence id
+        simulate_sp_request.prompt_lens = struct.pack("<1q", 60)
+        simulate_prompt_array = array.array("q", [1, 2, 3])  # non-empty prompt tokens
         simulate_sp_request.prompt_token_ids = simulate_prompt_array.tobytes()
         simulate_sp_request.sampling_params.seed = 54321
         simulate_sp_request.sampling_params.max_output_len = 100
@@ -533,10 +501,7 @@ class TestInputMetadataBuilder(unittest.TestCase):
         mixed_request.seq_group_metadata_list.append(simulate_sp_request)
 
         composite = convert_execute_model_request_to_input_metadata_composite(
-            request=mixed_request,
-            num_npu_blocks=self.num_npu_blocks,
-            block_size=self.block_size,
-            config=sp_config
+            request=mixed_request, num_npu_blocks=self.num_npu_blocks, block_size=self.block_size, config=sp_config
         )
 
         input_metadata = composite.input_metadata

@@ -23,7 +23,7 @@ def mock_model_runner_exp():
     mock_runner.config = {"model_type": "qwen2"}
     mock_runner.config_dict = {"hidden_size": 4096}
     mock_runner.tokenizer = MagicMock()
-    mock_runner.device = torch.device("npu:0")
+    mock_runner.device = torch.device("cpu")
     mock_runner.kv_cache_dtype = torch.float16
     mock_runner.num_layers = 28
     mock_runner.num_kv_heads = 8
@@ -50,7 +50,7 @@ def mock_model_runner_exp():
 def mock_parallel_info_manager():
     """Mock parallel info manager with required parallel types."""
     mock_manager = MagicMock()
-    
+
     # Mock ParallelInfo objects
     mock_dp_info = MagicMock()
     mock_dp_info.group_size = 2
@@ -58,23 +58,20 @@ def mock_parallel_info_manager():
     mock_sp_info.group_size = 1
     mock_cp_info = MagicMock()
     mock_cp_info.group_size = 1
-    
+
     mock_manager.get.side_effect = lambda pt: {
         "ParallelType.ATTN_DP": mock_dp_info,
         "ParallelType.ATTN_INNER_SP": mock_sp_info,
         "ParallelType.ATTN_CP": mock_cp_info,
     }.get(str(pt), MagicMock(group_size=1))
-    
+
     return mock_manager
 
 
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_init_success(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test successful initialization of AclGraphModelWrapperExp."""
     # Setup mocks
@@ -92,7 +89,7 @@ def test_init_success(
         load_tokenizer=True,
         max_batch_size=8,
         tp=2,
-        dp=2
+        dp=2,
     )
 
     # Assertions
@@ -126,7 +123,7 @@ def test_init_success(
         cp=-1,
         moe_tp=-1,
         moe_ep=-1,
-        role='standard',
+        role="standard",
         max_seq_len=-1,
         block_size=-1,
         sampler_config=None,
@@ -137,18 +134,13 @@ def test_init_success(
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_prepare_model_inputs(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test prepare_model_inputs method."""
     mock_model_runner_class.return_value = mock_model_runner_exp
     mock_get_parallel_info.return_value = mock_parallel_info_manager
 
-    wrapper = AclGraphModelWrapperExp(
-        rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test"
-    )
+    wrapper = AclGraphModelWrapperExp(rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test")
 
     # Create mock model_inputs
     mock_inputs = Mock()
@@ -176,18 +168,13 @@ def test_prepare_model_inputs(
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_forward_success(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test forward method success path."""
     mock_model_runner_class.return_value = mock_model_runner_exp
     mock_get_parallel_info.return_value = mock_parallel_info_manager
 
-    wrapper = AclGraphModelWrapperExp(
-        rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test"
-    )
+    wrapper = AclGraphModelWrapperExp(rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test")
 
     mock_inputs = Mock()
     mock_inputs.input_ids = [1, 2, 3]
@@ -209,18 +196,13 @@ def test_forward_success(
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_generate_position_ids(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test generate_position_ids method."""
     mock_model_runner_class.return_value = mock_model_runner_exp
     mock_get_parallel_info.return_value = mock_parallel_info_manager
 
-    wrapper = AclGraphModelWrapperExp(
-        rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test"
-    )
+    wrapper = AclGraphModelWrapperExp(rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test")
 
     input_ids = np.array([1, 2, 3])
     result = wrapper.generate_position_ids(input_ids)
@@ -232,43 +214,31 @@ def test_generate_position_ids(
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_make_context(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test make_context method."""
     mock_model_runner_class.return_value = mock_model_runner_exp
     mock_get_parallel_info.return_value = mock_parallel_info_manager
 
-    wrapper = AclGraphModelWrapperExp(
-        rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test"
-    )
+    wrapper = AclGraphModelWrapperExp(rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test")
 
     conversation = [{"role": "user", "content": "Hello"}]
     result = wrapper.make_context(conversation, add_generation_prompt=True)
 
-    wrapper.model_runner.input_builder.make_context.assert_called_once_with(
-        0, conversation, add_generation_prompt=True
-    )
+    wrapper.model_runner.input_builder.make_context.assert_called_once_with(0, conversation, add_generation_prompt=True)
     assert result == [1, 2, 3]
 
 
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.ModelRunnerExp")
 @patch("mindie_llm.modeling.model_wrapper.aclgraph.aclgraph_model_wrapper_exp.get_parallel_info_manager")
 def test_resume_hccl_comm_raises(
-    mock_get_parallel_info,
-    mock_model_runner_class,
-    mock_model_runner_exp,
-    mock_parallel_info_manager
+    mock_get_parallel_info, mock_model_runner_class, mock_model_runner_exp, mock_parallel_info_manager
 ):
     """Test resume_hccl_comm raises NotImplementedError."""
     mock_model_runner_class.return_value = mock_model_runner_exp
     mock_get_parallel_info.return_value = mock_parallel_info_manager
 
-    wrapper = AclGraphModelWrapperExp(
-        rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test"
-    )
+    wrapper = AclGraphModelWrapperExp(rank=0, local_rank=0, world_size=2, npu_device_id=0, model_id="test")
 
     with pytest.raises(NotImplementedError):
         wrapper.resume_hccl_comm()
