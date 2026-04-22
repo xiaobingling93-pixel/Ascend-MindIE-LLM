@@ -7,24 +7,25 @@
 # EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
-import math
 import torch
 import torch_npu
-import torch.distributed as dist
 from torch import nn
 from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
 from mindie_llm.runtime.layers.normalization import RMSNorm, LayerNorm
-from mindie_llm.runtime.layers.linear.linear import RowParallelLinear, MergedColumnParallelLinear, \
-    ColumnParallelLinear, ReplicatedLinear
+from mindie_llm.runtime.layers.linear.linear import (
+    RowParallelLinear,
+    MergedColumnParallelLinear,
+    ColumnParallelLinear,
+    ReplicatedLinear,
+)
 from mindie_llm.runtime.layers.embedding.embedding import VocabParallelEmbedding, ParallelLMHead
 from mindie_llm.runtime.layers.attention.sparse_attention_layer import SFA
 from mindie_llm.runtime.layers.attention.attention_mask import AttentionMask
 from mindie_llm.runtime.layers.fused_moe.experts_selector import select_experts
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE, assign_experts
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
-from mindie_llm.runtime.layers.attention import get_global_attn_dict
 from mindie_llm.runtime.layers.parameter import BaseParameter
 from mindie_llm.runtime.layers.embedding.rotary_embedding import get_rope
 from mindie_llm.runtime.layers.embedding.rotary_embedding.yarn_scaling_rope import yarn_get_mscale
@@ -34,12 +35,13 @@ from mindie_llm.runtime.config.huggingface_config import HuggingFaceConfig
 class DeepseekV3Moe(nn.Module):
     """
     DeepSeek V3 Mixture of Experts (MoE) module.
-    
+
     This class represents  in the DeepseekV3 model. It includes:
     - Experts with fused kernel FusedMoE
     - Gating Network
     - Shared experts
     """
+
     def __init__(self, config, prefix, quant_config) -> None:
         """
         Initialize the DeepseekV3Moe module.
@@ -57,8 +59,9 @@ class DeepseekV3Moe(nn.Module):
         self.topk_group = config.topk_group
         self.topk_num = config.num_experts_per_tok
         self.expert_num = config.n_routed_experts
-        self.expert_list = assign_experts(config.n_routed_experts,
-            parallel_info.moe_ep.group_size)[parallel_info.moe_ep.rank]
+        self.expert_list = assign_experts(config.n_routed_experts, parallel_info.moe_ep.group_size)[
+            parallel_info.moe_ep.rank
+        ]
         self.experts = FusedMoE(
             num_experts=config.n_routed_experts,
             topk_num=self.topk_num,
@@ -66,7 +69,8 @@ class DeepseekV3Moe(nn.Module):
             intermediate_size=config.moe_intermediate_size,
             quant_config=quant_config,
             prefix=f"{prefix}.experts",
-            suffix=["gate_proj", "down_proj", "up_proj"])
+            suffix=["gate_proj", "down_proj", "up_proj"],
+        )
 
         self.gate = ReplicatedLinear(
             config.hidden_size,
@@ -81,7 +85,7 @@ class DeepseekV3Moe(nn.Module):
             f"{self.prefix}.shared_experts",
             quant_config=quant_config,
             intermediate_size=config.moe_intermediate_size,
-            is_moe=True
+            is_moe=True,
         )
         self.gate.e_score_correction_bias = BaseParameter(torch.empty(config.n_routed_experts))
         self.gate.e_score_correction_bias.add_attrs({"weight_loader": self.weight_loader})
@@ -106,7 +110,7 @@ class DeepseekV3Moe(nn.Module):
         Returns:
             torch.Tensor: Output combining the results of the shared expert and the selected experts.
         """
-        # shared expert 
+        # shared expert
         shared_expert_out = self.shared_experts(hidden_states)
         # moe gate
         router_logits = self.gate(hidden_states)
@@ -122,7 +126,7 @@ class DeepseekV3Moe(nn.Module):
             scoring_func="",
             routed_scaling_factor=1.0,
             e_score_correction_bias=self.gate.e_score_correction_bias,
-            global_num_experts=self.expert_num
+            global_num_experts=self.expert_num,
         )
 
         final_hidden_states = self.experts(hidden_states, topk_weights, topk_ids)
@@ -133,6 +137,7 @@ class Indexer(nn.Module):
     """
     Indexer module for Deepseek V3.2
     """
+
     def __init__(self, config, prefix) -> None:
         """
         Initialize the Indexer module.
@@ -148,44 +153,28 @@ class Indexer(nn.Module):
         self.rope_head_dim: int = config.qk_rope_head_dim  # 64
         self.q_lora_rank: int = config.q_lora_rank  # 1536
         self.wq_b = ReplicatedLinear(
-            self.q_lora_rank,
-            self.n_heads * self.head_dim,
-            bias=False,
-            quant_config=None,
-            prefix=f"{prefix}.wq_b"
+            self.q_lora_rank, self.n_heads * self.head_dim, bias=False, quant_config=None, prefix=f"{prefix}.wq_b"
         )
-        self.wk = ReplicatedLinear(
-            self.dim,
-            self.head_dim,
-            bias=False,
-            quant_config=None,
-            prefix=f"{prefix}.wk"
-        )
+        self.wk = ReplicatedLinear(self.dim, self.head_dim, bias=False, quant_config=None, prefix=f"{prefix}.wk")
         self.weights_proj = ReplicatedLinear(
-            self.dim,
-            self.n_heads,
-            bias=False,
-            quant_config=None, 
-            prefix=f"{prefix}.weights_proj"
+            self.dim, self.n_heads, bias=False, quant_config=None, prefix=f"{prefix}.weights_proj"
         )
-        self.k_norm = LayerNorm(
-            self.head_dim,
-            config.rms_norm_eps,
-            quant_config=None,
-            prefix=f"{prefix}.k_norm"
-        )
+        self.k_norm = LayerNorm(self.head_dim, config.rms_norm_eps, quant_config=None, prefix=f"{prefix}.k_norm")
 
 
 class DeepseekV3Attention(nn.Module):
     """
     Multi-Head Latent Attention module for Deepseek V3
     """
-    def __init__(self,
-                config: HuggingFaceConfig,
-                prefix: str,
-                quant_config,
-                enable_mlapo,
-                input_layernorm: RMSNorm = None,) -> None:
+
+    def __init__(
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        quant_config,
+        enable_mlapo,
+        input_layernorm: RMSNorm = None,
+    ) -> None:
         """
         Initialize the Deepseek V3 MLA module.
 
@@ -210,20 +199,13 @@ class DeepseekV3Attention(nn.Module):
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
         self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim  # 64
-        self.scale = self.qk_head_dim ** -0.5
+        self.scale = self.qk_head_dim**-0.5
 
         self.q_a_proj = ReplicatedLinear(
-            self.hidden_size,
-            self.q_lora_rank,
-            bias=False,
-            quant_config=quant_config,
-            prefix=f"{prefix}.q_a_proj"
+            self.hidden_size, self.q_lora_rank, bias=False, quant_config=quant_config, prefix=f"{prefix}.q_a_proj"
         )
         self.q_a_layernorm = RMSNorm(
-            self.q_lora_rank,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{prefix}.q_a_layernorm"
+            self.q_lora_rank, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.q_a_layernorm"
         )
         self.q_b_proj = ColumnParallelLinear(
             self.q_lora_rank,
@@ -231,30 +213,27 @@ class DeepseekV3Attention(nn.Module):
             bias=False,
             quant_config=quant_config,
             prefix=f"{prefix}.q_b_proj",
-            parallel_info=parallel_info.attn_tp
+            parallel_info=parallel_info.attn_tp,
         )
         self.q_proj = (self.q_a_proj, self.q_a_layernorm, self.q_b_proj)
 
         self.kv_a_proj_with_mqa = ReplicatedLinear(
             self.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,                   
+            self.kv_lora_rank + self.qk_rope_head_dim,
             bias=False,
             quant_config=quant_config,
-            prefix=f"{prefix}.kv_a_proj_with_mqa"
+            prefix=f"{prefix}.kv_a_proj_with_mqa",
         )
         self.kv_a_layernorm = RMSNorm(
-            self.kv_lora_rank,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{prefix}.kv_a_layernorm"
+            self.kv_lora_rank, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.kv_a_layernorm"
         )
         self.kv_b_proj = ColumnParallelLinear(
             self.kv_lora_rank,
-            self.num_heads * (self.v_head_dim + self.qk_nope_head_dim),                  
+            self.num_heads * (self.v_head_dim + self.qk_nope_head_dim),
             bias=False,
             quant_config=quant_config,
             prefix=f"{prefix}.kv_b_proj",
-            parallel_info=parallel_info.attn_tp
+            parallel_info=parallel_info.attn_tp,
         )
         self.o_proj = RowParallelLinear(
             self.num_heads * self.qk_nope_head_dim,
@@ -263,7 +242,7 @@ class DeepseekV3Attention(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.o_proj",
             parallel_info=parallel_info.attn_tp,
-            reduce_results=True
+            reduce_results=True,
         )
 
         self.softmax_scale = self.qk_head_dim ** (-0.5)
@@ -272,8 +251,7 @@ class DeepseekV3Attention(nn.Module):
         if mscale_all_dim:
             mscale = yarn_get_mscale(rope_config.factor, mscale_all_dim)
             self.softmax_scale = self.softmax_scale * mscale * mscale
-        
-        
+
         rope_config.rope_type = "deepseek_yarn"
         self.rope_emb = get_rope(
             head_size=self.config.qk_rope_head_dim,
@@ -281,13 +259,10 @@ class DeepseekV3Attention(nn.Module):
             max_position=rope_config.original_max_position_embeddings,
             is_neox_style=True,
             dtype=torch.get_default_dtype(),
-            rope_config=rope_config
+            rope_config=rope_config,
         )
         ## v32
-        self.indexer = Indexer(
-            self.config,
-            prefix=f"{prefix}.indexer"
-        )
+        self.indexer = Indexer(self.config, prefix=f"{prefix}.indexer")
 
         self.attn = SFA(
             head_size=self.qk_nope_head_dim,
@@ -295,7 +270,7 @@ class DeepseekV3Attention(nn.Module):
             scale=self.scale,
             prefix=prefix,
             num_kv_heads=self.num_key_value_heads_per_rank,
-            #SFA Para
+            # SFA Para
             softmax_scale=self.softmax_scale,
             num_heads_per_rank=self.num_heads_per_rank,
             q_lora_rank=self.q_lora_rank,
@@ -310,7 +285,7 @@ class DeepseekV3Attention(nn.Module):
             kv_b_proj=self.kv_b_proj,
             o_proj=self.o_proj,
             indexer=self.indexer,
-            #SFA switch
+            # SFA switch
             enable_mlapo=enable_mlapo,
             input_layernorm=input_layernorm,
         )
@@ -325,9 +300,7 @@ class DeepseekV3Attention(nn.Module):
         Returns:
             torch.Tensor: Output hidden states after attention
         """
-        return self.attn(hidden_states,
-                        cos=self.rope_emb.cos_indexed_cache,
-                        sin=self.rope_emb.sin_indexed_cache)
+        return self.attn(hidden_states, cos=self.rope_emb.cos_indexed_cache, sin=self.rope_emb.sin_indexed_cache)
 
 
 class DeepseekV3MLP(nn.Module):
@@ -345,14 +318,14 @@ class DeepseekV3MLP(nn.Module):
         parallel_info = get_parallel_info_manager()
         self.config = config
         self.prefix = prefix
-        cur_parallel_info = parallel_info.mlp_tp if not is_moe else parallel_info.moe_tp        
+        cur_parallel_info = parallel_info.mlp_tp if not is_moe else parallel_info.moe_tp
         self.gate_up_proj = MergedColumnParallelLinear(
             config.hidden_size,
             [intermediate_size] * 2,
             bias=False,
             quant_config=quant_config,
             prefix=[f"{prefix}.gate_proj", f"{prefix}.up_proj"],
-            parallel_info=cur_parallel_info
+            parallel_info=cur_parallel_info,
         )
         self.down_proj = RowParallelLinear(
             intermediate_size,
@@ -361,15 +334,15 @@ class DeepseekV3MLP(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.down_proj",
             parallel_info=cur_parallel_info,
-            reduce_results=True
+            reduce_results=True,
         )
-    
+
     def forward(self, x) -> torch.Tensor:
         """
         Forward pass of the MLP module.
 
         Args:
-            x: Input hidden states 
+            x: Input hidden states
 
         Returns:
             torch.Tensor: Output hidden states after MLP
@@ -390,6 +363,7 @@ class DeepseekV3Layer(nn.Module):
     - Normalization after attention
     - Mixture-of-Experts (MoE) or standard MLP
     """
+
     def __init__(self, config: HuggingFaceConfig, prefix: str, layer_idx: int, quant_config) -> None:
         """
         Initialize the MTP layer.
@@ -407,41 +381,31 @@ class DeepseekV3Layer(nn.Module):
         # (NOTE): the fused kernel switch can be removed in the future
         self.enable_mlapo = True
         self.input_layernorm = RMSNorm(
-            config.hidden_size,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{self.prefix}.input_layernorm"
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.prefix}.input_layernorm"
         )
         self.self_attn = DeepseekV3Attention(
             config,
             f"{self.prefix}.self_attn",
             quant_config,
             enable_mlapo=self.enable_mlapo,
-            input_layernorm=self.input_layernorm if self.enable_mlapo else None
+            input_layernorm=self.input_layernorm if self.enable_mlapo else None,
         )
         self.post_attention_layernorm = RMSNorm(
             config.hidden_size,
             config.rms_norm_eps,
             quant_config=quant_config,
-            prefix=f"{self.prefix}.post_attention_layernorm"
+            prefix=f"{self.prefix}.post_attention_layernorm",
         )
-        self.is_moe = config.n_routed_experts is not None and \
-                layer_idx >= config.first_k_dense_replace and \
-                (layer_idx - config.first_k_dense_replace) % config.moe_layer_freq == 0
+        self.is_moe = (
+            config.n_routed_experts is not None
+            and layer_idx >= config.first_k_dense_replace
+            and (layer_idx - config.first_k_dense_replace) % config.moe_layer_freq == 0
+        )
 
         if not self.is_moe:
-            self.mlp = DeepseekV3MLP(
-                config,
-                f"{self.prefix}.mlp",
-                quant_config,
-                config.intermediate_size
-            )
+            self.mlp = DeepseekV3MLP(config, f"{self.prefix}.mlp", quant_config, config.intermediate_size)
         else:
-            self.mlp = DeepseekV3Moe(
-                config,
-                f"{self.prefix}.mlp",
-                quant_config
-            )
+            self.mlp = DeepseekV3Moe(config, f"{self.prefix}.mlp", quant_config)
 
     def forward(
         self,
@@ -457,7 +421,7 @@ class DeepseekV3Layer(nn.Module):
             residual: Residual connection from previous layer
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor]: 
+            tuple[torch.Tensor, torch.Tensor]:
                 - Output hidden states [seq_len, hidden_size]
                 - Updated residual for next layer
         """
@@ -494,6 +458,7 @@ class DeepseekV3Model(nn.Module):
     - Multiple layers
     - Final layer normalization
     """
+
     def __init__(self, config: HuggingFaceConfig, prefix, quant_config) -> None:
         """
         Initialize the Deepseekv3 model.
@@ -519,10 +484,7 @@ class DeepseekV3Model(nn.Module):
             ]
         )
         self.norm = RMSNorm(
-            config.hidden_size,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{self.prefix}.norm"
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.prefix}.norm"
         )
 
     def forward(self, input_ids, positions) -> torch.Tensor:
@@ -554,6 +516,7 @@ class DeepseekV3ForCausalLM(BaseModelForCausalLM):
     """
     Deepseek V3 Model for causal language modeling.
     """
+
     def __init__(self, mindie_llm_config) -> None:
         """
         Initializes the DeepseekV3ForCausalLM model.
@@ -569,17 +532,13 @@ class DeepseekV3ForCausalLM(BaseModelForCausalLM):
         self.parallel_info = get_parallel_info_manager()
         self.ds_config = mindie_llm_config.llm_config
         weight_prefetcher.enable_weight_prefetch()  # initialize weight prefetcher
-        self.model = DeepseekV3Model(
-            config=mindie_llm_config.hf_config,
-            prefix="model",
-            quant_config=self.quant_config
-        )
+        self.model = DeepseekV3Model(config=mindie_llm_config.hf_config, prefix="model", quant_config=self.quant_config)
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
             bias=False,
             quant_config=None,
-            prefix=f"lm_head",
+            prefix="lm_head",
         )
         self.softmax_scale = (self.config.qk_nope_head_dim + self.config.qk_rope_head_dim) ** (-0.5)
         self.kv_lora_rank = self.config.kv_lora_rank
@@ -598,7 +557,7 @@ class DeepseekV3ForCausalLM(BaseModelForCausalLM):
             torch.Tensor: The output tensor from the model before the LM head.
         """
         return self.model(input_ids, positions)
-    
+
     def compute_logits(self, hidden_states) -> torch.Tensor:
         """
         Computes the final logits using the language model head (LM head).

@@ -87,22 +87,26 @@ def reorder_tensor(tensor: torch.Tensor, order: List[int], dim: int = 0, positio
 
 
 def check_model_config(model_config):
-    model_name = model_config.get('model_name')
+    model_name = model_config.get("model_name")
     if model_name is not None and (len(model_name) < 1 or len(model_name) > MAX_KEY_LENGTH):
-        message = "The length of `model_name` should be in range of [1, 256]. " \
-                  "If you are using MindIE as a service framework, " \
-                  "`model_name` is loaded from $BackendConfig.ModelDeployConfig.ModelConfig.modelName " \
-                  "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        message = (
+            "The length of `model_name` should be in range of [1, 256]. "
+            "If you are using MindIE as a service framework, "
+            "`model_name` is loaded from $BackendConfig.ModelDeployConfig.ModelConfig.modelName "
+            "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        )
         logger.error(message, ErrorCode.TEXT_GENERATOR_PARAM_OUT_OF_RANGE)
         raise ValueError(message)
 
-    max_position_embeddings = model_config.get('max_position_embeddings')
+    max_position_embeddings = model_config.get("max_position_embeddings")
     if max_position_embeddings is not None and max_position_embeddings <= 0:
-        message = "`max_position_embeddings` must be greater than 0. " \
-                  "If you are using MindIE as a service framework, " \
-                  "`max_position_embeddings` is derived from " \
-                  "$BackendConfig.ModelDeployConfig.ModelConfig.max_position_embeddings " \
-                  "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        message = (
+            "`max_position_embeddings` must be greater than 0. "
+            "If you are using MindIE as a service framework, "
+            "`max_position_embeddings` is derived from "
+            "$BackendConfig.ModelDeployConfig.ModelConfig.max_position_embeddings "
+            "in ${MINDIE_LLM_HOME_PATH}/conf/config.json."
+        )
         logger.error(message, ErrorCode.TEXT_GENERATOR_PARAM_OUT_OF_RANGE)
         raise ValueError(message)
 
@@ -136,6 +140,7 @@ class GeneratorTorch(GeneratorBackend):
         model_config: A dictionary containing the model configuration as detailed in
             `mindie_llm.text_generator.utils.config.ModelConfig`.
     """
+
     cache_pool: KVCachePool = None
 
     def __init__(self, model_config: Dict[str, Any]) -> None:
@@ -151,8 +156,10 @@ class GeneratorTorch(GeneratorBackend):
         self.enable_dap = False if self.llm_config is None else self.llm_config.llm.stream_options.micro_batch
         self.enable_kv_pool = len(self.kv_pool_backend) != 0 and len(self.kv_pool_config_path) != 0
 
-        if self.llm_config is not None and \
-            self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir is not None:
+        if (
+            self.llm_config is not None
+            and self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir is not None
+        ):
             self.obfuscation_func = self._get_obfuscation_func()
 
         self.cp_rank = 0
@@ -183,7 +190,7 @@ class GeneratorTorch(GeneratorBackend):
         input_lengths: torch.Tensor,
         max_seq_len: int,
         lm_head_indices: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ):
         """Call the `forward_tensor` of `model_wrapper`."""
         adapter_ids = kwargs.get("adapter_ids")
@@ -206,7 +213,7 @@ class GeneratorTorch(GeneratorBackend):
         )
         return logits
 
-    @timer.track_time('forward')
+    @timer.track_time("forward")
     def forward(self, model_inputs: ModelInput, **kwargs):
         if self.mapping.has_dp() and model_inputs.dp_rank_ids is None:
             error_msg = "`dp_rank_ids` is not given when data parallel size > 1."
@@ -218,11 +225,11 @@ class GeneratorTorch(GeneratorBackend):
             logits = self._dap_forward(dap_stream_id_mask, model_inputs, **kwargs)
         else:
             logits = self._forward(model_inputs, **kwargs)
-        
+
         return logits
 
     def update_cache_policy(self, kvcache_settings, sepd_worker=None):
-        if hasattr(self, 'cache_pool') and self.cache_pool is not None:
+        if hasattr(self, "cache_pool") and self.cache_pool is not None:
             del self.cache_pool
             torch.npu.empty_cache()
             gc.collect()
@@ -270,7 +277,8 @@ class GeneratorTorch(GeneratorBackend):
             logger.error(message, ErrorCode.TEXT_GENERATOR_INTERNAL_ERROR)
             raise ValueError(message)
         effective_adapter_ids = self.adapter_manager.preprocess_adapter_ids(
-            adapter_ids, model_name=self.model_wrapper.model_name, model_id=self.model_wrapper.model_id)
+            adapter_ids, model_name=self.model_wrapper.model_name, model_id=self.model_wrapper.model_id
+        )
         if len(effective_adapter_ids) == 1:
             model_inputs.adapter_ids = effective_adapter_ids
             return False, []
@@ -281,12 +289,11 @@ class GeneratorTorch(GeneratorBackend):
         input_lengths_origin = model_inputs.context_length.cumsum()
         split_batch_group = input_lengths_origin.tolist() if model_inputs.is_prefill else []
         model_inputs.adapter_ids = [effective_adapter_ids[idx] for idx in sorted_adapter_idx]
-        model_inputs.input_ids = reorder_array(
-            model_inputs.input_ids, sorted_adapter_idx, position=split_batch_group)
+        model_inputs.input_ids = reorder_array(model_inputs.input_ids, sorted_adapter_idx, position=split_batch_group)
         model_inputs.position_ids = reorder_array(
-            model_inputs.position_ids, sorted_adapter_idx, position=split_batch_group)
-        model_inputs.slots = reorder_array(
-            model_inputs.slots, sorted_adapter_idx, position=split_batch_group)
+            model_inputs.position_ids, sorted_adapter_idx, position=split_batch_group
+        )
+        model_inputs.slots = reorder_array(model_inputs.slots, sorted_adapter_idx, position=split_batch_group)
         model_inputs.block_tables = reorder_array(model_inputs.block_tables, sorted_adapter_idx)
         model_inputs.context_length = reorder_array(model_inputs.context_length, sorted_adapter_idx)
         if model_inputs.prefill_head_indices is not None:
@@ -294,8 +301,7 @@ class GeneratorTorch(GeneratorBackend):
             if np.array_equal(model_inputs.prefill_head_indices, lm_head_indices_check):
                 model_inputs.prefill_head_indices = model_inputs.context_length.cumsum() - 1
             else:
-                logger.warning("prefill_head_indices passed through model_inputs "
-                               "is not consistent with context_length")
+                logger.warning("prefill_head_indices passed through model_inputs is not consistent with context_length")
 
         return True, revert_adapter_idx
 
@@ -319,8 +325,9 @@ class GeneratorTorch(GeneratorBackend):
 
         return lm_head_local_dp
 
-    def _partition_data(self, slot_dp_rank_id, dp_rank_ids_per_token, model_inputs,
-                        token_size_per_request, output_token_num_per_batch):
+    def _partition_data(
+        self, slot_dp_rank_id, dp_rank_ids_per_token, model_inputs, token_size_per_request, output_token_num_per_batch
+    ):
         dp_rank_ids = model_inputs.dp_rank_ids
         cur_dp_rank_id_per_token_mask = dp_rank_ids_per_token == self.mapping.attn_dp.rank
         cur_dp_slot_mask = slot_dp_rank_id == self.mapping.attn_dp.rank
@@ -380,11 +387,13 @@ class GeneratorTorch(GeneratorBackend):
             cur_shard_input_lengths = token_size_per_request[dp_rank_ids == i]
             cur_shared_output_lengths = output_token_num_per_batch[dp_rank_ids == i]
             cur_num_request = cur_shard_input_lengths.shape[0]
-            if cur_num_request == 0: # 当前进程上没有这个dp组，会构造一个陪跑数据，那么从这个位置开始往后的所有lm_head都+1
+            if (
+                cur_num_request == 0
+            ):  # 当前进程上没有这个dp组，会构造一个陪跑数据，那么从这个位置开始往后的所有lm_head都+1
                 lm_head_indices_with_dp[cur_idx:] += 1
             else:
                 cur_idx += sum(cur_shared_output_lengths)
-        
+
         # 刷新后重新反排
         reverse_indices = np.argsort(sorted_indices, kind=STABLE_SORT_TYPE)
         lm_head_indices_with_dp = lm_head_indices_with_dp[reverse_indices]
@@ -394,8 +403,9 @@ class GeneratorTorch(GeneratorBackend):
         lm_head_indices_with_dp = lm_head_indices_with_dp - delta_offset
 
         # 额外计算一个当前dp组的lmhead输出（用于MTP的多轮抽取）
-        lm_head_local_dp = self._lm_head_local_dp_calc(dp_rank_ids, dp_rank_ids_per_token,
-                                                       model_inputs.prefill_head_indices)
+        lm_head_local_dp = self._lm_head_local_dp_calc(
+            dp_rank_ids, dp_rank_ids_per_token, model_inputs.prefill_head_indices
+        )
 
         model_inputs.input_ids = shard_input_ids
         model_inputs.position_ids = shard_position_ids
@@ -421,8 +431,7 @@ class GeneratorTorch(GeneratorBackend):
         start_indices = np.cumsum(token_size_per_dp_group, axis=0) - token_size_per_dp_group
         end_indices = np.cumsum(token_size_per_dp_group, axis=0)
         shard_effective_token_indices = np.arange(
-            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank],
-            dtype=np.int64
+            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank], dtype=np.int64
         )
 
         max_token_size_per_dp_group = token_size_per_dp_group.max().item()
@@ -430,9 +439,11 @@ class GeneratorTorch(GeneratorBackend):
             self.mapping.attn_dp.group_size * max_token_size_per_dp_group, dtype=np.int64
         ).reshape((self.mapping.attn_dp.group_size, max_token_size_per_dp_group))
         token_offset_per_dp_group = np.arange(
-            0, (self.mapping.attn_dp.group_size - 1) * max_token_size_per_dp_group + 1,
+            0,
+            (self.mapping.attn_dp.group_size - 1) * max_token_size_per_dp_group + 1,
             step=max_token_size_per_dp_group,
-            dtype=np.int64)
+            dtype=np.int64,
+        )
         token_index_with_padding = skip_padding_token_indices - token_offset_per_dp_group.reshape((-1, 1))
         padding_mask = token_index_with_padding >= token_size_per_dp_group.reshape((-1, 1))
 
@@ -449,7 +460,7 @@ class GeneratorTorch(GeneratorBackend):
             "token_index_with_padding": token_index_with_padding,
             "skip_padding_token_indices": skip_padding_token_indices,
         }
-    
+
     def _update_qlen_and_mask_dp_data(self, model_inputs, q_lens, spec_mask):
         filtered_mask = None
         dp_rank_ids = model_inputs.dp_rank_ids
@@ -457,7 +468,7 @@ class GeneratorTorch(GeneratorBackend):
         q_lens_np = np.array(q_lens)
         q_lens_tmp = q_lens_np[cur_dp_rank_id_mask]
         if q_lens_tmp.size == 0:
-            q_lens_new = np.array([1], dtype=np.int32) # q_len为1的list
+            q_lens_new = np.array([1], dtype=np.int32)  # q_len为1的list
             filtered_mask = spec_mask[0] if spec_mask is not None else None
         else:
             # 获取当前dp组的数据
@@ -467,12 +478,12 @@ class GeneratorTorch(GeneratorBackend):
             if spec_mask is not None:
                 for qlen, t in zip(q_lens, cur_dp_rank_id_mask):
                     if t:
-                        filtered_mask_rows.append(spec_mask[current_row:current_row + qlen])
+                        filtered_mask_rows.append(spec_mask[current_row : current_row + qlen])
                     current_row += qlen
                 filtered_mask = torch.cat(filtered_mask_rows, dim=0)
         q_lens_new = q_lens_new.tolist()
         return q_lens_new, filtered_mask
-    
+
     def _update_hidden_states_dp_data(self, model_inputs, q_lens, hidden_states):
         dp_rank_ids = model_inputs.dp_rank_ids
         cur_dp_rank_id_mask = dp_rank_ids == self.mapping.attn_dp.rank
@@ -486,12 +497,12 @@ class GeneratorTorch(GeneratorBackend):
             current_row = 0
             for qlen, t in zip(q_lens, cur_dp_rank_id_mask):
                 if t:
-                    filtered_hidden_states_rows.append(hidden_states[current_row:current_row + qlen])
+                    filtered_hidden_states_rows.append(hidden_states[current_row : current_row + qlen])
                 current_row += qlen
             filtered_hidden_states = torch.cat(filtered_hidden_states_rows, dim=0)
 
         return filtered_hidden_states
-    
+
     def _dp_partition_data(self, model_inputs, kwargs):
         dp_rank_ids = model_inputs.dp_rank_ids
         q_lens = kwargs.get("q_lens", None)
@@ -502,8 +513,9 @@ class GeneratorTorch(GeneratorBackend):
             input_token_num_per_batch = q_lens if q_lens is not None else model_inputs.context_length
             output_token_num_per_batch = [1 for _ in range(len(model_inputs.context_length))]
         else:
-            input_token_num_per_batch = \
+            input_token_num_per_batch = (
                 q_lens if q_lens is not None else [1 for _ in range(len(model_inputs.input_ids))]
+            )
             batch_size = len(model_inputs.context_length)
             output_token_num_per_batch = [1] * batch_size if is_sub_model else input_token_num_per_batch
         input_token_num_per_batch = np.array(input_token_num_per_batch)
@@ -511,8 +523,9 @@ class GeneratorTorch(GeneratorBackend):
         slot_num_per_batch = input_token_num_per_batch if not is_sub_model else (2 * (input_token_num_per_batch - 1))
         dp_rank_ids_per_token = np.repeat(dp_rank_ids, input_token_num_per_batch)
         slot_dp_rank_id = np.repeat(dp_rank_ids, slot_num_per_batch)
-        lm_head_local_dp = self._partition_data(slot_dp_rank_id, dp_rank_ids_per_token, model_inputs,
-                                                input_token_num_per_batch, output_token_num_per_batch)
+        lm_head_local_dp = self._partition_data(
+            slot_dp_rank_id, dp_rank_ids_per_token, model_inputs, input_token_num_per_batch, output_token_num_per_batch
+        )
         additional_kwargs = self._gather_dp_data(dp_rank_ids_per_token)
         kwargs.update(additional_kwargs)
 
@@ -521,17 +534,17 @@ class GeneratorTorch(GeneratorBackend):
 
         if q_lens is not None:
             q_lens_new, spec_mask_new = self._update_qlen_and_mask_dp_data(model_inputs, q_lens, spec_mask)
-            kwargs['q_lens'] = q_lens_new
-            kwargs['spec_mask'] = spec_mask_new
+            kwargs["q_lens"] = q_lens_new
+            kwargs["spec_mask"] = spec_mask_new
         if hidden_states is not None:
             hidden_states_new = self._update_hidden_states_dp_data(model_inputs, q_lens, hidden_states)
-            kwargs['hidden_states'] = hidden_states_new
+            kwargs["hidden_states"] = hidden_states_new
         if not is_sub_model or model_inputs.is_prefill:
-            kwargs['lm_head_indices_dp_rank_ids'] = dp_rank_ids
-            kwargs['dp_rank_ids'] = torch.tensor(dp_rank_ids).to(self.device)
+            kwargs["lm_head_indices_dp_rank_ids"] = dp_rank_ids
+            kwargs["dp_rank_ids"] = torch.tensor(dp_rank_ids).to(self.device)
         if is_sub_model:
-            kwargs['lm_head_local_dp'] = lm_head_local_dp
-    
+            kwargs["lm_head_local_dp"] = lm_head_local_dp
+
     def _generate_lm_head_for_cp(self, context_lens):
         # 每个seq对应的token个数
         # 单bs，不做负载均衡时的lmhead indices
@@ -548,21 +561,24 @@ class GeneratorTorch(GeneratorBackend):
         rank_ids = np.where(
             chunk_ids >= self.cp_size,
             2 * self.cp_size - chunk_ids - 1,  # 满足条件时的计算
-            chunk_ids  # 不满足条件时的计算
+            chunk_ids,  # 不满足条件时的计算
         )
         # 前缀和，表示相对于seq的偏移（第i+1个batch从前i个batch的总token个数处开始）
         sum_prefix_lens_per_rank = np.insert(np.cumsum(seq_lens / self.cp_size)[:-1], 0, 0)
         # lmhead indices计算结果：rank_id * rank_len + sum(prefix_seq_lens) + chunk_id * chunk_len + offset
-        prefill_head_indices = np.sum(seq_lens) / self.cp_size * rank_ids \
-            + sum_prefix_lens_per_rank + \
-            (chunk_ids / self.cp_size).astype(np.int64) * chunk_lens + offsets
+        prefill_head_indices = (
+            np.sum(seq_lens) / self.cp_size * rank_ids
+            + sum_prefix_lens_per_rank
+            + (chunk_ids / self.cp_size).astype(np.int64) * chunk_lens
+            + offsets
+        )
         return prefill_head_indices
-    
+
     def _cp_partition_data(self, model_inputs: ModelInput):
         # CP 参数切分
         cp_size = self.mapping.attn_cp.group_size
         cp_rank = self.mapping.attn_cp.rank
-        num_chunks = cp_size * 2 # 负载均衡下，需要将序列切 2*cp 份
+        num_chunks = cp_size * 2  # 负载均衡下，需要将序列切 2*cp 份
         input_ids_list = []
         position_ids_list = []
         batch_seq_len = model_inputs.context_length
@@ -575,15 +591,15 @@ class GeneratorTorch(GeneratorBackend):
             former_end_idx = chunk_length * (cp_rank + 1)
             latter_st_idx = chunk_length * (num_chunks - 1 - cp_rank)
             latter_end_idx = chunk_length * (num_chunks - cp_rank)
- 
+
             input_ids_list.extend(model_inputs.input_ids[start_idx:end_idx][former_st_idx:former_end_idx])
             input_ids_list.extend(model_inputs.input_ids[start_idx:end_idx][latter_st_idx:latter_end_idx])
- 
+
             position_ids_list.extend(model_inputs.position_ids[start_idx:end_idx][former_st_idx:former_end_idx])
             position_ids_list.extend(model_inputs.position_ids[start_idx:end_idx][latter_st_idx:latter_end_idx])
-            
+
             cumulative_seq_len += input_length
-        
+
         context_length_without_padding = model_inputs.context_length - model_inputs.pad_token_count
         model_inputs.prefill_head_indices = self._generate_lm_head_for_cp(context_length_without_padding)
         model_inputs.input_ids = np.array(input_ids_list, dtype=np.int64)
@@ -592,11 +608,11 @@ class GeneratorTorch(GeneratorBackend):
         model_inputs.context_length = model_inputs.cp_tokens[:, cp_rank].astype(np.int32)
 
     def _cp_update_context_length(self, model_inputs: ModelInput):
-        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size: (self.cp_rank + 1) * self.sp_size]
+        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size : (self.cp_rank + 1) * self.sp_size]
         model_inputs.context_length = all_sp_tokens.sum(axis=1).astype(np.int32)
 
     def _sp_partition_data(self, model_inputs: ModelInput):
-        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size: (self.cp_rank + 1) * self.sp_size]
+        all_sp_tokens = model_inputs.sp_tokens[:, self.cp_rank * self.sp_size : (self.cp_rank + 1) * self.sp_size]
 
         if len(all_sp_tokens) == 0:
             input_lengths_sp = np.array([1], dtype=np.int32)
@@ -615,14 +631,13 @@ class GeneratorTorch(GeneratorBackend):
             lm_head_indices_dp_rank_ids = np.repeat(sorted_dp_rank_ids, sorted_output_token_num_per_batch)
             additional_kwargs = {"lm_head_indices_dp_rank_ids": lm_head_indices_dp_rank_ids}
             kwargs.update(additional_kwargs)
-    
+
     def _update_shard_effective_token_indices(self, model_inputs, kwargs):
         token_size_per_dp_group = kwargs.get("token_size_per_dp_group")
         start_indices = np.cumsum(token_size_per_dp_group, axis=0) - token_size_per_dp_group
         end_indices = np.cumsum(token_size_per_dp_group, axis=0)
         shard_effective_token_indices = np.arange(
-            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank],
-            dtype=np.int64
+            start_indices[self.mapping.attn_dp.rank], end_indices[self.mapping.attn_dp.rank], dtype=np.int64
         )
         additional_kwargs = {"shard_effective_token_indices": shard_effective_token_indices}
         kwargs.update(additional_kwargs)
@@ -666,15 +681,14 @@ class GeneratorTorch(GeneratorBackend):
             do_reorder_requests, revert_adapter_idx = self._sort_model_inputs_by_adapter_ids(model_inputs)
 
         if self.mapping.has_dp() and not self.distributed_enable:
-            tmp_dict = {'q_lens': model_kwargs.get('q_lens', None),
-                            'sub_model': True}
+            tmp_dict = {"q_lens": model_kwargs.get("q_lens", None), "sub_model": True}
             self._dp_partition_data(model_inputs, model_kwargs)
-            sub_model_inputs = model_kwargs.get('sub_model_inputs', None)
+            sub_model_inputs = model_kwargs.get("sub_model_inputs", None)
             if sub_model_inputs is not None:
                 self._dp_partition_data(sub_model_inputs, tmp_dict)
-                model_kwargs['sub_model_inputs'] = sub_model_inputs
-                lm_head_local_dp = tmp_dict.get('lm_head_local_dp', None)
-                model_kwargs['lm_head_local_dp'] = lm_head_local_dp
+                model_kwargs["sub_model_inputs"] = sub_model_inputs
+                lm_head_local_dp = tmp_dict.get("lm_head_local_dp", None)
+                model_kwargs["lm_head_local_dp"] = lm_head_local_dp
 
         if self.mapping.has_attn_cp():
             if model_inputs.is_prefill:
@@ -683,19 +697,21 @@ class GeneratorTorch(GeneratorBackend):
                 self._cp_update_context_length(model_inputs)
 
         if self.mapping.has_attn_inner_sp() and not model_inputs.is_prefill:
-            model_kwargs['input_lengths_sp'] = self._sp_partition_data(model_inputs)
-            sub_model_inputs = model_kwargs.get('sub_model_inputs', None)
+            model_kwargs["input_lengths_sp"] = self._sp_partition_data(model_inputs)
+            sub_model_inputs = model_kwargs.get("sub_model_inputs", None)
             if sub_model_inputs is not None:
-                model_kwargs['sub_input_lengths_sp'] = self._sp_partition_data(sub_model_inputs)
-        
-        has_tp = self.mapping.has_attn_tp() or self.mapping.has_attn_o_proj_tp() or \
-                                self.mapping.lm_head_tp.group_size > 1
+                model_kwargs["sub_input_lengths_sp"] = self._sp_partition_data(sub_model_inputs)
+
+        has_tp = (
+            self.mapping.has_attn_tp() or self.mapping.has_attn_o_proj_tp() or self.mapping.lm_head_tp.group_size > 1
+        )
 
         if model_inputs.is_prefill:
             if has_tp and self.distributed_enable:
                 batch_size = len(model_inputs.context_length)
-                logger.debug(f'Prefill Distributed scenario and TP > 1, generate dp ep padding. '
-                            f'The batch size is {batch_size}')
+                logger.debug(
+                    f"Prefill Distributed scenario and TP > 1, generate dp ep padding. The batch size is {batch_size}"
+                )
                 self._update_lm_head_indices(model_inputs, model_kwargs)
                 self._update_token_size_per_dp_group(model_inputs, model_kwargs)
                 self._update_lm_head_indices_dp_rank_ids(model_inputs, model_kwargs)
@@ -706,12 +722,11 @@ class GeneratorTorch(GeneratorBackend):
                 batch_size = len(model_inputs.context_length)
                 token_num_per_batch = self.num_speculative_tokens + 1
 
-                logger.debug(f'Decode Distributed scenario and TP > 1, generate dp ep padding. '
-                            f'The batch size is {batch_size}')
+                logger.debug(
+                    f"Decode Distributed scenario and TP > 1, generate dp ep padding. The batch size is {batch_size}"
+                )
                 dep_inputs = self._get_dp_ep_inputs(batch_size * token_num_per_batch, model_inputs.input_ids)
-                data = {
-                    "dep_inputs": dep_inputs
-                }
+                data = {"dep_inputs": dep_inputs}
                 model_kwargs.update(data)
 
         return do_reorder_requests, revert_adapter_idx
@@ -722,57 +737,61 @@ class GeneratorTorch(GeneratorBackend):
         wrapper for forward inference.
         """
         do_reorder_requests, revert_adapter_idx = self._prepare_model_inputs(model_inputs, kwargs)
-        
-        if not hasattr(self, 'soc_version') or self.soc_version != ASCEND_310B:
+
+        if not hasattr(self, "soc_version") or self.soc_version != ASCEND_310B:
             logits = self.model_wrapper.forward(model_inputs, self.cache_pool.npu_cache, **kwargs)
-            
+
             # sort logits back to the original order (related to lm_head_indices)
-            if do_reorder_requests and ( \
-                model_inputs.layerwise_disaggregated_exe_stage is None \
-                or model_inputs.layerwise_disaggregated_exe_stage.end_of_generate_token):
+            if do_reorder_requests and (
+                model_inputs.layerwise_disaggregated_exe_stage is None
+                or model_inputs.layerwise_disaggregated_exe_stage.end_of_generate_token
+            ):
                 logits = reorder_tensor(logits, revert_adapter_idx)
             return logits
         else:
             logits, past_key_values = self.model_wrapper.forward(model_inputs, self.cache_pool.npu_cache, **kwargs)
-            if (
-                do_reorder_requests
-                and (model_inputs.layerwise_disaggregated_exe_stage is None
+            if do_reorder_requests and (
+                model_inputs.layerwise_disaggregated_exe_stage is None
                 or model_inputs.layerwise_disaggregated_exe_stage.end_of_generate_token
-                )
             ):
                 logits = reorder_tensor(logits, revert_adapter_idx)
             return logits, past_key_values
 
     def _get_dp_ep_inputs(self, batch_size, input_ids):
-        if self.mapping.enable_lm_head_local_tp or self.mapping.enable_o_proj_local_tp or \
-                self.model_wrapper.config.ep_level == 1:
+        if (
+            self.mapping.enable_lm_head_local_tp
+            or self.mapping.enable_o_proj_local_tp
+            or self.model_wrapper.config.ep_level == 1
+        ):
             max_decode_dp_token_size = self.max_batch_size * (self.num_speculative_tokens + 1)
             padding_batch_size = max_decode_dp_token_size - batch_size
-        elif batch_size % self.mapping.attn_tp.group_size != 0:   
+        elif batch_size % self.mapping.attn_tp.group_size != 0:
             padding_batch_size = self.mapping.attn_tp.group_size - batch_size % self.mapping.attn_tp.group_size
         else:
             padding_batch_size = 0
-        
-        attn_padding_idx = np.concatenate([
-                np.arange(batch_size, dtype=np.int32),
-                np.zeros(padding_batch_size, dtype=np.int32)
-            ]).reshape(-1)
+
+        attn_padding_idx = np.concatenate(
+            [np.arange(batch_size, dtype=np.int32), np.zeros(padding_batch_size, dtype=np.int32)]
+        ).reshape(-1)
         if self.model_wrapper.config.ep_level == 1:
-            attn_unpadding_idx = np.arange((batch_size + padding_batch_size) * \
-                            self.mapping.attn_dp.group_size, dtype=np.int32)
+            attn_unpadding_idx = np.arange(
+                (batch_size + padding_batch_size) * self.mapping.attn_dp.group_size, dtype=np.int32
+            )
         else:
-            attn_unpadding_idx = np.arange((batch_size + padding_batch_size) // \
-                            self.mapping.attn_tp.group_size, dtype=np.int32)
+            attn_unpadding_idx = np.arange(
+                (batch_size + padding_batch_size) // self.mapping.attn_tp.group_size, dtype=np.int32
+            )
         ffn_padding_idx = attn_unpadding_idx
         ffn_unpadding_idx = np.arange(batch_size, dtype=np.int32)
         lm_head_skip_padding_token_indices = ffn_unpadding_idx
         if self.mapping.enable_lm_head_local_tp:
-            lm_head_skip_padding_token_indices = \
-                            np.arange(max_decode_dp_token_size * self.mapping.lm_head_tp.group_size, dtype=np.int32)
+            lm_head_skip_padding_token_indices = np.arange(
+                max_decode_dp_token_size * self.mapping.lm_head_tp.group_size, dtype=np.int32
+            )
 
         tp_rank = self.mapping.attn_tp.rank
         token_size_per_tp_rank = (batch_size + padding_batch_size) // self.mapping.attn_tp.group_size
-        gather_prenorm_idx = attn_padding_idx[tp_rank * token_size_per_tp_rank: (tp_rank + 1) * token_size_per_tp_rank]
+        gather_prenorm_idx = attn_padding_idx[tp_rank * token_size_per_tp_rank : (tp_rank + 1) * token_size_per_tp_rank]
         if self.mapping.enable_o_proj_local_tp:
             gather_prenorm_idx = np.arange(len(input_ids), dtype=np.int32)
 
@@ -780,38 +799,42 @@ class GeneratorTorch(GeneratorBackend):
         moe_idx = np.array([1], dtype=np.int32)
         post_lmhead_gather_indices = np.array([1], dtype=np.int32)
         if self.mapping.enable_lm_head_local_tp:
-            post_lmhead_gather_indices = np.arange(
-                len(input_ids), 
-                dtype=np.int32
-            )
+            post_lmhead_gather_indices = np.arange(len(input_ids), dtype=np.int32)
 
-        dep_inputs = [attn_padding_idx, attn_unpadding_idx, ffn_padding_idx,
-            ffn_unpadding_idx, lm_head_skip_padding_token_indices, gather_prenorm_idx,
-            dynamic_ep_idx, moe_idx, post_lmhead_gather_indices]
+        dep_inputs = [
+            attn_padding_idx,
+            attn_unpadding_idx,
+            ffn_padding_idx,
+            ffn_unpadding_idx,
+            lm_head_skip_padding_token_indices,
+            gather_prenorm_idx,
+            dynamic_ep_idx,
+            moe_idx,
+            post_lmhead_gather_indices,
+        ]
 
         return dep_inputs
 
     def _partition_dap_stream_by_rank(self, model_inputs, **kwargs):
         # 仅在DAP使能，且为prefill阶段，且该batch总输入长度超过2k时进行DAP双流并发
-        q_lens = kwargs.get('q_lens')
+        q_lens = kwargs.get("q_lens")
         if q_lens:
             input_lengths = np.array(q_lens)
         else:
             input_lengths = np.array(model_inputs.context_length)
         is_prefill_stage = model_inputs.is_prefill
         total_input_length_exceeds_2k = np.sum(input_lengths) > 2048
-        is_dap_disabled = not self.enable_dap or not is_prefill_stage or \
-            not total_input_length_exceeds_2k
+        is_dap_disabled = not self.enable_dap or not is_prefill_stage or not total_input_length_exceeds_2k
         if is_dap_disabled:
             return False, np.array([])
-        
+
         if self.mapping.has_dp():
             dap_rank_ids = model_inputs.dp_rank_ids
         else:
             dap_rank_ids = np.zeros(input_lengths.size)
         batch_size = dap_rank_ids.size
 
-        dap_partition_map = {} # key: rank_id, value: DapPartitionInfo
+        dap_partition_map = {}  # key: rank_id, value: DapPartitionInfo
         for i in range(batch_size):
             rank_id = dap_rank_ids[i]
             if rank_id not in dap_partition_map:
@@ -827,8 +850,10 @@ class GeneratorTorch(GeneratorBackend):
         for dap_partition_info in dap_partition_map.values():
             dap_partition_info.req_info_list.sort(key=lambda x: x.context_length, reverse=True)
             for req_info in dap_partition_info.req_info_list:
-                if dap_partition_info.context_length[DapStreamId.BASE_STREAM] <= \
-                    dap_partition_info.context_length[DapStreamId.DAP_STREAM]:
+                if (
+                    dap_partition_info.context_length[DapStreamId.BASE_STREAM]
+                    <= dap_partition_info.context_length[DapStreamId.DAP_STREAM]
+                ):
                     req_info.dap_stream_id = DapStreamId.BASE_STREAM
                     dap_stream_id_mask[req_info.origin_index] = DapStreamId.BASE_STREAM
                     dap_partition_info.context_length[DapStreamId.BASE_STREAM] += req_info.context_length
@@ -836,9 +861,11 @@ class GeneratorTorch(GeneratorBackend):
                     req_info.dap_stream_id = DapStreamId.DAP_STREAM
                     dap_stream_id_mask[req_info.origin_index] = DapStreamId.DAP_STREAM
                     dap_partition_info.context_length[DapStreamId.DAP_STREAM] += req_info.context_length
-            
-            if dap_partition_info.context_length[DapStreamId.BASE_STREAM] < \
-                dap_partition_info.context_length[DapStreamId.DAP_STREAM]:
+
+            if (
+                dap_partition_info.context_length[DapStreamId.BASE_STREAM]
+                < dap_partition_info.context_length[DapStreamId.DAP_STREAM]
+            ):
                 for req_info in dap_partition_info.req_info_list:
                     dap_stream_id_mask[req_info.origin_index] = swap_map.get(req_info.dap_stream_id)
 
@@ -850,11 +877,11 @@ class GeneratorTorch(GeneratorBackend):
             return False, np.array([])
 
         return True, dap_stream_id_mask
-    
+
     def _dap_partition_data(self, partition_id, partition_mask, dap_model_inputs, dap_kwargs):
         model_inputs = dap_model_inputs[partition_id]
         dap_kwargs = dap_kwargs[partition_id]
-        q_lens = dap_kwargs.get("q_lens", None) 
+        q_lens = dap_kwargs.get("q_lens", None)
         if q_lens:
             partition_mask_per_token = np.repeat(partition_mask, q_lens)
         else:
@@ -881,7 +908,7 @@ class GeneratorTorch(GeneratorBackend):
             model_inputs.dp_rank_ids = model_inputs.dp_rank_ids[cur_partition_id_mask]
         if model_inputs.adapter_ids is not None and self.adapter_manager is not None:
             model_inputs.adapter_ids = model_inputs.adapter_ids[cur_partition_id_mask]
-    
+
     def _dap_reorder_tensor(self, dap_stream_id_mask, dap_logits):
         base_stream_batch_size = (dap_stream_id_mask == DapStreamId.BASE_STREAM).sum()
         base_stream_index = 0
@@ -898,13 +925,13 @@ class GeneratorTorch(GeneratorBackend):
             reorder_list.append(reorder_index)
             if reorder_index != origin_index:
                 need_reorder = True
-        
+
         logits = torch.cat(dap_logits, dim=0)
         if not need_reorder:
             return logits
         reordered_logits = logits[reorder_list]
         return reordered_logits
-    
+
     def _dap_forward(self, dap_stream_id_mask, model_inputs, **kwargs):
         num_speculative_tokens = self.model_wrapper.model_runner.num_speculative_tokens
         dap_kwargs = [kwargs]
@@ -938,7 +965,7 @@ class GeneratorTorch(GeneratorBackend):
                 dap_logits[i] = reorder_tensor(dap_logits[i], dap_revert_adapter_idx[i])
                 if num_speculative_tokens > 0:
                     hidden_states[i] = reorder_tensor(hidden_states[i], dap_revert_adapter_idx[i])
-        
+
         reordered_logits = self._dap_reorder_tensor(dap_stream_id_mask, dap_logits)
         if num_speculative_tokens > 0:
             reordered_hidden_states = self._dap_reorder_tensor(dap_stream_id_mask, hidden_states)
@@ -946,7 +973,7 @@ class GeneratorTorch(GeneratorBackend):
         return reordered_logits
 
     def _get_dp_ep_padding_inputs(self, is_prefill, kwargs):
-        token_size_per_dp_group = kwargs['token_size_per_dp_group']
+        token_size_per_dp_group = kwargs["token_size_per_dp_group"]
         input_ids_len = token_size_per_dp_group[self.mapping.attn_dp.rank]
         max_dp_batch_size = max(token_size_per_dp_group)
         local_token_size = token_size_per_dp_group[self.mapping.attn_dp.rank]
@@ -965,67 +992,89 @@ class GeneratorTorch(GeneratorBackend):
         token_size_per_dp_group_startid = np.cumsum(token_size_per_dp_group)
         token_size_per_dp_group_startid[-1] = 0
 
-        lm_head_skip_padding_token_indices = np.concatenate([
-            np.arange(j, dtype=np.int32) + max_token_size_per_dp_group * rank_id
-            for rank_id, j in enumerate(token_size_per_dp_group)
-        ])
+        lm_head_skip_padding_token_indices = np.concatenate(
+            [
+                np.arange(j, dtype=np.int32) + max_token_size_per_dp_group * rank_id
+                for rank_id, j in enumerate(token_size_per_dp_group)
+            ]
+        )
 
         atom_dp_size = max_token_size_per_dp_group // self.mapping.attn_tp.group_size
         input_length_padding = max_token_size_per_dp_group - local_token_size
-        attn_padding_idx = np.concatenate([
-                np.arange(local_token_size, dtype=np.int32),
-                np.zeros(input_length_padding, dtype=np.int32)
-            ]).reshape(-1)
+        attn_padding_idx = np.concatenate(
+            [np.arange(local_token_size, dtype=np.int32), np.zeros(input_length_padding, dtype=np.int32)]
+        ).reshape(-1)
 
         if self.mapping.attn_o_proj_tp.group_size > 1:
             gather_prenorm_idx = np.arange(atom_dp_size, dtype=np.int32)
         else:
-            gather_prenorm_idx = \
-                        attn_padding_idx[self.mapping.attn_tp.rank * atom_dp_size: \
-                        (self.mapping.attn_tp.rank + 1) * atom_dp_size]
+            gather_prenorm_idx = attn_padding_idx[
+                self.mapping.attn_tp.rank * atom_dp_size : (self.mapping.attn_tp.rank + 1) * atom_dp_size
+            ]
 
-        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or \
-        (expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill):
+        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or (
+            expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill
+        ):
             attn_unpadding_idx = np.arange(atom_dp_size, dtype=np.int32)
             ffn_padding_idx = attn_unpadding_idx
         else:
             attn_unpadding_idx = np.concatenate(
-                [np.arange(s) + max_token_size_per_dp_group * i
-                    for i, s in enumerate(token_size_per_dp_group)])
-            ffn_padding_idx = np.concatenate([
-                np.concatenate([np.arange(j) + token_size_per_dp_group_startid[rank_id - 1],
-                np.zeros(max_token_size_per_dp_group - j, dtype=np.int32)]) \
-                    for rank_id, j in enumerate(token_size_per_dp_group)], axis=0)
+                [np.arange(s) + max_token_size_per_dp_group * i for i, s in enumerate(token_size_per_dp_group)]
+            )
+            ffn_padding_idx = np.concatenate(
+                [
+                    np.concatenate(
+                        [
+                            np.arange(j) + token_size_per_dp_group_startid[rank_id - 1],
+                            np.zeros(max_token_size_per_dp_group - j, dtype=np.int32),
+                        ]
+                    )
+                    for rank_id, j in enumerate(token_size_per_dp_group)
+                ],
+                axis=0,
+            )
 
         ffn_unpadding_idx = np.arange(token_size_per_dp_group[self.mapping.attn_dp.rank], dtype=np.int32)
 
         dynamic_ep_idx = np.zeros(1, dtype=np.int32)
         moe_idx = np.zeros(1, dtype=np.int32)
 
-        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or \
-            (expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill):
+        if expert_parallel_degree == ExpertParallelDegree.DYNAMIC_EP or (
+            expert_parallel_degree == ExpertParallelDegree.MIX_EP and is_prefill
+        ):
             if self.mapping.attn_tp.group_size == 1:
-                dynamic_ep_idx = np.arange(input_ids_len * self.model_wrapper.config.num_experts_per_tok, 
-                                            dtype=np.int32)
-                dynamic_ep_idx_padding = \
-                    np.arange(attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, 
-                                dtype=np.int32)
+                dynamic_ep_idx = np.arange(
+                    input_ids_len * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
+                dynamic_ep_idx_padding = np.arange(
+                    attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
             else:
-                dynamic_ep_idx = np.arange(attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, 
-                                            dtype=np.int32)
+                dynamic_ep_idx = np.arange(
+                    attn_unpadding_idx.shape[0] * self.model_wrapper.config.num_experts_per_tok, dtype=np.int32
+                )
                 dynamic_ep_idx_padding = dynamic_ep_idx
 
-            ep_input_length = \
-                int(dynamic_ep_idx_padding.shape[0] * self._get_all2all_buffer_factor(dynamic_ep_idx_padding.shape[0]))
+            ep_input_length = int(
+                dynamic_ep_idx_padding.shape[0] * self._get_all2all_buffer_factor(dynamic_ep_idx_padding.shape[0])
+            )
             all2all_padding = ep_input_length % self.mapping.moe_ep.group_size
             ep_input_length_padding = (self.mapping.moe_ep.group_size - all2all_padding) if all2all_padding != 0 else 0
             ep_input_length_padding += ep_input_length
             moe_idx = np.arange(1, ep_input_length_padding + 1, dtype=np.int32)
 
         post_lmhead_gather_indices = np.array([1], dtype=np.int32)
-        dep_inputs = [attn_padding_idx, attn_unpadding_idx, ffn_padding_idx,
-                ffn_unpadding_idx, lm_head_skip_padding_token_indices, gather_prenorm_idx,
-                dynamic_ep_idx, moe_idx, post_lmhead_gather_indices]
+        dep_inputs = [
+            attn_padding_idx,
+            attn_unpadding_idx,
+            ffn_padding_idx,
+            ffn_unpadding_idx,
+            lm_head_skip_padding_token_indices,
+            gather_prenorm_idx,
+            dynamic_ep_idx,
+            moe_idx,
+            post_lmhead_gather_indices,
+        ]
 
         additional_kwargs = dict(dep_inputs=dep_inputs, max_dp_batch_size=max_dp_batch_size)
 
@@ -1037,9 +1086,15 @@ class GeneratorTorch(GeneratorBackend):
         if hasattr(self.model_wrapper.config, "alltoall_ep_buffer_scale_factors"):
             length_thresholds = self.model_wrapper.config.alltoall_ep_buffer_scale_factors
         else:
-            length_thresholds = \
-                [[1048576, 1.32], [524288, 1.4], [262144, 1.53],
-                 [131072, 1.8], [32768, 3.0], [8192, 5.2], [0, 8.0]]
+            length_thresholds = [
+                [1048576, 1.32],
+                [524288, 1.4],
+                [262144, 1.53],
+                [131072, 1.8],
+                [32768, 3.0],
+                [8192, 5.2],
+                [0, 8.0],
+            ]
         for threshold in length_thresholds:
             if length >= threshold[0]:
                 all2all_buffer_factor = threshold[1]
@@ -1049,18 +1104,28 @@ class GeneratorTorch(GeneratorBackend):
     def _get_obfuscation_func(self):
         try:
             from ai_asset_obfuscate import data_asset_obfuscation
+
             obfuscation_func = data_asset_obfuscation.DataAssetObfuscation(self.config.vocab_size)
-            file_name_list = ["kms_ca.pem", "kms_cfs.pem", "kms_cfs.key", "kms_client_key_enc.txt", \
-                "aiguard_psk", "aiguard_psk_enc.txt"]
+            file_name_list = [
+                "kms_ca.pem",
+                "kms_cfs.pem",
+                "kms_cfs.key",
+                "kms_client_key_enc.txt",
+                "aiguard_psk",
+                "aiguard_psk_enc.txt",
+            ]
             file_list = []
             for name in file_name_list:
                 file_path = standardize_path(
-                    os.path.join(self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir, name))
+                    os.path.join(self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir, name)
+                )
                 check_file_safety(file_path)
                 file_list.append(file_path)
 
             tls_info = (
-                file_list[0], file_list[1], file_list[2],
+                file_list[0],
+                file_list[1],
+                file_list[2],
                 self.llm_config.llm.pmcc_obfuscation_options.kms_agent_port,
                 self.llm_config.llm.pmcc_obfuscation_options.data_obfuscation_ca_dir,
                 file_list[3],
@@ -1073,7 +1138,9 @@ class GeneratorTorch(GeneratorBackend):
             obfuscation_func.set_seed_safer(tls_info, psk_info)
             return obfuscation_func
         except Exception as e:
-            error_msg = f"If you enable data obfuscation, please make sure you have installed ai_asset_obfuscate, " \
-                        f"and use it properly. Exception msg: {e}"
+            error_msg = (
+                f"If you enable data obfuscation, please make sure you have installed ai_asset_obfuscate, "
+                f"and use it properly. Exception msg: {e}"
+            )
             logger.error(error_msg, ErrorCode.TEXT_GENERATOR_INTERNAL_ERROR)
             raise RuntimeError(error_msg) from e

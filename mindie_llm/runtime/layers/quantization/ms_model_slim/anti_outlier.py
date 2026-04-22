@@ -20,6 +20,7 @@ class AntiOutlierNormMethod(QuantizationMethodBase):
     Quantization method for Anti-Outlier Normalization.
     Uses NPU-optimized RMS Norm with optional residual connection and bias addition.
     """
+
     def create_weights(
         self,
         layer: torch.nn.Module,
@@ -50,11 +51,11 @@ class AntiOutlierNormMethod(QuantizationMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Applies Anti-Outlier Normalization to the input tensor.
-        
+
         Note:
             If residual is provided, uses fused `npu_add_rms_norm` for performance.
             Bias is added after normalization.
-        
+
         Returns:
             - If residual is None: Normalized tensor.
             - If residual is provided: Tuple of (normalized_tensor, residual_tensor).

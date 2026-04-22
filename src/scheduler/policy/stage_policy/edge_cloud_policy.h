@@ -10,18 +10,17 @@
  * See the Mulan PSL v2 for more details.
  */
 
-
 // 边云协同新增
 #ifndef EDGE_CLOUD_POLICY_H
 #define EDGE_CLOUD_POLICY_H
 
-#include "sequence_group.h"
-#include "policy/stage_policy/stage_policy.h"
 #include "latency_predictor/latency_predictor.h"
+#include "policy/stage_policy/stage_policy.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 class EdgeCloudPolicy final : public StagePolicy {
-public:
+   public:
     explicit EdgeCloudPolicy(uint32_t batchPnum) : batchPnum_(batchPnum) {};
     PDPriorityType Apply([[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &waiting,
                          [[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &running,
@@ -33,18 +32,18 @@ public:
 
     void LayerwiseSubBatchCnt(ForwardMode forwardMode);
 
-    int GetPrefillBatchCnt() const {return prefillBatchCount_;};
+    int GetPrefillBatchCnt() const { return prefillBatchCount_; };
 
-    int GetDecodeBatchCnt() const {return decodeBatchCount_;};
+    int GetDecodeBatchCnt() const { return decodeBatchCount_; };
 
     bool LwdNeedWaiting4Response(ForwardMode forwardMode) const;
 
-private:
+   private:
     std::shared_ptr<LatencyPredictor> predictor_;
     int prefillBatchCount_{0};
     int decodeBatchCount_{0};
     const int batchPnum_{1};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

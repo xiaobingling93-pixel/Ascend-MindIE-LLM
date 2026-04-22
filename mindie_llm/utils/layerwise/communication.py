@@ -14,18 +14,18 @@ import ipaddress
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from mindie_llm.model_wrapper.utils.config import DmiConfig
 from mindie_llm.utils.log.logging import logger
 from mindie_llm.utils.file_utils import safe_open
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_hbm_info, get_npu_node_info
 
-ROLE_MASTER = 'master'
-ROLE_SLAVE = 'slave'
-SERVER_LIST = 'server_list'
-SERVER_COUNT = 'server_count'
-HOST = 'host'
-DEVICE = 'device'
+ROLE_MASTER = "master"
+ROLE_SLAVE = "slave"
+SERVER_LIST = "server_list"
+SERVER_COUNT = "server_count"
+HOST = "host"
+DEVICE = "device"
 
 
 @dataclass
@@ -43,7 +43,7 @@ class LwdCommConfig:
     multi_nodes_infer_enabled: bool = False
     multi_nodes_ctrl_port: Optional[str] = None
     multi_nodes_is_master: bool = False
-    comm_group_size: int = 1    # 通信域划分数量, 包括按dp和cp进行划分, 两者不兼容开启
+    comm_group_size: int = 1  # 通信域划分数量, 包括按dp和cp进行划分, 两者不兼容开启
     npu_net_host: bool = False
     npu_smi_info_sync: bool = False
 
@@ -78,15 +78,17 @@ class LwdCommunicationManager:
 
     def communication_config_check(self, model_config: DmiConfig) -> bool:
         if self.config.role_type is None or self.config.role_type not in [ROLE_MASTER, ROLE_SLAVE]:
-            logger.error("[layerwiseDisaggregated] The configuration is invalid" \
-                        "because the role is %s.", self.config.role_type)
+            logger.error(
+                "[layerwiseDisaggregated] The configuration is invalidbecause the role is %s.", self.config.role_type
+            )
             return False
 
         if len(self.config.cloud_ip_addresses) == 0 or len(self.config.cloud_ip_addresses) > 2:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "layerwiseDisaggregatedSlaveIpAddress " \
-                        "only support 1 to 2 ip address.")
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "layerwiseDisaggregatedSlaveIpAddress "
+                "only support 1 to 2 ip address."
+            )
             return False
 
         edge_ip_valid = LwdCommunicationManager.is_valid_ip(self.config.edge_ip_address)
@@ -98,50 +100,53 @@ class LwdCommunicationManager:
 
         if not edge_ip_valid or not cloud_ip_valid:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "layerwiseDisaggregatedMasterIpAddress is %s and " \
-                        "layerwiseDisaggregatedSlaveIpAddress is %s.", self.config.edge_ip_address,
-                        self.config.cloud_ip_addresses)
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "layerwiseDisaggregatedMasterIpAddress is %s and "
+                "layerwiseDisaggregatedSlaveIpAddress is %s.",
+                self.config.edge_ip_address,
+                self.config.cloud_ip_addresses,
+            )
             return False
 
-        if 'models' not in model_config.model_config:
+        if "models" not in model_config.model_config:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "there is no models configuration."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because there is no models configuration."
+            )
             return False
-        models = json.loads(model_config.model_config['models'])
+        models = json.loads(model_config.model_config["models"])
 
-        if 'layerwiseDisaggregatedMasterDeviceNum' not in models or \
-            'layerwiseDisaggregatedSlaveDeviceNum' not in models:
+        if (
+            "layerwiseDisaggregatedMasterDeviceNum" not in models
+            or "layerwiseDisaggregatedSlaveDeviceNum" not in models
+        ):
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because" \
-                        "models are missing configuration items.")
+                "[layerwiseDisaggregated] The configuration is invalid becausemodels are missing configuration items."
+            )
             return False
 
-        npu_edge_num = models['layerwiseDisaggregatedMasterDeviceNum']
-        npu_cloud_num = models['layerwiseDisaggregatedSlaveDeviceNum']
+        npu_edge_num = models["layerwiseDisaggregatedMasterDeviceNum"]
+        npu_cloud_num = models["layerwiseDisaggregatedSlaveDeviceNum"]
 
         if npu_edge_num not in [2] or npu_cloud_num not in [8, 16]:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "the npuEdgeNum or npuCloudNum is illegal."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "the npuEdgeNum or npuCloudNum is illegal."
+            )
             return False
 
         if self.config.tcp_comm_cloud_ip_port is None or self.config.hccl_comm_edge_ip_port is None:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "there is no layerwiseDisaggregatedDataPort " \
-                        "or layerwiseDisaggregatedCrtlPort configuration."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "there is no layerwiseDisaggregatedDataPort "
+                "or layerwiseDisaggregatedCrtlPort configuration."
+            )
             return False
 
         if len(self.config.tcp_comm_cloud_ip_port) != 2:
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "layerwiseDisaggregatedCrtlPort need two port."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "layerwiseDisaggregatedCrtlPort need two port."
+            )
             return False
 
         tcp_comm_cloud_ip_port1 = self.config.tcp_comm_cloud_ip_port[0]
@@ -149,24 +154,25 @@ class LwdCommunicationManager:
 
         if not tcp_comm_cloud_ip_port1.isdigit() or not tcp_comm_cloud_ip_port2.isdigit():
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "the layerwiseDisaggregatedCrtlPort is not a number."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "the layerwiseDisaggregatedCrtlPort is not a number."
+            )
             return False
 
-        if not LwdCommunicationManager.is_valid_port(int(tcp_comm_cloud_ip_port1)) or \
-            not LwdCommunicationManager.is_valid_port(int(tcp_comm_cloud_ip_port2)):
+        if not LwdCommunicationManager.is_valid_port(
+            int(tcp_comm_cloud_ip_port1)
+        ) or not LwdCommunicationManager.is_valid_port(int(tcp_comm_cloud_ip_port2)):
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "the TCP port is not within the range of 1024 to 65535."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "the TCP port is not within the range of 1024 to 65535."
+            )
             return False
 
         if not LwdCommunicationManager.is_valid_port(int(self.config.hccl_comm_edge_ip_port)):
             logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "the HCCL port is not within the range of 1024 to 65535."
-                        )
+                "[layerwiseDisaggregated] The configuration is invalid because "
+                "the HCCL port is not within the range of 1024 to 65535."
+            )
             return False
 
         self.config.tcp_comm_cloud_ip_port = "[" + tcp_comm_cloud_ip_port1 + ", " + tcp_comm_cloud_ip_port2 + "]"
@@ -176,26 +182,29 @@ class LwdCommunicationManager:
 
         if self.config.multi_nodes_infer_enabled:
             if len(self.config.cloud_ip_addresses) < 2:
-                logger.error("[layerwiseDisaggregated] The configuration is invalid because " \
-                            "the layerwiseDisaggregatedSlaveIpAddress is a single ip address."
-                            )
+                logger.error(
+                    "[layerwiseDisaggregated] The configuration is invalid because "
+                    "the layerwiseDisaggregatedSlaveIpAddress is a single ip address."
+                )
                 return False
             if self.config.role_type == ROLE_SLAVE and self.config.multi_nodes_is_master is None:
-                logger.error("[layerwiseDisaggregated] The configuration is invalid because " \
-                            "the layerwiseDisaggregatedMultiNodesIsMaster is not a number."
-                            )
+                logger.error(
+                    "[layerwiseDisaggregated] The configuration is invalid because "
+                    "the layerwiseDisaggregatedMultiNodesIsMaster is not a number."
+                )
                 return False
             if self.config.role_type == ROLE_SLAVE and self.config.multi_nodes_ctrl_port is None:
-                logger.error("[layerwiseDisaggregated] The configuration is invalid because " \
-                            "the layerwiseDisaggregatedMultiNodesCtrlPort is not a number."
-                            )
+                logger.error(
+                    "[layerwiseDisaggregated] The configuration is invalid because "
+                    "the layerwiseDisaggregatedMultiNodesCtrlPort is not a number."
+                )
                 return False
 
             if not LwdCommunicationManager.is_valid_port(int(self.config.multi_nodes_ctrl_port)):
                 logger.error(
-                        "[layerwiseDisaggregated] The configuration is invalid because " \
-                        "the TCP port is not within the range of 1024 to 65535."
-                        )
+                    "[layerwiseDisaggregated] The configuration is invalid because "
+                    "the TCP port is not within the range of 1024 to 65535."
+                )
                 return False
         return True
 
@@ -220,17 +229,16 @@ class LwdCommunicationManager:
 
         hbm_capacity = get_npu_hbm_info().get_hbm_capacity()
         soc_name = get_npu_node_info().soc_name
-        npu_smi_info = {
-            "hbm_capacity": hbm_capacity,
-            "soc_name": soc_name
-        }
+        npu_smi_info = {"hbm_capacity": hbm_capacity, "soc_name": soc_name}
         self.ctrl_comm.npu_smi_info_sync(npu_smi_info)
         if not self.ctrl_comm.npu_smi_info_sync_is_done():
             logger.error("[layerwiseDisaggregated] npu-smi information synchronize incomplete")
             return False
 
-        logger.info(f"[layerwiseDisaggregated] rank {self.config.rank} edge_npu_smi_info"
-                    f" {self.ctrl_comm.edge_npu_smi_info} cloud_npu_smi_info {self.ctrl_comm.cloud_npu_smi_info}")
+        logger.info(
+            f"[layerwiseDisaggregated] rank {self.config.rank} edge_npu_smi_info"
+            f" {self.ctrl_comm.edge_npu_smi_info} cloud_npu_smi_info {self.ctrl_comm.cloud_npu_smi_info}"
+        )
 
         return True
 
@@ -244,11 +252,11 @@ class LwdCommunicationManager:
         server_ip = self.config.cloud_ip_addresses[0]
         if self.config.multi_nodes_infer_enabled:
             multi_nodes_infer_args = {
-                'is_master': self.config.multi_nodes_is_master,
-                'cloud_ctrl_port': self.config.multi_nodes_ctrl_port,
-                'cloud_ctrl_address': self.config.cloud_ip_addresses[0],
-                'comm_group_size': self.config.comm_group_size,
-                'max_input_len': self.config.max_input_len,
+                "is_master": self.config.multi_nodes_is_master,
+                "cloud_ctrl_port": self.config.multi_nodes_ctrl_port,
+                "cloud_ctrl_address": self.config.cloud_ip_addresses[0],
+                "comm_group_size": self.config.comm_group_size,
+                "max_input_len": self.config.max_input_len,
             }
             if self.config.role_type == ROLE_MASTER:
                 if self.config.rank < self.config.comm_group_size:
@@ -256,12 +264,18 @@ class LwdCommunicationManager:
             else:
                 if not self.config.multi_nodes_is_master:
                     server_ip = self.config.cloud_ip_addresses[1]
-        self.ctrl_comm.init_tcp_link(rank=self.config.rank, role=self.config.role_type,
-                                     server_ip=server_ip, server_port=self.config.tcp_comm_cloud_ip_port,
-                                     multi_nodes_infer_args=multi_nodes_infer_args)
+        self.ctrl_comm.init_tcp_link(
+            rank=self.config.rank,
+            role=self.config.role_type,
+            server_ip=server_ip,
+            server_port=self.config.tcp_comm_cloud_ip_port,
+            multi_nodes_infer_args=multi_nodes_infer_args,
+        )
         if not self.ctrl_comm.is_edge_cloud_ctrl_comm_success():
-            logger.error("[layerwiseDisaggregated] The tcp connection of LayerwiseDisaggregated is fail, " \
-                        f"ip={self.config.edge_ip_address} port={self.config.tcp_comm_cloud_ip_port}.")
+            logger.error(
+                "[layerwiseDisaggregated] The tcp connection of LayerwiseDisaggregated is fail, "
+                f"ip={self.config.edge_ip_address} port={self.config.tcp_comm_cloud_ip_port}."
+            )
             return False
 
         if not self.ctrl_comm_sync_npu_smi_info():
@@ -282,20 +296,20 @@ class LwdCommunicationManager:
 
     def parse(self, model_config: DmiConfig):
         self.config.role_type = model_config.parse("layerwiseDisaggregatedRoleType", required=False, default_value=None)
-        self.config.edge_ip_address = model_config.parse("layerwiseDisaggregatedMasterIpAddress", \
-                                                required=False)
-        self.config.cloud_ip_addresses = model_config.parse_list("layerwiseDisaggregatedSlaveIpAddress", \
-                                                required=False)
-        self.config.hccl_comm_edge_ip_port = model_config.parse("layerwiseDisaggregatedDataPort", \
-                                                required=False)
-        self.config.tcp_comm_cloud_ip_port = model_config.parse_list("layerwiseDisaggregatedCrtlPort", \
-                                                required=False)
-        self.config.multi_nodes_infer_enabled = model_config.parse("layerwiseDisaggregatedMultiNodesInferEnabled", \
-                                                required=False, default_value='false') == 'true'
-        self.config.multi_nodes_ctrl_port = model_config.parse("layerwiseDisaggregatedMultiNodesCtrlPort", \
-                                                required=False)
-        self.config.multi_nodes_is_master = model_config.parse("lwd_multi_nodes_is_master", required=False, \
-                                                default_value='false') == 'true'
+        self.config.edge_ip_address = model_config.parse("layerwiseDisaggregatedMasterIpAddress", required=False)
+        self.config.cloud_ip_addresses = model_config.parse_list("layerwiseDisaggregatedSlaveIpAddress", required=False)
+        self.config.hccl_comm_edge_ip_port = model_config.parse("layerwiseDisaggregatedDataPort", required=False)
+        self.config.tcp_comm_cloud_ip_port = model_config.parse_list("layerwiseDisaggregatedCrtlPort", required=False)
+        self.config.multi_nodes_infer_enabled = (
+            model_config.parse("layerwiseDisaggregatedMultiNodesInferEnabled", required=False, default_value="false")
+            == "true"
+        )
+        self.config.multi_nodes_ctrl_port = model_config.parse(
+            "layerwiseDisaggregatedMultiNodesCtrlPort", required=False
+        )
+        self.config.multi_nodes_is_master = (
+            model_config.parse("lwd_multi_nodes_is_master", required=False, default_value="false") == "true"
+        )
         self.config.rank = model_config.local_rank
         self.config.npu_device_id = model_config.npu_device_id
         if model_config.dp_size > 1 and model_config.cp_size > 1:
@@ -305,15 +319,22 @@ class LwdCommunicationManager:
 
     def lwd_ranktable_parse_check_proc(self, lwd_rank_table) -> bool:
         if SERVER_LIST not in lwd_rank_table or SERVER_COUNT not in lwd_rank_table:
-            logger.error("[layerwiseDisaggregated] The lwd_rank_table_file is missing configuration item " \
-                         "(%s or %s).", SERVER_LIST, SERVER_COUNT)
+            logger.error(
+                "[layerwiseDisaggregated] The lwd_rank_table_file is missing configuration item (%s or %s).",
+                SERVER_LIST,
+                SERVER_COUNT,
+            )
             return False
 
         server_list = lwd_rank_table[SERVER_LIST]
         server_count = int(lwd_rank_table[SERVER_COUNT])
         if int(lwd_rank_table[SERVER_COUNT]) != len(server_list):
-            logger.error("[layerwiseDisaggregated] The lwd_rank_table_file contains incorrect configuration item, " \
-                         "server_list contains %d servers, server_count is %d.", len(server_list), server_count)
+            logger.error(
+                "[layerwiseDisaggregated] The lwd_rank_table_file contains incorrect configuration item, "
+                "server_list contains %d servers, server_count is %d.",
+                len(server_list),
+                server_count,
+            )
             return False
 
         device_num_list = []
@@ -334,24 +355,28 @@ class LwdCommunicationManager:
                     self.config.npu_net_host = True if self.config.role_type == ROLE_MASTER else False
                     self.config.npu_smi_info_sync = True
             if len(device_net_pos_set) != 1:
-                logger.error("[layerwiseDisaggregated] The configuration of net_position for device " \
-                            "in lwd_rank_table_file is incorrect.")
+                logger.error(
+                    "[layerwiseDisaggregated] The configuration of net_position for device "
+                    "in lwd_rank_table_file is incorrect."
+                )
                 return False
 
         if device_num_list[-1] != self.config.npu_edge_num:
-            logger.error("[layerwiseDisaggregated] The master configuration in the lwd_rank_table_file " \
-                         "should be placed after the slave configuration.")
+            logger.error(
+                "[layerwiseDisaggregated] The master configuration in the lwd_rank_table_file "
+                "should be placed after the slave configuration."
+            )
             return False
 
         return True
 
     def lwd_ranktable_parse_check(self) -> bool:
-        lwd_rank_table_file = os.environ.get('LAYERWISE_DISAGGREGATED_RANK_TABLE_FILE')
+        lwd_rank_table_file = os.environ.get("LAYERWISE_DISAGGREGATED_RANK_TABLE_FILE")
         if lwd_rank_table_file is None:
             return True
 
         try:
-            with safe_open(lwd_rank_table_file, 'r', encoding='utf-8') as f:
+            with safe_open(lwd_rank_table_file, "r", encoding="utf-8") as f:
                 lwd_rank_table = json.load(f)
         except FileNotFoundError as e:
             logger.error("[layerwiseDisaggregated] %s", lwd_rank_table_file, e)
@@ -368,18 +393,19 @@ class LwdCommunicationManager:
         ret2 = self.lwd_ranktable_parse_check()
         if ret1 and ret2:
             comm_args = {
-                'edge_ip_address': self.config.edge_ip_address,
-                'cloud_ip_address': self.config.cloud_ip_addresses,
-                'edge_npu_num': self.config.npu_edge_num,
-                'cloud_npu_num': self.config.npu_cloud_num,
-                'data_port': self.config.hccl_comm_edge_ip_port,
-                'multi_nodes_ctrl_port': self.config.multi_nodes_ctrl_port,
-                'multi_nodes_infer_enabled': self.config.multi_nodes_infer_enabled,
-                'multi_nodes_is_master': self.config.multi_nodes_is_master,
-                'comm_group_size': self.config.comm_group_size,
-                'max_input_len': self.config.max_input_len,
-                'npu_net_host': self.config.npu_net_host}
-            model_config.model_config['lwd_comm_args'] = comm_args
+                "edge_ip_address": self.config.edge_ip_address,
+                "cloud_ip_address": self.config.cloud_ip_addresses,
+                "edge_npu_num": self.config.npu_edge_num,
+                "cloud_npu_num": self.config.npu_cloud_num,
+                "data_port": self.config.hccl_comm_edge_ip_port,
+                "multi_nodes_ctrl_port": self.config.multi_nodes_ctrl_port,
+                "multi_nodes_infer_enabled": self.config.multi_nodes_infer_enabled,
+                "multi_nodes_is_master": self.config.multi_nodes_is_master,
+                "comm_group_size": self.config.comm_group_size,
+                "max_input_len": self.config.max_input_len,
+                "npu_net_host": self.config.npu_net_host,
+            }
+            model_config.model_config["lwd_comm_args"] = comm_args
             return True
         else:
             return False
@@ -391,6 +417,7 @@ class LwdCommunicationManager:
             initialize_result["status"] = "error"
 
         logger.info(
-                    "[layerwiseDisaggregated] global rank:%s: return initialize success " \
-                    "result: %s", self.config.rank, initialize_result
-                    )
+            "[layerwiseDisaggregated] global rank:%s: return initialize success result: %s",
+            self.config.rank,
+            initialize_result,
+        )

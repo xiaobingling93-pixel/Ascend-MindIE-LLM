@@ -10,17 +10,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <cmath>
-#include "policy/seq_group_collection.h"
-#include "dataclass/metric.h"
 #include "latency_stage_policy.h"
+
+#include <cmath>
+
+#include "dataclass/metric.h"
+#include "policy/seq_group_collection.h"
 
 namespace mindie_llm {
 LatencyStagePolicy::LatencyStagePolicy(const SchedulerConfigSPtr schedulerConfig,
                                        std::shared_ptr<LatencyPredictor> predictor,
                                        std::shared_ptr<BlockSpaceManager> blockManager)
-    : schedulerConfig_(schedulerConfig), predictor_(predictor), blockManager_(blockManager)
-{
+    : schedulerConfig_(schedulerConfig), predictor_(predictor), blockManager_(blockManager) {
     counter_ = std::make_unique<QueueCounter>(schedulerConfig_, blockManager_);
     stageDeadlines_[ForwardMode::PREFILL] = schedulerConfig_->prefillExpectedTime;
     stageDeadlines_[ForwardMode::DECODE] = schedulerConfig_->decodeExpectedTime;
@@ -28,8 +29,7 @@ LatencyStagePolicy::LatencyStagePolicy(const SchedulerConfigSPtr schedulerConfig
 
 PDPriorityType LatencyStagePolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting,
                                          ConcurrentDeque<SequenceGroupSPtr> &running,
-                                         ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                         ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     if (running.Empty()) {
         return PDPriorityType::PREFILL_FIRST;
     } else if (waiting.Empty()) {
@@ -39,7 +39,7 @@ PDPriorityType LatencyStagePolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &wai
         MINDIE_LLM_LOG_DEBUG("[LatencyStagePolicy] maxPrefillBatchSize is zero, Selected priority: DECODE_FIRST");
         return PDPriorityType::DECODE_FIRST;
     }
-    UpdateCounter(waiting, running, swapped); // 更新Latency policy需要的参数
+    UpdateCounter(waiting, running, swapped);  // 更新Latency policy需要的参数
     auto prefillDeadline = static_cast<float>(stageDeadlines_[ForwardMode::PREFILL]);
     auto prefillProcCostTime = GetExpectProcessTime(ForwardMode::PREFILL);
     auto prefillProcWaitTime = prefillCounter_->firstSeqWaitTime;
@@ -62,8 +62,7 @@ PDPriorityType LatencyStagePolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &wai
     return priority;
 }
 
-float LatencyStagePolicy::GetExpectProcessTime(ForwardMode stage)
-{
+float LatencyStagePolicy::GetExpectProcessTime(ForwardMode stage) {
     float costTime = 0;
     if (stage == ForwardMode::DECODE) {
         // the number of tokens to compute equals to batch size when decode stage
@@ -80,8 +79,7 @@ float LatencyStagePolicy::GetExpectProcessTime(ForwardMode stage)
     return costTime;
 }
 
-float LatencyStagePolicy::CalStageLaxity(float deadline, float processCostTime, float stageWaitTime) const
-{
+float LatencyStagePolicy::CalStageLaxity(float deadline, float processCostTime, float stageWaitTime) const {
     if (std::fabs(deadline) < 1e-6f) {
         MINDIE_LLM_LOG_DEBUG("deadline is zero");
         return 0;
@@ -90,14 +88,12 @@ float LatencyStagePolicy::CalStageLaxity(float deadline, float processCostTime, 
     return laxity;
 }
 
-void LatencyStagePolicy::UpdatePrefillCounter(ConcurrentDeque<SequenceGroupSPtr> &waiting)
-{
+void LatencyStagePolicy::UpdatePrefillCounter(ConcurrentDeque<SequenceGroupSPtr> &waiting) {
     prefillCounter_ = counter_->Count(waiting, SequenceStatus::WAITING);
 }
 
 void LatencyStagePolicy::UpdateDecodeCounter(ConcurrentDeque<SequenceGroupSPtr> &running,
-                                             ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                             ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     auto runningResult = counter_->Count(running, SequenceStatus::RUNNING);
     auto swappedResult = counter_->Count(swapped, SequenceStatus::SWAPPED);
 
@@ -113,8 +109,7 @@ void LatencyStagePolicy::UpdateDecodeCounter(ConcurrentDeque<SequenceGroupSPtr> 
 
 void LatencyStagePolicy::UpdateCounter(ConcurrentDeque<SequenceGroupSPtr> &waiting,
                                        ConcurrentDeque<SequenceGroupSPtr> &running,
-                                       ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                       ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     // 更新prefill计数器（仅waiting队列）
     UpdatePrefillCounter(waiting);
 
@@ -123,4 +118,4 @@ void LatencyStagePolicy::UpdateCounter(ConcurrentDeque<SequenceGroupSPtr> &waiti
 
     MINDIE_LLM_LOG_DEBUG("prefillCounter_:" << *prefillCounter_ << "decodeCounter_:" << *decodeCounter_);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -13,14 +13,13 @@
 
 #include "log.h"
 #include "math_utils.h"
-#include "request_response/request_id.h"
 #include "msServiceProfiler/msServiceProfiler.h"
+#include "request_response/request_id.h"
 
 using namespace std::chrono;
 
 namespace mindie_llm {
-void RunningOutputs::Clear()
-{
+void RunningOutputs::Clear() {
     blocksToSwapOut_.clear();
     blocksToCopy_.clear();
     decodeSeqGroups_.clear();
@@ -33,20 +32,20 @@ void RunningOutputs::Clear()
 }
 
 FcfsPolicy::FcfsPolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockSpaceManagerSPtr &blockManager)
-    : policyHelper_(schedulerConfig, blockManager), schedulerConfig_(schedulerConfig), blockManager_(blockManager)
-{
-}
+    : policyHelper_(schedulerConfig, blockManager), schedulerConfig_(schedulerConfig), blockManager_(blockManager) {}
 
-PolicyOutput FcfsPolicy::Apply(SchedulingBudget &budget, ISeqGroupCollectionSPtr &collection)
-{
+PolicyOutput FcfsPolicy::Apply(SchedulingBudget &budget, ISeqGroupCollectionSPtr &collection) {
     // 1. preprocess collection
     PreprocessCollection(collection);
 
     // 2. schedule according to pdPriorityType
     switch (collection->pdPriorityType_) {
-        case PDPriorityType::PREFILL_FIRST: return SchedulePrefill(budget);
-        case PDPriorityType::DECODE_FIRST: return ScheduleDecode(budget);
-        case PDPriorityType::MIX: return ScheduleChunkedPrefill(budget);
+        case PDPriorityType::PREFILL_FIRST:
+            return SchedulePrefill(budget);
+        case PDPriorityType::DECODE_FIRST:
+            return ScheduleDecode(budget);
+        case PDPriorityType::MIX:
+            return ScheduleChunkedPrefill(budget);
         default:
             throw std::runtime_error("the pdPriorityType is not supported. pdPriorityType = " +
                                      std::to_string(static_cast<uint8_t>(collection->pdPriorityType_)));
@@ -55,8 +54,7 @@ PolicyOutput FcfsPolicy::Apply(SchedulingBudget &budget, ISeqGroupCollectionSPtr
 
 void FcfsPolicy::PreprocessCollection(const ISeqGroupCollectionSPtr &collection) { queuesCollection_ = collection; }
 
-PolicyOutput FcfsPolicy::SchedulePrefill(SchedulingBudget &budget)
-{
+PolicyOutput FcfsPolicy::SchedulePrefill(SchedulingBudget &budget) {
     PrefillOutputs prefillOut;
     RunningOutputs runningOut;
     SwappedInOutputs swappedInOut;
@@ -70,8 +68,7 @@ PolicyOutput FcfsPolicy::SchedulePrefill(SchedulingBudget &budget)
     return BuildPolicyOutput(prefillOut, runningOut, swappedInOut, budget);
 }
 
-PolicyOutput FcfsPolicy::ScheduleDecode(SchedulingBudget &budget)
-{
+PolicyOutput FcfsPolicy::ScheduleDecode(SchedulingBudget &budget) {
     PrefillOutputs prefillOut;
     RunningOutputs runningOut;
     SwappedInOutputs swappedInOut;
@@ -92,8 +89,7 @@ PolicyOutput FcfsPolicy::ScheduleDecode(SchedulingBudget &budget)
     return BuildPolicyOutput(prefillOut, runningOut, swappedInOut, budget);
 }
 
-PolicyOutput FcfsPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget)
-{
+PolicyOutput FcfsPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget) {
     PrefillOutputs prefillOut;
     RunningOutputs runningOut;
     SwappedInOutputs swappedInOut;
@@ -116,8 +112,7 @@ PolicyOutput FcfsPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget)
 }
 
 PolicyOutput FcfsPolicy::BuildPolicyOutput(PrefillOutputs &prefillOut, RunningOutputs &runningOut,
-                                           SwappedInOutputs &swappedInOut, SchedulingBudget &budget) const
-{
+                                           SwappedInOutputs &swappedInOut, SchedulingBudget &budget) const {
     PolicyOutput policyOut;
 
     // leftovers in policy input collection should be withdrawn
@@ -168,8 +163,7 @@ PolicyOutput FcfsPolicy::BuildPolicyOutput(PrefillOutputs &prefillOut, RunningOu
     return policyOut;
 }
 
-PrefillOutputs FcfsPolicy::ApplyToWaitingQueue(SchedulingBudget &budget, const bool enableChunking)
-{
+PrefillOutputs FcfsPolicy::ApplyToWaitingQueue(SchedulingBudget &budget, const bool enableChunking) {
     std::vector<SequenceGroupSPtr> ignoredSeqGroups;
     std::vector<std::shared_ptr<ScheduledSequenceGroup>> seqGroups;
     std::deque<SequenceGroupSPtr> leftOverSeqGroups;
@@ -177,7 +171,8 @@ PrefillOutputs FcfsPolicy::ApplyToWaitingQueue(SchedulingBudget &budget, const b
     while (!queuesCollection_->waiting_.empty()) {
         SequenceGroupSPtr seqGroup = queuesCollection_->waiting_.front();
         if (CeilDiv(static_cast<uint32_t>(seqGroup->firstSeq->GetLen()), schedulerConfig_->cacheBlockSize) ==
-            blockManager_->GetNumFreeNpuBlocks() && seqGroup->firstSeq->data_.outputTokenIds.size() > 0) {
+                blockManager_->GetNumFreeNpuBlocks() &&
+            seqGroup->firstSeq->data_.outputTokenIds.size() > 0) {
             break;
         }
         std::vector<SequenceSPtr> waitingSeqs = seqGroup->GetFirstSequence(SequenceStatus::WAITING);
@@ -212,13 +207,14 @@ PrefillOutputs FcfsPolicy::ApplyToWaitingQueue(SchedulingBudget &budget, const b
         if (canAllocate == AllocStatus::LATER) {
             // Allow new requests to preempt the current queue based on the configured maximum first token wait time.
             auto currentTime = std::chrono::high_resolution_clock::now();
-            size_t reqArriveTime = static_cast<size_t>(duration_cast<milliseconds>(currentTime -
-                seqGroup->arriveTime).count());
+            size_t reqArriveTime =
+                static_cast<size_t>(duration_cast<milliseconds>(currentTime - seqGroup->arriveTime).count());
             size_t maxFirstTokenWaitTime = schedulerConfig_->maxFirstTokenWaitTime;
             if (seqGroup->firstSeq->data_.outputTokenIds.size() == 0 && reqArriveTime > maxFirstTokenWaitTime) {
-                MINDIE_LLM_LOG_DEBUG_REQUEST("Request(requestId: " << seqGroup->metrics_.inferReqId_
-                    << ") exceeded first token wait time (" << reqArriveTime << " > " << maxFirstTokenWaitTime
-                    << ", preempting current request, Only effective in the PD mix scenario.");
+                MINDIE_LLM_LOG_DEBUG_REQUEST("Request(requestId: "
+                                             << seqGroup->metrics_.inferReqId_ << ") exceeded first token wait time ("
+                                             << reqArriveTime << " > " << maxFirstTokenWaitTime
+                                             << ", preempting current request, Only effective in the PD mix scenario.");
                 newRequestFirst_ = true;
             }
             break;
@@ -262,8 +258,7 @@ PrefillOutputs FcfsPolicy::ApplyToWaitingQueue(SchedulingBudget &budget, const b
  * beam search 新增加的采样选择seqgrp 分配block空间，TBC:不占用budget是否合理？
  */
 bool FcfsPolicy::AllocBlocks4ParallelSeqGrp(SequenceGroupSPtr seqGroup,
-                                            std::vector<std::pair<BlockId, BlockId>> &blockToCopy)
-{
+                                            std::vector<std::pair<BlockId, BlockId>> &blockToCopy) {
     if (!seqGroup->sampling->enableParallelSampling) {
         return true;
     }
@@ -286,7 +281,7 @@ bool FcfsPolicy::AllocBlocks4ParallelSeqGrp(SequenceGroupSPtr seqGroup,
             // 为需要更新的 seq 重新分配 block 空间
             auto canAllocate = blockManager_->CanAllocate(seqGrpSPtr);
             if (canAllocate == AllocStatus::LATER) {
-                return false; // fcfs
+                return false;  // fcfs
             } else if (canAllocate == AllocStatus::NEVER) {
                 throw std::runtime_error("Beam search sequence too long.");
             }
@@ -321,15 +316,13 @@ bool FcfsPolicy::AllocBlocks4ParallelSeqGrp(SequenceGroupSPtr seqGroup,
 }
 
 void FcfsPolicy::ScheduleRunningSeqGroup(const SequenceGroupSPtr &seqGroup, size_t numUncachedNewTokens,
-                                         bool enableChunking, RunningOutputs &runningOutput, SchedulingBudget &budget)
-{
+                                         bool enableChunking, RunningOutputs &runningOutput, SchedulingBudget &budget) {
     bool isSimulateInferenceSeq = seqGroup->IsSimulateRequest();
     if (!isSimulateInferenceSeq) {
         policyHelper_.AppendSlots(seqGroup, runningOutput.blocksToCopy_);
     }
 
-    auto scheduledSeqGroup =
-        std::make_shared<ScheduledSequenceGroup>(seqGroup, numUncachedNewTokens, enableChunking);
+    auto scheduledSeqGroup = std::make_shared<ScheduledSequenceGroup>(seqGroup, numUncachedNewTokens, enableChunking);
     if (seqGroup->IsPrefill()) {
         scheduledSeqGroup->tokenChunkSize_ = numUncachedNewTokens;
         runningOutput.chunkedPrefillSeqGroups_.emplace_back(scheduledSeqGroup);
@@ -344,8 +337,7 @@ void FcfsPolicy::ScheduleRunningSeqGroup(const SequenceGroupSPtr &seqGroup, size
     budget.AddNumSeqs(seqGroup->requestId, seqGroup->GetMaxNumRunningSeqs());
 }
 
-void FcfsPolicy::UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup)
-{
+void FcfsPolicy::UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup) {
     std::vector<TokenId> &earlyStoppingIds = schedulerConfig_->earlyStoppingIds;
     std::vector<SequenceSPtr> runningSeqs = seqGroup->GetSequences(SequenceStatus::RUNNING);
     for (auto &seq : runningSeqs) {
@@ -354,7 +346,7 @@ void FcfsPolicy::UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup)
         }
         std::vector<TokenId> &outputTokenIds = seq->data_.outputTokenIds;
         auto it = std::find_if(outputTokenIds.rbegin(), outputTokenIds.rend(),
-            [](int val) { return val != PLACEHOLDER_TOKEN; });
+                               [](int val) { return val != PLACEHOLDER_TOKEN; });
         outputTokenIds.erase(it.base(), outputTokenIds.end());
         outputTokenIds.insert(outputTokenIds.end(), earlyStoppingIds.begin(), earlyStoppingIds.end());
     }
@@ -365,8 +357,7 @@ void FcfsPolicy::UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup)
     PreemptByRecompute(seqGroup);
 }
 
-RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const bool enableChunking)
-{
+RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const bool enableChunking) {
     RunningOutputs runningOutput;
     size_t swapNum = 0;
 
@@ -384,7 +375,7 @@ RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const b
         bool isSimulateInferenceSeq = seqGroup->IsSimulateRequest();
         // 是否需要抢占分两种情况：1. beamsearch请求新的seq是否可以alloc 2. 其他seq是否可以append
         while (!isSimulateInferenceSeq && (!AllocBlocks4ParallelSeqGrp(seqGroup, runningOutput.blocksToCopy_) ||
-               !policyHelper_.CanAppendSlots(seqGroup) || newRequestFirst_)) {
+                                           !policyHelper_.CanAppendSlots(seqGroup) || newRequestFirst_)) {
             // 2. try to pop back seqgroup of running queue to preempt
             SequenceGroupSPtr victmSeqGroup;
             if (!queuesCollection_->running_.empty()) {
@@ -411,8 +402,8 @@ RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const b
 
         // 4. append slot and update budget
         if (canAppend) {
-            if (seqGroup != nullptr && seqGroup->enableThinking_ && seqGroup->thinkingBudget_ > 0
-                && seqGroup->exceededThinkingbudget_) {
+            if (seqGroup != nullptr && seqGroup->enableThinking_ && seqGroup->thinkingBudget_ > 0 &&
+                seqGroup->exceededThinkingbudget_) {
                 UpdateStatusForRecompute(seqGroup);
                 runningOutput.preempted_.emplace_back(seqGroup);
                 continue;
@@ -424,8 +415,7 @@ RunningOutputs FcfsPolicy::ApplyToRunningQueue(SchedulingBudget &budget, const b
     return runningOutput;
 }
 
-SwappedInOutputs FcfsPolicy::ApplyToSwappedQueue(SchedulingBudget &budget, const bool enableChunking)
-{
+SwappedInOutputs FcfsPolicy::ApplyToSwappedQueue(SchedulingBudget &budget, const bool enableChunking) {
     SwappedInOutputs outputs;
 
     while (!queuesCollection_->swapped_.empty()) {
@@ -476,9 +466,7 @@ SwappedInOutputs FcfsPolicy::ApplyToSwappedQueue(SchedulingBudget &budget, const
 }
 
 PreemptionMode FcfsPolicy::Preempt(SequenceGroupSPtr &seqGroup,
-                                   std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut,
-                                   size_t &swapNum)
-{
+                                   std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut, size_t &swapNum) {
     PreemptionMode preemptionMode = PreemptionMode::RECOMPUTE;
     if (swapNum < schedulerConfig_->maxPreemptCount && policyHelper_.CanSwapOut(seqGroup)) {
         preemptionMode = PreemptionMode::SWAP;
@@ -486,17 +474,16 @@ PreemptionMode FcfsPolicy::Preempt(SequenceGroupSPtr &seqGroup,
     }
 
     MINDIE_LLM_LOG_INFO_REQUEST("Preemption is triggered. CumulativePreemptionNum:"
-                                << (numCumulativePreemption_ + 1)
-                                << "; seqId: " << seqGroup->firstSeq->seqId_
+                                << (numCumulativePreemption_ + 1) << "; seqId: " << seqGroup->firstSeq->seqId_
                                 << "; requestId: " << seqGroup->metrics_.inferReqId_
-                                << "; preempt mode:" << static_cast<int>(preemptionMode)
-                                << "; maxPreemptCount config:" << schedulerConfig_->maxPreemptCount
-                                << "; swapNum:" << swapNum);
+                                << "; preempt mode:" << static_cast<int>(preemptionMode) << "; maxPreemptCount config:"
+                                << schedulerConfig_->maxPreemptCount << "; swapNum:" << swapNum);
     numCumulativePreemption_ += 1;
 
     if (newRequestFirst_) {
-        MINDIE_LLM_LOG_WARN_REQUEST("Preemption is triggered to ensure that some requests with long waiting time "
-                                    "can be scheduled with priority.");
+        MINDIE_LLM_LOG_WARN_REQUEST(
+            "Preemption is triggered to ensure that some requests with long waiting time "
+            "can be scheduled with priority.");
     }
 
     // do preempt
@@ -509,8 +496,7 @@ PreemptionMode FcfsPolicy::Preempt(SequenceGroupSPtr &seqGroup,
     return preemptionMode;
 }
 
-void FcfsPolicy::PreemptByRecompute(const SequenceGroupSPtr &seqGroup)
-{
+void FcfsPolicy::PreemptByRecompute(const SequenceGroupSPtr &seqGroup) {
     std::vector<SequenceSPtr> seqs = seqGroup->GetSequences(SequenceStatus::RUNNING);
     if (!seqGroup->sampling->enableParallelSampling && seqs.size() != 1) {
         throw std::runtime_error("the size of seqs must be 1.");
@@ -523,15 +509,13 @@ void FcfsPolicy::PreemptByRecompute(const SequenceGroupSPtr &seqGroup)
     }
 }
 
-void FcfsPolicy::PreemptBySwap(SequenceGroupSPtr &seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut)
-{
+void FcfsPolicy::PreemptBySwap(SequenceGroupSPtr &seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut) {
     policyHelper_.SwapOut(seqGroup, blockToSwapOut);
 }
 
-void FcfsPolicy::WithdrawLeftovers(std::deque<SequenceGroupSPtr> &dst, const std::deque<SequenceGroupSPtr> &src)
-{
+void FcfsPolicy::WithdrawLeftovers(std::deque<SequenceGroupSPtr> &dst, const std::deque<SequenceGroupSPtr> &src) {
     for (auto &seqGroup : src) {
         dst.push_back(seqGroup);
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

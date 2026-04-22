@@ -11,14 +11,13 @@
  */
 #include "safe_envvar.h"
 
-#include <mutex>
-
 #include <Python.h>
+
+#include <mutex>
 
 namespace mindie_llm {
 
-static std::string GetSitePackagesPath()
-{
+static std::string GetSitePackagesPath() {
     PyGILState_STATE gil = PyGILState_Ensure();
     std::string result;
     PyObject* site_module = PyImport_ImportModule("site");
@@ -44,43 +43,35 @@ static std::string GetSitePackagesPath()
     return result;
 }
 
-const std::string& GetDefaultMindIELLMHomePath()
-{
+const std::string& GetDefaultMindIELLMHomePath() {
     static std::string path;
     static std::once_flag once;
-    std::call_once(once, [] {
-        path = GetSitePackagesPath() + "/mindie_llm/";
-    });
+    std::call_once(once, [] { path = GetSitePackagesPath() + "/mindie_llm/"; });
     return path;
 }
 
-EnvVar& EnvVar::GetInstance()
-{
+EnvVar& EnvVar::GetInstance() {
     static EnvVar instance;
     return instance;
 }
 
-Result EnvVar::Set(const char *key, const std::string& value, bool overwrite) const
-{
+Result EnvVar::Set(const char* key, const std::string& value, bool overwrite) const {
     if (!key || value.empty()) {
         return Result::Error(ResultCode::NONE_ARGUMENT,
-            "Environment variable key is null or value is an empty string.");
+                             "Environment variable key is null or value is an empty string.");
     }
     int ret = setenv(key, value.c_str(), overwrite ? 1 : 0);
     if (ret != 0) {
-        return Result::Error(
-            ResultCode::IO_FAILURE,
-            "Failed to set environment variable, errno: " + std::to_string(errno) + " for key: " + std::string(key)
-        );
+        return Result::Error(ResultCode::IO_FAILURE, "Failed to set environment variable, errno: " +
+                                                         std::to_string(errno) + " for key: " + std::string(key));
     }
     return Result::OK();
 }
 
-Result EnvVar::Get(const char *key, const std::string& defaultValue, std::string& outValue) const
-{
+Result EnvVar::Get(const char* key, const std::string& defaultValue, std::string& outValue) const {
     if (!key || defaultValue.empty()) {
         return Result::Error(ResultCode::NONE_ARGUMENT,
-            "Environment variable key is nullptr or default value is empty.");
+                             "Environment variable key is nullptr or default value is empty.");
     }
     try {
         const char* val = std::getenv(key);
@@ -93,4 +84,4 @@ Result EnvVar::Get(const char *key, const std::string& defaultValue, std::string
     return Result::OK();
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

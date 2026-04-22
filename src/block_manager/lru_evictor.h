@@ -12,9 +12,9 @@
 
 #pragma once
 
+#include <limits>
 #include <queue>
 #include <unordered_map>
-#include <limits>
 
 #include "evictor.h"
 
@@ -23,7 +23,7 @@ namespace mindie_llm {
 const int LRU_EVICTOR_CLEANUP_THRESHOLD = 50;
 
 class LRUEvictor : public Evictor {
-public:
+   public:
     bool ContainsBlock(BlockId blockId) const override;
 
     EvictionResult Evict() override;
@@ -36,7 +36,7 @@ public:
 
     size_t GetNumblocks() const override;
 
-private:
+   private:
     struct BlockMetaData {
         BlockId blockId;
         HashValue prefixHash;
@@ -45,12 +45,9 @@ private:
 
         BlockMetaData() {}
         BlockMetaData(BlockId id, HashValue prefixHash, size_t hashedTokensNum, TimeStamp lastAccessed)
-            : blockId(id), prefixHash(prefixHash), hashedTokensNum(hashedTokensNum), lastAccessedTime(lastAccessed)
-        {
-        }
+            : blockId(id), prefixHash(prefixHash), hashedTokensNum(hashedTokensNum), lastAccessedTime(lastAccessed) {}
 
-        bool operator<(const BlockMetaData &other) const
-        {
+        bool operator<(const BlockMetaData &other) const {
             if (std::abs(lastAccessedTime - other.lastAccessedTime) > std::numeric_limits<TimeStamp>::epsilon()) {
                 return lastAccessedTime > other.lastAccessedTime;
             }
@@ -59,12 +56,12 @@ private:
         }
     };
 
-private:
+   private:
     std::unordered_map<BlockId, BlockMetaData> candidates_;
     std::priority_queue<BlockMetaData> priorityQueue_;
 
-private:
+   private:
     void Cleanup();
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

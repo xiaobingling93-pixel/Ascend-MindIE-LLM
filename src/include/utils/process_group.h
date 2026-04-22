@@ -13,16 +13,16 @@
 #ifndef MINDIE_LLM_COLLECTIVE_COMMUNICATION_OPERTATION_H
 #define MINDIE_LLM_COLLECTIVE_COMMUNICATION_OPERTATION_H
 
-#include <memory>
-
 #include <torch/torch.h>
+
+#include <memory>
 #include <torch/csrc/distributed/c10d/ProcessGroupGloo.hpp>
 
 #include "basic_types.h"
 
 namespace mindie_llm {
 class ProcessGroup {
-public:
+   public:
     /**
      * @brief 获取ProcessGroup单例，参数仅在第一次调用时生效，后续使用可以不传递参数
      * @details 该函数是线程安全的，保证在多线程环境下只创建一个ProcessGroup实例
@@ -60,11 +60,11 @@ public:
      */
     void BroadCast(std::vector<torch::Tensor> &tensor);
 
-protected:
+   protected:
     ProcessGroup(const std::string &masterAddr, uint16_t masterPort, const std::string &localAddr, int rank,
                  int worldSize, bool isMaster, int timeoutInSeconds = 120);
 
-private:
+   private:
     std::string masterAddr_;
 
     uint16_t masterPort_;
@@ -81,5 +81,5 @@ private:
 };
 
 std::string GetLocalHostIP(const std::vector<NodeInfo> &nodeInfos, std::vector<std::string> &hostIps);
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

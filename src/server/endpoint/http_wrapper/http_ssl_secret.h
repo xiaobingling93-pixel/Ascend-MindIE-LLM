@@ -13,23 +13,23 @@
 #ifndef MIES_HTTP_SSL_SECRET_H
 #define MIES_HTTP_SSL_SECRET_H
 
-#include <condition_variable>
-#include <thread>
-#include <boost/thread/mutex.hpp>
+#include <boost/chrono.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/condition_variable.hpp>
-#include <boost/chrono.hpp>
+#include <boost/thread/mutex.hpp>
+#include <condition_variable>
+#include <thread>
 
 #include "config_manager.h"
 #include "endpoint_def.h"
 
 namespace mindie_llm {
 class HttpSslSecret {
-public:
+   public:
     void Start();
     void Stop();
 
-private:
+   private:
     void CheckKeyExpiredTask();
 
     boost::mutex mMutex;
@@ -38,6 +38,6 @@ private:
     boost::condition_variable mCond;
     std::thread mCheckExpiredThread;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_HTTP_SSL_SECRET_H
+#endif  // MIES_HTTP_SSL_SECRET_H

@@ -13,14 +13,9 @@
 
 namespace mindie_llm {
 
-bool SchedulerConfig::ChooseV2BlockManager() const
-{
-    return (dpSize == 1) &&
-    (!enablePrefixCache) &&
-    (!enableSplit) &&
-    (spSize == 1) &&
-    (cpSize == 1);
+bool SchedulerConfig::ChooseV2BlockManager() const {
+    return (dpSize == 1) && (!enablePrefixCache) && (!enableSplit) && (spSize == 1) && (cpSize == 1);
 
     // TBC_workFlowTemplateType workFlowModelConfigGamma (!enableAsyncScheduling)
 }
-}
+}  // namespace mindie_llm

@@ -36,8 +36,7 @@ export ATB_MODELS_DIR=$CODE_ROOT
 THIRD_PARTY_DIR=$CODE_ROOT/third_party
 DIST_DIR=$CODE_ROOT/dist
 EGG_INFO_DIR=$CODE_ROOT/atb_llm.egg-info
-PACKAGE_NAME="1.0.RC3"
-MINDIE_ATB_VERSION_FOR_CI="1.0.RC1.B062" # only for ci build
+PACKAGE_NAME=${MINDIE_LLM_VERSION_OVERRIDE:-1.0.0}
 MINDIE_ATB_TAG_BRANCH=master # current MindIE-ATB sourcecode tag/branch for ATB-Models
 ATB_MODELS_VERSION=""
 README_DIR=$ATB_MODELS_DIR
@@ -139,28 +138,6 @@ function fn_build_third_party_for_test()
     cd ..
 }
 
-function fn_build_atb()
-{
-    if [ $ATB_HOME_PATH ]; then
-        echo "MindIE-ATB is ready"
-        return 0
-    fi
-
-    #belows are for ci build
-    if [ "$USE_CXX11_ABI" == "OFF" ]; then
-        abi="abi0"
-    else
-        abi="abi1"
-    fi
-    cd $CODE_ROOT
-    mindie_atb_package="MindIE_ATB/$MINDIE_ATB_VERSION_FOR_CI/Ascend-mindie-atb_${PACKAGE_NAME}_linux-${ARCH}_${abi}.run"
-    chmod 550 ./$mindie_atb_package
-    ./$mindie_atb_package --extract=./MindIE_ATB/latest
-    mv ./MindIE_ATB/latest/set_env.sh ./MindIE_ATB
-    cp ./MindIE_ATB/include/atb/* ./MindIE_ATB/latest/atb/include/atb/
-    source ./MindIE_ATB/set_env.sh
-}
-
 function fn_build_nlohmann_json()
 {
     NLOHMANN_DIR=$THIRD_PARTY_DIR/nlohmannJson/include
@@ -200,7 +177,6 @@ function fn_build_third_party()
 {
     mkdir -p $CACHE_DIR
     cd $CACHE_DIR
-    fn_build_atb
     fn_build_nlohmann_json
     fn_build_spdlog
     cd ..
@@ -237,7 +213,7 @@ function fn_init_pytorch_env()
 
     IS_HIGHER_PTA6=$(nm --dynamic ${PYTORCH_NPU_INSTALL_PATH}/lib/libtorch_npu.so | grep _ZN6at_npu6native17empty_with_formatEN3c108ArrayRefIlEERKNS1_13TensorOptionsElb | wc -l)
     if [ $IS_HIGHER_PTA6 -ge 1 ];then
-        echo "using pta verion after PTA6RC1B010 (6.0.RC1.B010)"
+        echo "using pta version after PTA6RC1B010 (6.0.RC1.B010)"
         COMPILE_OPTIONS="${COMPILE_OPTIONS} -DTORCH_HIGHER_THAN_PTA6=ON"
     else
         echo "using pta version below PTA6RC1B010 (6.0.RC1.B010)"
@@ -359,6 +335,72 @@ EOF
 
 }
 
+function fn_build_for_ci()
+{
+    fn_files_authority_limit
+    cd $OUTPUT_DIR/atb_models
+    rm -rf ./*.tar.gz
+    cp $ATB_MODELS_DIR/dist/atb_llm*.whl .
+    cp -r $ATB_MODELS_DIR/atb_llm .
+    cp -r $ATB_MODELS_DIR/docs .
+    cp $ATB_MODELS_DIR/setup.py .
+    cp -r $ATB_MODELS_DIR/examples .
+    cp -r $ATB_MODELS_DIR/tests .
+    cp -r $ATB_MODELS_DIR/requirements .
+    cp -r $ATB_MODELS_DIR/public_address_statement.md .
+    cp $README_DIR/README.md .
+    fn_build_version_info
+
+
+    torch_vision=$(pip list | grep torch | head  -n 1 | awk '{print $2}' | cut -d '+' -f1)
+    if [ "$USE_CXX11_ABI" == "OFF" ];then
+        abi=0
+    else
+        abi=1
+    fi
+
+
+    TMP_VERSION=$(python3 -c 'import sys; print(sys.version_info[0], ".", sys.version_info[1])' | tr -d ' ')
+    PY_MINOR_VERSION=${TMP_VERSION##*.}
+    PY_VERSION="py3$PY_MINOR_VERSION"
+
+
+    tar_package_name="Ascend-mindie-atb-models_${PACKAGE_NAME}_linux-${ARCH}_${PY_VERSION}_torch${torch_vision}-abi${abi}.tar.gz"
+
+
+    if [ $IS_RELEASE -eq 1 ]; then
+        source_folder_list=$(cat $SCRIPT_DIR/release_folder.ini | xargs)
+        chmod 750 $source_folder_list
+        find $source_folder_list -mindepth 1 -type d -exec chmod 550 {} \;
+        find $source_folder_list -type f \( -name "*.py" -o -name "*.sh" -o -name "*.so" -o -name "*.tar.gz" \) -exec chmod 550 {} \;
+        find $source_folder_list -type f \( -name "*.json" -o -name "*.jsonl" -o -name "*.csv" -o -name "*.txt" \) -exec chmod 640 {} \;
+        tar czpf $tar_package_name $source_folder_list --owner=0 --group=0
+    else
+        tar czpf $tar_package_name ./* --owner=0 --group=0
+    fi
+
+
+    if [ -f "README.md" ];then
+        rm -rf README.md
+    fi
+
+
+    if [ $IS_RELEASE -eq 1 ]; then
+        cd $OUTPUT_DIR
+        mkdir -p debug_symbols
+        debug_symbols_package_name="$OUTPUT_DIR/debug_symbols/Ascend-mindie-atb-models-debug-symbols_${PACKAGE_NAME}_linux-${ARCH}_${PY_VERSION}_torch${torch_vision}-abi${abi}.tar.gz"
+        tar czpf $debug_symbols_package_name atb_models_debug_symbols
+        echo "Save debug symbols file to $OUTPUT_DIR/debug_symbols"
+    fi
+}
+
+
+function fn_make_whl() {
+    echo "make atb_llm whl package"
+    cd $ATB_MODELS_DIR
+    python3 $ATB_MODELS_DIR/setup_atb_llm.py bdist_wheel
+}
+
 function fn_extract_debug_symbols() {
     local in_dir=$1
     local out_dir=$2
@@ -464,7 +506,7 @@ function fn_main()
         if [[ $cfg_flag == 1 ]];then
             arg1="master"
         else
-            echo "argument $1 is unknown, please type build.sh help for more imformation"
+            echo "argument $1 is unknown, please type build.sh help for more information"
             exit 1
         fi
     fi
@@ -568,6 +610,8 @@ function fn_main()
             COMPILE_OPTIONS="${COMPILE_OPTIONS} -DCMAKE_BUILD_TYPE=RelWithDebInfo"
             IS_RELEASE=1
             fn_build
+            fn_make_whl
+            fn_build_for_ci
             ;;
         "clean")
             [[ -d "$CACHE_DIR" ]] && rm -rf $CACHE_DIR

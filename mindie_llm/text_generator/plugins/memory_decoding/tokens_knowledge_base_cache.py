@@ -17,8 +17,8 @@ import numpy as np
 from _prefix_tree import _PrefixTree
 from ....utils.env import ENV
 
-PATTEN_INPUT = 'input'
-PATTEN_OUTPUT = 'output'
+PATTEN_INPUT = "input"
+PATTEN_OUTPUT = "output"
 
 
 class TreeNode:
@@ -91,9 +91,21 @@ class Tree:
                 if len(node.next_node) > 0:
                     self.dfs_match(node.next_node, freqs, idx, output_weight)
 
-    def get_mask(self, nodes, ids, mask, pid, max_size=64, max_length=8,
-                 min_output_freq=1.0, min_input_freq=1.0, min_mix_freq=1.0,
-                 output_weight=1e-4, sizes=None, use_batch=0):
+    def get_mask(
+        self,
+        nodes,
+        ids,
+        mask,
+        pid,
+        max_size=64,
+        max_length=8,
+        min_output_freq=1.0,
+        min_input_freq=1.0,
+        min_mix_freq=1.0,
+        output_weight=1e-4,
+        sizes=None,
+        use_batch=0,
+    ):
         if len(ids) >= max_size or max_length <= 0:
             return
 
@@ -101,9 +113,7 @@ class Tree:
             (k, v, (1.0 - output_weight) * v.freqs_dict.get(use_batch, 0.0) + output_weight * v.freqs_dict.get(-1, 0.0))
             for k, v in nodes.items()
         ]
-        sorts = sorted(sorts,
-                       key=lambda x: x[2],
-                       reverse=True)
+        sorts = sorted(sorts, key=lambda x: x[2], reverse=True)
         for tid, node, fm in sorts:
             if len(ids) >= max_size:
                 return
@@ -122,15 +132,20 @@ class Tree:
                 mask[rid] = mask[pid]
             mask[rid, rid] = 1
             if len(node.next_node) > 0:
-                self.get_mask(node.next_node, ids, mask, rid,
-                              max_size=max_size,
-                              max_length=max_length - 1,
-                              min_output_freq=min_output_freq,
-                              min_input_freq=min_input_freq,
-                              min_mix_freq=min_mix_freq,
-                              output_weight=output_weight,
-                              sizes=sizes,
-                              use_batch=use_batch)
+                self.get_mask(
+                    node.next_node,
+                    ids,
+                    mask,
+                    rid,
+                    max_size=max_size,
+                    max_length=max_length - 1,
+                    min_output_freq=min_output_freq,
+                    min_input_freq=min_input_freq,
+                    min_mix_freq=min_mix_freq,
+                    output_weight=output_weight,
+                    sizes=sizes,
+                    use_batch=use_batch,
+                )
             self.n_output_node = sizes[0]
 
     def trim(self):
@@ -159,7 +174,7 @@ class Tree:
                 temp_nodes.pop(token_id)
 
     def add_node(self, next_token_ids, pattern=PATTEN_OUTPUT, use_batch=0, dynamic_algo=False):
-        output_flag = (pattern == PATTEN_OUTPUT)
+        output_flag = pattern == PATTEN_OUTPUT
         use_batch = -1 if output_flag else use_batch
         if dynamic_algo:
             leaves = self.tree_nodes
@@ -238,7 +253,7 @@ class TokensKnowledgeBaseCache:
             if token_id in input_ids:
                 if isinstance(input_ids, list):
                     # 输入的input_ids是next_token，在使用输出维护前缀树时使用
-                    input_ids = input_ids[:input_ids.index(token_id)]
+                    input_ids = input_ids[: input_ids.index(token_id)]
                 else:
                     # 输入的input_ids是model_inputs种的input_ids，在prefill阶段使用输入维护前缀树时使用
                     input_ids = input_ids[input_ids != token_id]
@@ -255,12 +270,14 @@ class TokensKnowledgeBaseCache:
                 self.token2tree[temp_token_id] = prefix_tree
         else:
             if prefix_tree:
-                prefix_tree.add_node(window_tokens, pattern=pattern, 
-                                     use_batch=use_batch, dynamic_algo=self.dynamic_algo)
+                prefix_tree.add_node(
+                    window_tokens, pattern=pattern, use_batch=use_batch, dynamic_algo=self.dynamic_algo
+                )
             else:
                 prefix_tree = Tree(temp_token_id, max_size=self.max_size, max_output_size=self.max_output_size)
-                prefix_tree.add_node(window_tokens, pattern=pattern, 
-                                     use_batch=use_batch, dynamic_algo=self.dynamic_algo)
+                prefix_tree.add_node(
+                    window_tokens, pattern=pattern, use_batch=use_batch, dynamic_algo=self.dynamic_algo
+                )
                 self.token2tree[temp_token_id] = prefix_tree
         return prefix_tree
 
@@ -275,11 +292,11 @@ class TokensKnowledgeBaseCache:
                 temp_token_id = temp_output_ids[i]
                 if temp_token_id in self.stop_words:
                     continue
-                window_tokens = temp_output_ids[i + 1:i + search_size + 1]
+                window_tokens = temp_output_ids[i + 1 : i + search_size + 1]
                 prefix_tree = self.get_prefix_tree(temp_token_id, window_tokens, pattern=pattern, use_batch=use_batch)
                 self.changed_prefix_trees.add(prefix_tree)
             if not final:
-                self.temp_output[use_batch] = temp_output_ids[temp_size - search_size:]
+                self.temp_output[use_batch] = temp_output_ids[temp_size - search_size :]
         if final:
             self.temp_output[use_batch] = []
             self.clear_input(use_batch)
@@ -291,7 +308,7 @@ class TokensKnowledgeBaseCache:
         if input_length > 1:
             for i in range(input_length - 1):
                 temp_token_id = input_ids[i]
-                window_tokens = input_ids[i + 1:i + search_size + 1]
+                window_tokens = input_ids[i + 1 : i + search_size + 1]
                 prefix_tree = self.get_prefix_tree(temp_token_id, window_tokens, pattern=pattern, use_batch=use_batch)
                 self.changed_prefix_trees.add(prefix_tree)
                 if pattern == PATTEN_INPUT:
@@ -307,16 +324,16 @@ class TokensKnowledgeBaseCache:
         for index, token in enumerate(token_ids):
             prefix_tree = self.token2tree.get(token, None)
             if prefix_tree is not None:
-                ids = token_ids[index + 1:]
+                ids = token_ids[index + 1 :]
                 if token in self.stop_words and len(ids) == 0:
                     continue
                 if ENV.performance_prefix_tree:
                     decoding_ids, sizes = prefix_tree.get_one_draft(ids, use_batch, int(decoding_length - 1))
                     decoding_masks = np.tril(np.ones((sizes + 1, sizes + 1), dtype=np.int64), 0)
                 else:
-                    decoding_ids, decoding_masks, sizes = prefix_tree.search_one_draft(ids,
-                                                                                    max_size=decoding_length - 1,
-                                                                                    use_batch=use_batch)
+                    decoding_ids, decoding_masks, sizes = prefix_tree.search_one_draft(
+                        ids, max_size=decoding_length - 1, use_batch=use_batch
+                    )
                 decoding_ids_length = len(decoding_ids)
                 if decoding_ids_length >= search_size // 2:
                     break
@@ -326,16 +343,14 @@ class TokensKnowledgeBaseCache:
         return decoding_ids, decoding_masks, [sizes]
 
     def get_all_batch_draft(self, token_id_list, batch_decoding_length=None, search_size=8, indices=None):
-
         decoding_id_list = []
         decoding_mask_list = []
         size_list = []
         for sub_idx, token_ids in enumerate(token_id_list):
             update_decoding_length = batch_decoding_length[sub_idx]
-            decoding_ids, decoding_masks, sizes = self.get_single_draft(token_ids,
-                                                                        decoding_length=update_decoding_length,
-                                                                        search_size=search_size,
-                                                                        use_batch=indices[sub_idx])
+            decoding_ids, decoding_masks, sizes = self.get_single_draft(
+                token_ids, decoding_length=update_decoding_length, search_size=search_size, use_batch=indices[sub_idx]
+            )
             decoding_id_list.append(decoding_ids)
             decoding_mask_list.append(decoding_masks)
             size_list.append(sizes)
@@ -354,7 +369,7 @@ class TokensKnowledgeBaseCache:
                 else:
                     decoding_mask_list_temp.append(decoding_mask_list[i])
             decoding_mask_list = decoding_mask_list_temp
-        
+
         return decoding_id_list, decoding_mask_list, size_list
 
     def clear_input(self, use_batch):

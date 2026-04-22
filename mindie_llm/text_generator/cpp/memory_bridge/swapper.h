@@ -9,22 +9,22 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_MEMORY_BRIDGE_SWAPPER_H
 #define MINDIE_LLM_MEMORY_BRIDGE_SWAPPER_H
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace hmm {
-    class Swapper {
-    public:
-        virtual ~Swapper() noexcept = default;
-        virtual void H2dSwap(const uint64_t &cpuBlock, const uint64_t &npuBlock,
-                             const std::vector<uint64_t> &params) const = 0;
-        virtual void D2hSwap(const uint64_t &cpuBlock, const uint64_t &npuBlock,
-                             const std::vector<uint64_t> &params) const = 0;
-        static std::shared_ptr<Swapper> &Create();
-    };
-}
+class Swapper {
+   public:
+    virtual ~Swapper() noexcept = default;
+    virtual void H2dSwap(const uint64_t &cpuBlock, const uint64_t &npuBlock,
+                         const std::vector<uint64_t> &params) const = 0;
+    virtual void D2hSwap(const uint64_t &cpuBlock, const uint64_t &npuBlock,
+                         const std::vector<uint64_t> &params) const = 0;
+    static std::shared_ptr<Swapper> &Create();
+};
+}  // namespace hmm
 #endif

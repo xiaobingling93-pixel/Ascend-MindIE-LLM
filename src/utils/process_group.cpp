@@ -11,65 +11,64 @@
  */
 
 #include "process_group.h"
-#include "common_util.h"
-#include "log.h"
 
 #include <arpa/inet.h>
-#include <cerrno>
-#include <cstdlib>
 #include <netinet/in.h>
-#include <stdexcept>
-#include <string>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstdlib>
+#include <stdexcept>
+#include <string>
 #include <torch/csrc/distributed/c10d/TCPStore.hpp>
+
+#include "common_util.h"
+#include "log.h"
 
 namespace mindie_llm {
 namespace {
-int BindMasterSocket(int listenFd, const std::string &masterAddr, uint16_t masterPort, bool isIPv6)
-{
+int BindMasterSocket(int listenFd, const std::string &masterAddr, uint16_t masterPort, bool isIPv6) {
     if (isIPv6) {
         int v6only = 0;
         if (::setsockopt(listenFd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) < 0) {
             MINDIE_LLM_LOG_WARN("BindMasterSocket setsockopt IPV6_V6ONLY failed, errno=" << errno);
         }
 
-        sockaddr_in6 addr {};
+        sockaddr_in6 addr{};
         addr.sin6_family = AF_INET6;
         addr.sin6_port = htons(masterPort);
         if (::inet_pton(AF_INET6, masterAddr.c_str(), &addr.sin6_addr) != 1) {
-            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv6, masterAddr=" << masterAddr <<
-                                 ", errno=" << errno);
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv6, masterAddr=" << masterAddr
+                                                                                           << ", errno=" << errno);
             return -1;
         }
 
         if (::bind(listenFd, static_cast<sockaddr *>(static_cast<void *>(&addr)), sizeof(addr)) < 0) {
-            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv6, masterAddr=" << masterAddr <<
-                                 ", port=" << masterPort << ", errno=" << errno);
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv6, masterAddr="
+                                 << masterAddr << ", port=" << masterPort << ", errno=" << errno);
             return -1;
         }
     } else {
-        sockaddr_in addr {};
+        sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(masterPort);
         if (::inet_pton(AF_INET, masterAddr.c_str(), &addr.sin_addr) != 1) {
-            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv4, masterAddr=" << masterAddr <<
-                                 ", errno=" << errno);
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket inet_pton failed for IPv4, masterAddr=" << masterAddr
+                                                                                           << ", errno=" << errno);
             return -1;
         }
 
         if (::bind(listenFd, static_cast<sockaddr *>(static_cast<void *>(&addr)), sizeof(addr)) < 0) {
-            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv4, masterAddr=" << masterAddr <<
-                                 ", port=" << masterPort << ", errno=" << errno);
+            MINDIE_LLM_LOG_ERROR("BindMasterSocket bind failed for IPv4, masterAddr="
+                                 << masterAddr << ", port=" << masterPort << ", errno=" << errno);
             return -1;
         }
     }
     return 0;
 }
 
-int CreateMasterListenSocket(const std::string &masterAddr, uint16_t masterPort)
-{
+int CreateMasterListenSocket(const std::string &masterAddr, uint16_t masterPort) {
     bool isIPv6 = IsIPv6(masterAddr);
     bool isIPv4 = IsIPv4(masterAddr);
     if (!isIPv4 && !isIPv6) {
@@ -109,28 +108,30 @@ int CreateMasterListenSocket(const std::string &masterAddr, uint16_t masterPort)
 
     return listenFd;
 }
-} // namespace
+}  // namespace
 
 ProcessGroup &ProcessGroup::GetInstance(const std::string &masterAddr, uint16_t masterPort,
                                         const std::string &localAddr, int rank, int worldSize, bool isMaster,
-                                        int timeoutInSeconds)
-{
+                                        int timeoutInSeconds) {
     static ProcessGroup instance(masterAddr, masterPort, localAddr, rank, worldSize, isMaster, timeoutInSeconds);
     return instance;
 }
 
 ProcessGroup::ProcessGroup(const std::string &masterAddr, uint16_t masterPort, const std::string &localAddr, int rank,
                            int worldSize, bool isMaster, int timeoutInSeconds)
-    : masterAddr_(masterAddr), masterPort_(masterPort), localAddr_(localAddr), rank_(rank), worldSize_(worldSize),
-      isMaster_(isMaster)
-{
+    : masterAddr_(masterAddr),
+      masterPort_(masterPort),
+      localAddr_(localAddr),
+      rank_(rank),
+      worldSize_(worldSize),
+      isMaster_(isMaster) {
     MINDIE_LLM_LOG_WARN("ProcessGroup construct, masterAddr="
                         << masterAddr << ", masterPort=" << masterPort << ", localAddr=" << localAddr
                         << ", rank=" << rank << ", worldSize=" << worldSize << ", isMaster=" << isMaster
                         << ", timeoutInSeconds=" << timeoutInSeconds);
-   
+
     try {
-            // 1. 创建TCPStore
+        // 1. 创建TCPStore
         c10d::TCPStoreOptions tcpOptions;
         tcpOptions.port = masterPort_;
         tcpOptions.isServer = isMaster_;
@@ -140,8 +141,8 @@ ProcessGroup::ProcessGroup(const std::string &masterAddr, uint16_t masterPort, c
         int masterListenFd = -1;
         if (isMaster_) {
             masterListenFd = CreateMasterListenSocket(masterAddr_, masterPort_);
-            MINDIE_LLM_LOG_INFO("ProcessGroup construct CreateMasterListenSocket success, masterListenFd=" <<
-                                 masterListenFd);
+            MINDIE_LLM_LOG_INFO(
+                "ProcessGroup construct CreateMasterListenSocket success, masterListenFd=" << masterListenFd);
             if (masterListenFd < 0) {
                 MINDIE_LLM_LOG_ERROR("ProcessGroup construct CreateMasterListenSocket failed.");
                 throw std::runtime_error("CreateMasterListenSocket failed");
@@ -165,8 +166,7 @@ ProcessGroup::ProcessGroup(const std::string &masterAddr, uint16_t masterPort, c
     }
 }
 
-std::vector<std::vector<torch::Tensor>> ProcessGroup::AllGather(std::vector<torch::Tensor> &inputs)
-{
+std::vector<std::vector<torch::Tensor>> ProcessGroup::AllGather(std::vector<torch::Tensor> &inputs) {
     std::vector<std::vector<torch::Tensor>> outputs(inputs.size());
     for (auto &item : outputs) {
         for (size_t i = 0; i < static_cast<size_t>(worldSize_) * inputs.size(); ++i) {
@@ -177,15 +177,13 @@ std::vector<std::vector<torch::Tensor>> ProcessGroup::AllGather(std::vector<torc
     return outputs;
 }
 
-void ProcessGroup::AllReduce(std::vector<torch::Tensor> &tensor, c10d::AllreduceOptions options)
-{
+void ProcessGroup::AllReduce(std::vector<torch::Tensor> &tensor, c10d::AllreduceOptions options) {
     processGroup_->allreduce(tensor, options)->wait();
 }
 
 void ProcessGroup::BroadCast(std::vector<torch::Tensor> &tensor) { processGroup_->broadcast(tensor)->wait(); }
 
-std::string GetLocalHostIP(const std::vector<NodeInfo> &nodeInfos, std::vector<std::string> &hostIps)
-{
+std::string GetLocalHostIP(const std::vector<NodeInfo> &nodeInfos, std::vector<std::string> &hostIps) {
     for (size_t i = 0; i < nodeInfos.size(); ++i) {
         if (std::find(hostIps.begin(), hostIps.end(), nodeInfos[i].hostIp) != hostIps.end()) {
             return nodeInfos[i].hostIp;
@@ -193,4 +191,4 @@ std::string GetLocalHostIP(const std::vector<NodeInfo> &nodeInfos, std::vector<s
     }
     return "";
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

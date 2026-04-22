@@ -33,8 +33,9 @@ def _get_lscpu() -> str:
     return _LSCPU_STRING
 
 
-def _get_numa_info_by_pci(device2pcie: dict[int, str],
-    keyword: str = "NUMAnode") -> tuple[dict[int, int], dict[int, list[int]]]:
+def _get_numa_info_by_pci(
+    device2pcie: dict[int, str], keyword: str = "NUMAnode"
+) -> tuple[dict[int, int], dict[int, list[int]]]:
     """
     Infer NUMA node affinity for NPUs based on their PCIe bus IDs.
 
@@ -62,9 +63,9 @@ def _get_numa_info_by_pci(device2pcie: dict[int, str],
     for device, pcie_no in device2pcie.items():
         numa_info = execute_command(["lspci", "-s", f"{pcie_no}", "-vvv"]).split("\n")
         for _ in numa_info:
-            line = ''.join(_.split())
+            line = "".join(_.split())
             if line.startswith(keyword):
-                numa_id = int(line[len(keyword) + 1:])
+                numa_id = int(line[len(keyword) + 1 :])
                 device2numa[device] = numa_id
 
                 devices = numa2devices.get(numa_id, None)
@@ -77,8 +78,9 @@ def _get_numa_info_by_pci(device2pcie: dict[int, str],
     return device2numa, numa2devices
 
 
-def _get_balanced_numa_info(devices: list[int],
-    keyword: str = "NUMAnode(s)") -> tuple[dict[int, int], dict[int, list[int]]]:
+def _get_balanced_numa_info(
+    devices: list[int], keyword: str = "NUMAnode(s)"
+) -> tuple[dict[int, int], dict[int, list[int]]]:
     """
     Fallback NUMA assignment when PCIe-based NUMA detection is unavailable.
 
@@ -102,7 +104,7 @@ def _get_balanced_numa_info(devices: list[int],
     numa_nodes = 1
     numa_info = _get_lscpu().split("\n")
     for _ in numa_info:
-        line = ''.join(_.split())
+        line = "".join(_.split())
         if keyword not in line:
             continue
         numa_nodes = int(line[-1])
@@ -116,25 +118,16 @@ def _get_balanced_numa_info(devices: list[int],
     ends = list(accumulate(device_count_per_numa_list))
     starts = [0] + ends[:-1]
 
-    numa2devices: dict[int, list[int]] = {
-        ind: devices[start:end]
-        for ind, (start, end) in enumerate(zip(starts, ends))
-    }
+    numa2devices: dict[int, list[int]] = {ind: devices[start:end] for ind, (start, end) in enumerate(zip(starts, ends))}
 
-    device2numa: dict[int, int] = {
-        device: numa
-        for numa, _devices in numa2devices.items()
-        for device in _devices
-    }
+    device2numa: dict[int, int] = {device: numa for numa, _devices in numa2devices.items() for device in _devices}
 
     return device2numa, numa2devices
 
 
 def _get_numa_cpu_affinity(
-        numa_ids: list[int],
-        keyword1: str = "NUMAnode",
-        keyword2: str = "CPU(s)"
-    ) -> dict[int, list[int]]:
+    numa_ids: list[int], keyword1: str = "NUMAnode", keyword2: str = "CPU(s)"
+) -> dict[int, list[int]]:
     """
     Retrieve CPU core lists for given NUMA nodes using `lscpu`.
 
@@ -156,12 +149,12 @@ def _get_numa_cpu_affinity(
         Input: numa_ids=[0,1]
         Output: {0: [0,1,...,31], 1: [32,...,63]}
     """
-    
+
     cpu_info = _get_lscpu().split("\n")
     numa2cpus: dict[int, list[int]] = dict()
     numa_keywords = [keyword1 + str(idx) + keyword2 for idx in numa_ids]
     for _ in cpu_info:
-        line = ''.join(_.split())
+        line = "".join(_.split())
         if any(line.startswith(word) for word in numa_keywords):
             split_info = line.split(":")
             cpu_id_ranges = split_info[-1].split(",")
@@ -176,7 +169,7 @@ def _get_numa_cpu_affinity(
 
                 ranges.extend(range(int(endpoints[0]), int(endpoints[1]) + 1))
 
-            numa_id = int(split_info[0].replace(keyword1, '').replace(keyword2, ''))
+            numa_id = int(split_info[0].replace(keyword1, "").replace(keyword2, ""))
             numa2cpus[numa_id] = ranges
     return numa2cpus
 
@@ -239,7 +232,8 @@ def bind_cpus(ratio: float = 0.5) -> None:
     all_cpus = numa2cpus.get(numa_id)
     logger.info(
         f"rank_id: {get_parallel_info_manager().rank}, device_id: {cur_device}, "
-        f"numa_id: {numa_id}, shard_devices: {shard_devices}, cpus: {all_cpus}")
+        f"numa_id: {numa_id}, shard_devices: {shard_devices}, cpus: {all_cpus}"
+    )
 
     cpu_nums = len(all_cpus)
     # Calculate the number of cores allocated to the NPU sharing this NUMA node.
@@ -248,8 +242,10 @@ def bind_cpus(ratio: float = 0.5) -> None:
     else:
         cpu_num_per_device = int(ENV.cpu_binding_num)
         if len(shard_devices) * cpu_num_per_device > cpu_nums:
-            err_msg = f"CPU num in numa {numa_id} to assign {cpu_num_per_device} for every device is not enough, " \
-                      f"please decrease the value of CPU_BINDING_NUM!"
+            err_msg = (
+                f"CPU num in numa {numa_id} to assign {cpu_num_per_device} for every device is not enough, "
+                f"please decrease the value of CPU_BINDING_NUM!"
+            )
             logger.error(err_msg)
             raise ValueError(err_msg)
         if cpu_num_per_device < 0:

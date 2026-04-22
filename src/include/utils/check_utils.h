@@ -9,11 +9,12 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_UTILS_CHECK_H
 #define MINDIE_LLM_UTILS_CHECK_H
 
 #include <sstream>
+
 #include "nlohmann/json.hpp"
 
 namespace mindie_llm {
@@ -26,9 +27,8 @@ using Json = nlohmann::json;
 /// \param b        input num 1
 /// \param overflowFlag     True, if multiply detected overflow. False otherwise
 /// \return multiply result.
-template<typename T, typename U>
-typename std::common_type<T, U>::type IntMulWithCheckOverFlow(const T a, const U b, bool &overflowFlag)
-{
+template <typename T, typename U>
+typename std::common_type<T, U>::type IntMulWithCheckOverFlow(const T a, const U b, bool& overflowFlag) {
     if (std::is_signed<T>::value != std::is_signed<U>::value) {
         overflowFlag = true;
         return 0;
@@ -44,10 +44,8 @@ typename std::common_type<T, U>::type IntMulWithCheckOverFlow(const T a, const U
     return result;
 }
 
-
-template<typename T, typename U>
-typename std::common_type<T, U>::type CheckIntMulOverFlow(const T a, const U b)
-{
+template <typename T, typename U>
+typename std::common_type<T, U>::type CheckIntMulOverFlow(const T a, const U b) {
     if (std::is_signed<T>::value != std::is_signed<U>::value) {
         throw std::runtime_error("Multiplication between signed and unsigned integer not supported, it's not safe");
     }
@@ -85,10 +83,10 @@ typename std::common_type<T, U>::type CheckIntMulOverFlow(const T a, const U b)
     }
     return pa * pb;
 }
-int CheckParamRange(const int &intParam, int min, int max);
+int CheckParamRange(const int& intParam, int min, int max);
 bool IsWithinRange(const std::string& integerType, const Json& jsonValue);
 uint32_t GetIntegerParamValue(const Json& jsonData, const std::string& configName, uint32_t defaultVal);
 std::string GetStringParamValue(const Json& jsonData, const std::string& configName);
 bool CheckStringInputLength(const std::string& stringValue, uint32_t maxValLength);
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

@@ -9,29 +9,27 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <utility>
-#include <sstream>
-#include <regex>
+#include "single_req_triton_token_infer_interface.h"
 
-#include "httplib.h"
+#include <regex>
+#include <sstream>
+#include <utility>
+
 #include "common_util.h"
+#include "httplib.h"
 #include "parameters_checker.h"
 #include "parse_protocol.h"
-#include "single_req_triton_token_infer_interface.h"
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
-const std::string SingleReqTritonTokenInferInterface::defOutputName{ "output0" };
+const std::string SingleReqTritonTokenInferInterface::defOutputName{"output0"};
 
 SingleReqTritonTokenInferInterface::SingleReqTritonTokenInferInterface(
     const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute,
     const std::vector<LoraParamSPtr> loraConfigs) noexcept
-    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs}
-{
-}
+    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs} {}
 
-bool SingleReqTritonTokenInferInterface::CheckReqId(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckReqId(OrderedJson &body, std::string &msg) {
     const std::string key = "id";
     auto res = JsonParse::CheckOptionalItemType(body, key, OrderedJson::value_t::string, msg);
     if (!res.isCorrectType) {
@@ -46,7 +44,8 @@ bool SingleReqTritonTokenInferInterface::CheckReqId(OrderedJson &body, std::stri
     std::regex pattern("^[a-zA-Z0-9_-]{1,256}$");
     if (!std::regex_match(requestId, pattern)) {
         msg = std::string("The id can contain only digits, letters, underscores(_), hyphens(-) and no more than ")
-            .append(std::to_string(MAX_INPUT_ID_LENGTH)).append(" words in length.");
+                  .append(std::to_string(MAX_INPUT_ID_LENGTH))
+                  .append(" words in length.");
         return false;
     }
     RequestIdNew requestIdTmp = requestId_;
@@ -60,21 +59,21 @@ bool SingleReqTritonTokenInferInterface::CheckReqId(OrderedJson &body, std::stri
 }
 
 bool SingleReqTritonTokenInferInterface::ValidateAndPrepareReqToken(OrderedJson &body, std::string &msg,
-                                                                    [[maybe_unused]] uint64_t &timestamp)
-{
+                                                                    [[maybe_unused]] uint64_t &timestamp) {
     try {
         if (!body.contains("inputs") || body["inputs"].is_null() || !body["inputs"].is_array()) {
             msg = "Req should contain 'inputs' and the type should be array.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         auto &inputs = body["inputs"];
         auto inputSize = inputs.size();
         if (inputSize != 1UL) {
             msg = "Inputs count must be 1.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Parse input only support 1 input. The requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Parse input only support 1 input. The requestId is " << requestId_);
             return false;
         }
         inputNames.reserve(inputSize);
@@ -108,12 +107,11 @@ bool SingleReqTritonTokenInferInterface::ValidateAndPrepareReqToken(OrderedJson 
     }
 }
 
-bool SingleReqTritonTokenInferInterface::CheckOutputs(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckOutputs(OrderedJson &body, std::string &msg) {
     if (!body.contains("outputs") || body["outputs"].is_null() || !body["outputs"].is_array()) {
         msg = "Req should contain 'outputs' and the type should be array.";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
         return false;
     }
     auto &outputs = body["outputs"];
@@ -121,8 +119,9 @@ bool SingleReqTritonTokenInferInterface::CheckOutputs(OrderedJson &body, std::st
         std::stringstream ss;
         ss << "Outputs size should be " << inputDataType.size() << ", got " << outputs.size() << ".";
         msg = ss.str();
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " in request for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " in request for requestId is " << requestId_);
         return false;
     }
     for (auto i = 0U; i < outputs.size(); i++) {
@@ -130,35 +129,30 @@ bool SingleReqTritonTokenInferInterface::CheckOutputs(OrderedJson &body, std::st
             std::stringstream ss;
             ss << "Outputs name must be non-empty string.";
             msg = ss.str();
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), "Name in outputs(" << i << ") is not contained and the type should be string.");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       "Name in outputs(" << i << ") is not contained and the type should be string.");
             return false;
         }
         inputParam->outputNames.emplace_back(outputs[i]["name"]);
     }
     return true;
 }
-bool SingleReqTritonTokenInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg) {
     auto paramCheckRet =
         JsonParse::CheckOptionalItemType(reqJsonBody_["inputs"][0], "parameters", OrderedJson::value_t::object, msg);
     if (!paramCheckRet.isCorrectType) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Parameters in request param invalid for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Parameters in request param invalid for requestId is " << requestId_);
         return false;
     }
     const auto &params = reqJsonBody_["inputs"][0]["parameters"];
-    if (!(AssignTemperature(params, tmpReq, msg, false) &&
-          AssignTopK(params, tmpReq, msg, true) &&
-          AssignTopP(params, tmpReq, msg) &&
-          AssignDoSample(params, tmpReq, msg) &&
-          AssignSeed(params, tmpReq, msg) &&
-          AssignRepetitionPenalty(params, tmpReq, msg) &&
-          AssignWatermark(params, tmpReq, msg) &&
-          AssignPriority(params, tmpReq, msg) &&
-          AssignMaxNewTokens(params, inputParam, msg) &&
-          AssignTimeout(params, inputParam, msg) &&
-          AssignDetails(params, inputParam, msg) &&
+    if (!(AssignTemperature(params, tmpReq, msg, false) && AssignTopK(params, tmpReq, msg, true) &&
+          AssignTopP(params, tmpReq, msg) && AssignDoSample(params, tmpReq, msg) && AssignSeed(params, tmpReq, msg) &&
+          AssignRepetitionPenalty(params, tmpReq, msg) && AssignWatermark(params, tmpReq, msg) &&
+          AssignPriority(params, tmpReq, msg) && AssignMaxNewTokens(params, inputParam, msg) &&
+          AssignTimeout(params, inputParam, msg) && AssignDetails(params, inputParam, msg) &&
           AssignBatchSize(params, inputParam, msg))) {
         return false;
     }
@@ -166,9 +160,9 @@ bool SingleReqTritonTokenInferInterface::SetupInferParams(RequestSPtr tmpReq, st
 }
 
 bool SingleReqTritonTokenInferInterface::BuildResponseJson(ResponseSPtr response,
-    [[maybe_unused]] const std::vector<BestNTokens> &tempTokens,
-    RespBodyQueue &jsonObjs, [[maybe_unused]] const uint64_t &timestamp)
-{
+                                                           [[maybe_unused]] const std::vector<BestNTokens> &tempTokens,
+                                                           RespBodyQueue &jsonObjs,
+                                                           [[maybe_unused]] const uint64_t &timestamp) {
     if (!response->isEos) {
         ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "Infer resp for requestId is " << requestId_ << " not finished.");
         return true;
@@ -178,9 +172,9 @@ bool SingleReqTritonTokenInferInterface::BuildResponseJson(ResponseSPtr response
     OrderedJson respBody;
     auto localOutputNames = inputParam->outputNames;
     if (localOutputNames.empty()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-            SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
-            "OutputNames of inputParam is empty");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "OutputNames of inputParam is empty");
         return false;
     }
     uint64_t seqId;
@@ -195,45 +189,46 @@ bool SingleReqTritonTokenInferInterface::BuildResponseJson(ResponseSPtr response
         respBody["outputs"][0]["name"] = localOutputNames[0].empty() ? "output0" : localOutputNames[0];
         respBody["outputs"][0]["shape"] = {1, respTokenMap[seqId].size()};
         respBody["outputs"][0]["datatype"] = "UINT32";
-        for (long &token: respTokenMap[seqId]) {
+        for (long &token : respTokenMap[seqId]) {
             respBody["outputs"][0]["data"].emplace_back(token);
         }
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Infer resp for requestId is " << requestId_ << " set response.");
         jsonObjs.push(respBody.dump());
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-            SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
-            "Error failed to get respBody outputs info");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Error failed to get respBody outputs info");
         return false;
     }
     return true;
 }
 
-bool SingleReqTritonTokenInferInterface::CheckReqInputName(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckReqInputName(OrderedJson &body, std::string &msg) {
     if (!body.contains("name") || body["name"].is_null() || !body["name"].is_string()) {
         msg = "Cannot find name in inputs or its type is not string";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
     std::string name = body["name"];
     if (name.size() > 256U) {
         msg = "The length of name set in inputs exceeds 256.";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
     inputNames.emplace_back(name);
     return true;
 }
 
-bool SingleReqTritonTokenInferInterface::CheckReqInputShape(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckReqInputShape(OrderedJson &body, std::string &msg) {
     if (!body.contains("shape") || body["shape"].is_null() || !body["shape"].is_array()) {
         msg = "Cannot find shape in inputs or its type is not array";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
     auto &shapeObj = body["shape"];
@@ -241,19 +236,21 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputShape(OrderedJson &body, s
     for (auto i = 0U; i < count; i++) {
         if (!shapeObj[i].is_number_unsigned()) {
             msg = "Shape element must be integer type.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg << " for requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       msg << " for requestId is " << requestId_);
             return false;
         }
     }
 
     auto validShape = (count == 1UL ||
-        ((count - 1U) == 1UL && shapeObj[0] == 1 && shapeObj[1] > 0 && (shapeObj[1] <= MAX_TOKENS_NUM)));
+                       ((count - 1U) == 1UL && shapeObj[0] == 1 && shapeObj[1] > 0 && (shapeObj[1] <= MAX_TOKENS_NUM)));
     if (!validShape) {
         msg = "Shape must be at most two-dimensional, and the last element's value must be in (0,";
         msg += std::to_string(MAX_TOKENS_NUM) + "].";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Only support shape with dim_count=1 for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Only support shape with dim_count=1 for requestId is " << requestId_);
         return false;
     }
 
@@ -269,12 +266,12 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputShape(OrderedJson &body, s
     return true;
 }
 
-bool SingleReqTritonTokenInferInterface::CheckReqInputDataType(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckReqInputDataType(OrderedJson &body, std::string &msg) {
     if (!body.contains("datatype") || body["datatype"].is_null() || !body["datatype"].is_string()) {
         msg = "Cannot find datatype in inputs or its type is not string";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
 
@@ -282,27 +279,29 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputDataType(OrderedJson &body
     auto pos = DATA_TYPE_MAPPING.stringToType.find(typeName);
     if (pos == DATA_TYPE_MAPPING.stringToType.end()) {
         msg = std::string("Unsupported datatype, got ").append(typeName).append(".");
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Datatype in inputs is invalid");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Datatype in inputs is invalid");
         return false;
     }
     auto dataType = pos->second;
     if (dataType != InferDataType::TYPE_UINT32) {
         msg = std::string("Unsupported datatype, got ").append(typeName).append(".");
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Datatype in inputs only support U32 for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Datatype in inputs only support U32 for requestId is " << requestId_);
         return false;
     }
     inputDataType.emplace_back(dataType);
     return true;
 }
 
-bool SingleReqTritonTokenInferInterface::CheckReqInputData(OrderedJson &body, std::string &msg)
-{
+bool SingleReqTritonTokenInferInterface::CheckReqInputData(OrderedJson &body, std::string &msg) {
     if (!body.contains("data") || body["data"].is_null() || !body["data"].is_array()) {
         msg = "Cannot find data in inputs or its type is not array";
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
 
@@ -310,8 +309,9 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputData(OrderedJson &body, st
         std::stringstream ss;
         ss << "Data element must be no more than max token id length, which is " << MAX_TOKENS_NUM << ".";
         msg = ss.str();
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
 
@@ -319,16 +319,18 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputData(OrderedJson &body, st
         std::stringstream ss;
         ss << "Data size should be " << inputShape[0][1] << ", got " << body["data"].size() << ".";
         msg = ss.str();
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), msg << " for requestId is " << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   msg << " for requestId is " << requestId_);
         return false;
     }
 
     for (const auto &i : body["data"]) {
         if (!i.is_number_integer()) {
             msg = "Data element must be integer type.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg << " for requestId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                       msg << " for requestId is " << requestId_);
             return false;
         }
     }
@@ -336,16 +338,12 @@ bool SingleReqTritonTokenInferInterface::CheckReqInputData(OrderedJson &body, st
     return true;
 }
 
-
-void SingleReqTritonTokenInferInterface::SetDMIReComputeBuilder()
-{
+void SingleReqTritonTokenInferInterface::SetDMIReComputeBuilder() {
     singleLLMReqHandlerBase_->SetDMIReComputeBuildCallBack(
         std::bind(&SingleReqTritonTokenInferInterface::BuildTritonTokenReComputeBody, this, std::placeholders::_1));
 }
 
-std::string SingleReqTritonTokenInferInterface::BuildTritonTokenReComputeBody(
-    const std::vector<BestNTokens>& tokens)
-{
+std::string SingleReqTritonTokenInferInterface::BuildTritonTokenReComputeBody(const std::vector<BestNTokens> &tokens) {
     OrderedJson newReqJsonObj;
     if (inputParam->userInputId.has_value()) {
         newReqJsonObj["id"] = inputParam->userInputId.value();
@@ -383,8 +381,7 @@ std::string SingleReqTritonTokenInferInterface::BuildTritonTokenReComputeBody(
     return newReqJsonObj.dump();
 }
 
-void SingleReqTritonTokenInferInterface::BuildReComputeBodySampling(const uint64_t& curSeqId, OrderedJson &parameters)
-{
+void SingleReqTritonTokenInferInterface::BuildReComputeBodySampling(const uint64_t &curSeqId, OrderedJson &parameters) {
     if (request_->temperature.has_value()) {
         parameters["temperature"] = request_->temperature.value();
     }
@@ -404,7 +401,8 @@ void SingleReqTritonTokenInferInterface::BuildReComputeBodySampling(const uint64
         parameters["repetition_penalty"] = request_->repetitionPenalty.value();
     }
     if (this->inputParam->maxNewTokens != MAX_NEW_TOKENS_DFT) {
-        parameters["max_new_tokens"] = static_cast<size_t>(this->inputParam->maxNewTokens) -
+        parameters["max_new_tokens"] =
+            static_cast<size_t>(this->inputParam->maxNewTokens) -
             (this->oriReqTokenLen_ + this->respTokenMap[curSeqId].size() - this->reqTokens_.size());
     }
     if (request_->watermark.has_value()) {
@@ -412,8 +410,7 @@ void SingleReqTritonTokenInferInterface::BuildReComputeBodySampling(const uint64
     }
 }
 
-void SingleReqTritonTokenInferInterface::BuildReComputeInput(std::vector<int64_t> &inputTokens)
-{
+void SingleReqTritonTokenInferInterface::BuildReComputeInput(std::vector<int64_t> &inputTokens) {
     inputTokens.push_back(oriReqTokenLen_);
     for (size_t i = 0; i < oriReqTokenLen_; i++) {
         inputTokens.push_back(reqTokens_[i]);
@@ -422,8 +419,8 @@ void SingleReqTritonTokenInferInterface::BuildReComputeInput(std::vector<int64_t
     if (!GetUniqueSequenceId(seqId)) {
         return;
     }
-    for (const auto& item : this->respTokenMap[seqId]) {
+    for (const auto &item : this->respTokenMap[seqId]) {
         inputTokens.push_back(item);
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

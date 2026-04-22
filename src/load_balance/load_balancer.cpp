@@ -16,9 +16,13 @@
 namespace mindie_llm {
 LoadBalancer::LoadBalancer(const std::vector<EnginePerDPSPtr> &enginePerDPs, size_t waveNumPerDP, size_t thresholdPerDP,
                            size_t intervalMs)
-    : enginePerDPs_(enginePerDPs), dpSize_(enginePerDPs.size()), waveNumPerDP_(waveNumPerDP),
-      thresholdPerDP_(thresholdPerDP), waveId_(0), intervalMs_(intervalMs), timer_(io_)
-{
+    : enginePerDPs_(enginePerDPs),
+      dpSize_(enginePerDPs.size()),
+      waveNumPerDP_(waveNumPerDP),
+      thresholdPerDP_(thresholdPerDP),
+      waveId_(0),
+      intervalMs_(intervalMs),
+      timer_(io_) {
     balancePolicyPtr_ = MakeBalancePolicy(BalancePolicyType::ROUND_ROBIN);
     if (balancePolicyPtr_ == nullptr) {
         throw std::runtime_error("LoadBalancer::LoadBalancer: Failed to create BalancePolicy");
@@ -30,8 +34,7 @@ LoadBalancer::LoadBalancer(const std::vector<EnginePerDPSPtr> &enginePerDPs, siz
     pthread_setname_np(worker_.native_handle(), "LoadBalancer");
 }
 
-LoadBalancer::~LoadBalancer()
-{
+LoadBalancer::~LoadBalancer() {
     Stop();
     if (worker_.joinable()) {
         worker_.join();
@@ -39,8 +42,7 @@ LoadBalancer::~LoadBalancer()
 }
 
 // 添加sequence group
-void LoadBalancer::AddSeqGroup(SequenceGroupSPtr &seqGroup)
-{
+void LoadBalancer::AddSeqGroup(SequenceGroupSPtr &seqGroup) {
     if (seqGroup == nullptr) {
         MINDIE_LLM_LOG_ERROR("Attempt to add a null SequenceGroup.");
         return;
@@ -59,8 +61,7 @@ void LoadBalancer::AddSeqGroup(SequenceGroupSPtr &seqGroup)
     }
 }
 
-void LoadBalancer::TriggerImmediatelyTask()
-{
+void LoadBalancer::TriggerImmediatelyTask() {
     timer_.cancel();
     MINDIE_LLM_LOG_DEBUG("TriggerImmediatelyTask.");
     Distribute();
@@ -70,15 +71,14 @@ void LoadBalancer::TriggerImmediatelyTask()
     timer_.async_wait(boost::bind(&LoadBalancer::ExecutePeriodicTask, this, boost::asio::placeholders::error));
 }
 
-void LoadBalancer::ExecutePeriodicTask(const boost::system::error_code &ec)
-{
+void LoadBalancer::ExecutePeriodicTask(const boost::system::error_code &ec) {
     if (ec == boost::asio::error::operation_aborted || (stop_ && seqGroups_.Empty())) {
         // 定时器被外部取消，此时直接返回，触发方调用async_wait重新启动
         return;
     }
 
     static int times = 0;
-    if ((times++ % 3000) == 0) { // 由于周期性调度，降低刷新频率到1/3000
+    if ((times++ % 3000) == 0) {  // 由于周期性调度，降低刷新频率到1/3000
         MINDIE_LLM_LOG_DEBUG("ExecutePeriodicTask.");
     }
     Distribute();
@@ -88,16 +88,14 @@ void LoadBalancer::ExecutePeriodicTask(const boost::system::error_code &ec)
     timer_.async_wait(boost::bind(&LoadBalancer::ExecutePeriodicTask, this, boost::asio::placeholders::error));
 }
 
-void LoadBalancer::Stop()
-{
+void LoadBalancer::Stop() {
     stop_ = true;
     io_.stop();
     MINDIE_LLM_LOG_INFO("LoadBalancer stopped.");
 }
 
 // 分配SequenceGroup到不同的Engine
-void LoadBalancer::Distribute()
-{
+void LoadBalancer::Distribute() {
     if (seqGroups_.Empty() && candidates_.empty()) {
         return;
     }
@@ -116,8 +114,7 @@ void LoadBalancer::Distribute()
     DistributeSeqGroups(dpRankIds);
 }
 
-std::vector<size_t> LoadBalancer::GetDistributedDpRankIds()
-{
+std::vector<size_t> LoadBalancer::GetDistributedDpRankIds() {
     std::vector<size_t> dpRankIds;
     uint64_t minFreeBlockNum = std::numeric_limits<uint64_t>::max();
     for (size_t i = 0; i < enginePerDPs_.size(); ++i) {
@@ -133,10 +130,9 @@ std::vector<size_t> LoadBalancer::GetDistributedDpRankIds()
 }
 
 // 准备下发的数据
-void LoadBalancer::PrepCandidates(size_t numDp, size_t maxNumPerDp)
-{
+void LoadBalancer::PrepCandidates(size_t numDp, size_t maxNumPerDp) {
     SequenceGroupSPtr seqGroup;
-    while (seqGroups_.PopFront(seqGroup)) { // TBC_此处逻辑有点问题，应该先判断，然后放入才对。
+    while (seqGroups_.PopFront(seqGroup)) {  // TBC_此处逻辑有点问题，应该先判断，然后放入才对。
         candidates_.push_back(seqGroup);
         if (candidates_.size() >= maxNumPerDp * numDp) {
             // 达到每个DP的最大数量，停止收集
@@ -146,8 +142,7 @@ void LoadBalancer::PrepCandidates(size_t numDp, size_t maxNumPerDp)
 }
 
 // 可以根据seqLen的长度均分，当前使用RoundRobin的方式
-void LoadBalancer::DistributeSeqGroups(const std::vector<size_t> &dpRankIds)
-{
+void LoadBalancer::DistributeSeqGroups(const std::vector<size_t> &dpRankIds) {
     if (this->candidates_.empty()) {
         return;
     }
@@ -168,16 +163,15 @@ void LoadBalancer::DistributeSeqGroups(const std::vector<size_t> &dpRankIds)
             seqGroupSPtr->waveId_ = waveId_;
             enginePerDP->scheduler->AddSeqGroup(seqGroupSPtr);
             MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Enter Waiting] Load Balance dispatch request to DP RankId: "
-                                << dpRankIds[i] << ", requestId: " << seqGroupSPtr->metrics_.inferReqId_
-                                << "seqId: " << seqGroupSPtr->firstSeq->seqId_ << ").");
+                                        << dpRankIds[i] << ", requestId: " << seqGroupSPtr->metrics_.inferReqId_
+                                        << "seqId: " << seqGroupSPtr->firstSeq->seqId_ << ").");
             enginePerDP->addedRequestNum++;
         }
     }
 }
 
 LoadBalancerPtr MakeLoadBalancer(const std::vector<std::shared_ptr<EnginePerDP>> &enginePerDPs, size_t waveNumPerDP,
-                                 size_t thresholdPerDP, size_t intervalMs)
-{
+                                 size_t thresholdPerDP, size_t intervalMs) {
     return std::make_unique<LoadBalancer>(enginePerDPs, waveNumPerDP, thresholdPerDP, intervalMs);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

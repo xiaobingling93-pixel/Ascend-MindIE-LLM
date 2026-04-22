@@ -9,20 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "model_exec_output_handler.h"
 
-#include <string>
 #include <chrono>
+#include <string>
 
+#include "error_queue.h"
+#include "live_infer_context.h"
 #include "log.h"
 #include "msServiceProfiler/msServiceProfiler.h"
-#include "live_infer_context.h"
-#include "policy/stage_policy/stage_policy.h"
-#include "policy/stage_policy/edge_cloud_policy.h"
-#include "error_queue.h"
 #include "policy/dynamic_batch_recorder.h"
-
+#include "policy/stage_policy/edge_cloud_policy.h"
+#include "policy/stage_policy/stage_policy.h"
 
 using namespace mindie_llm;
 using namespace model_execute_data;
@@ -30,15 +29,16 @@ using namespace model_execute_data;
 std::atomic<int> g_decodeTokenCount = 0;
 ModelExecOutputHandler::ModelExecOutputHandler(ForwardRespToManagerCall cb, Role pdRole, SchedulerConfigSPtr &config,
                                                std::shared_ptr<LatencyPredictor> latencypredictor, size_t localDPRank)
-    : role_(pdRole), forwardRespToManagerCall_(cb), schedulerConfig_(config),
+    : role_(pdRole),
+      forwardRespToManagerCall_(cb),
+      schedulerConfig_(config),
       bufferResponseConfig_({config->bufferResponseEnabled, config->prefillExpectedTime, config->decodeExpectedTime}),
-      latencypredictor_(latencypredictor), localDPRank_(localDPRank), bufferedResponser_(cb, bufferResponseConfig_),
-      dpRankId_(config->dpRankId_)
-{
-}
+      latencypredictor_(latencypredictor),
+      localDPRank_(localDPRank),
+      bufferedResponser_(cb, bufferResponseConfig_),
+      dpRankId_(config->dpRankId_) {}
 
-void ModelExecOutputHandler::AsyncPublishPrefilledKvCache(ModelBatchResultSPtr &modelBatchResult)
-{
+void ModelExecOutputHandler::AsyncPublishPrefilledKvCache(ModelBatchResultSPtr &modelBatchResult) {
     for (int i = 0; i < modelBatchResult->outputs_size(); i++) {
         model_execute_data::CompletionSequenceGroupOutput output = modelBatchResult->outputs(i);
         if (output.samples_size() == 0) {
@@ -66,9 +66,10 @@ void ModelExecOutputHandler::AsyncPublishPrefilledKvCache(ModelBatchResultSPtr &
             response->responseContents[0].isThinking = seqGroup->isThinking_;
             response->responseContents[0].singleLLMPrefillReqHandlerId = localDPRank_;
             MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Publish Complete] DP RankId: "
-                                << dpRankId_ << ". Request Prefill Complete, requestId: "
-                                << seqGroup->metrics_.inferReqId_ << ", seqId: " << firstSample.seq_id()
-                                << ", pInstanceId:" << seqGroup->pInstanceId << ", localDPRank_:" << localDPRank_);
+                                        << dpRankId_ << ". Request Prefill Complete, requestId: "
+                                        << seqGroup->metrics_.inferReqId_ << ", seqId: " << firstSample.seq_id()
+                                        << ", pInstanceId:" << seqGroup->pInstanceId
+                                        << ", localDPRank_:" << localDPRank_);
             seqGroup->isThinking_ = false;
             // 返回推理结果给上层的回调函数
             forwardRespToManagerCall_(response);
@@ -77,8 +78,7 @@ void ModelExecOutputHandler::AsyncPublishPrefilledKvCache(ModelBatchResultSPtr &
 }
 
 // 以下函数会并发调用，需要保证线程安全
-void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResult)
-{
+void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResult) {
     if (modelBatchResult == nullptr) {
         throw std::runtime_error("modelBatchResult is nullptr.");
     }
@@ -101,8 +101,8 @@ void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResu
     if (schedulerConfig_->layerwiseDisaggregated) {
         lwdCurrBatchType = static_cast<ForwardMode>(!modelBatchResult->layerwise_is_prefill());
     }
-    std::deque<SequenceGroupSPtr> recomputeInDBatchQueue; // recompute in decode batch
-    
+    std::deque<SequenceGroupSPtr> recomputeInDBatchQueue;  // recompute in decode batch
+
     for (const CompletionSequenceGroupOutput &output : modelBatchResult->outputs()) {
         uint64_t queueWaitTime = 0;
         uint64_t currentPrefixCachedTokenNums = 0;
@@ -110,8 +110,8 @@ void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResu
         if (output.samples_size() == 0) {
             throw std::runtime_error("There is no sample in output.");
         }
-        ResponseSPtr response = ConvertSequenceGroupOutputToResponse(output, queueWaitTime,
-            currentPrefixCachedTokenNums);
+        ResponseSPtr response =
+            ConvertSequenceGroupOutputToResponse(output, queueWaitTime, currentPrefixCachedTokenNums);
         PROF(spanConvert.SpanEnd());
 
         if (output.samples_size() > 1) {
@@ -122,8 +122,8 @@ void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResu
 
         // ChunkedPrefill特性下，除了最后一个prefill块，前几个块做forward后的输出token要丢弃
         SequenceGroupSPtr seqGroup = liveInferContext->GetSeqGroup(output.samples(0).seq_id());
-        bool discardChunkedPrefillReqToken = (seqGroup != nullptr) && ((schedulerConfig_->enableChunkedPrefill) &&
-            (!seqGroup->isLastChunk_));
+        bool discardChunkedPrefillReqToken =
+            (seqGroup != nullptr) && ((schedulerConfig_->enableChunkedPrefill) && (!seqGroup->isLastChunk_));
 
         if (response != nullptr) {
             if (discardChunkedPrefillReqToken) {
@@ -141,8 +141,9 @@ void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResu
                 prefixCachedTokenNums.push_back(currentPrefixCachedTokenNums);
             }
         }
-        layerwiseNeedUpdate = layerwiseMixin_.LwdProcessResponse(schedulerConfig_->layerwiseDisaggregated, seqGroup,
-            lastForwardMode, lwdCurrBatchType, recomputeInDBatchQueue);
+        layerwiseNeedUpdate =
+            layerwiseMixin_.LwdProcessResponse(schedulerConfig_->layerwiseDisaggregated, seqGroup, lastForwardMode,
+                                               lwdCurrBatchType, recomputeInDBatchQueue);
     }
     layerwiseMixin_.LwdProcessRecomputeSeq(layerwiseNeedUpdate, lastForwardMode, recomputeInDBatchQueue);
     layerwiseMixin_.LwdHandlerSubBatchCnt(schedulerConfig_->layerwiseDisaggregated, stagePolicy_, lwdCurrBatchType);
@@ -178,15 +179,14 @@ void ModelExecOutputHandler::Entry4Executor(ModelBatchResultSPtr &modelBatchResu
         stagePolicy_->MarkInferenceEndTimeStamp();
     }
     if (role_ == Role::P ||
-            (seqGroup != nullptr && liveInferContext->GetInferInstanceFlexRole4Req(seqGroup->requestId) == Role::FlexP)) {
+        (seqGroup != nullptr && liveInferContext->GetInferInstanceFlexRole4Req(seqGroup->requestId) == Role::FlexP)) {
         // notify ms coordinator that these prefilled kv cache can be pulled
         AsyncPublishPrefilledKvCache(modelBatchResult);
     }
 }
 
 SequenceGroupSPtr ModelExecOutputHandler::FindRootSequenceGroup(const CompletionSequenceGroupOutput &output,
-                                                                LiveInferContextSPtr &liveInferContext) const
-{
+                                                                LiveInferContextSPtr &liveInferContext) const {
     SequenceGroupSPtr seqGroup = nullptr;
     for (const model_execute_data::SequenceOutput &sample : output.samples()) {
         seqGroup = liveInferContext->GetSeqGroupFromSeqRootMap(sample.parent_seq_id());
@@ -197,15 +197,12 @@ SequenceGroupSPtr ModelExecOutputHandler::FindRootSequenceGroup(const Completion
     return seqGroup;
 }
 
-void ModelExecOutputHandler::ProcessSequenceStatus(SequenceId seqId, int64_t finishReason)
-{
+void ModelExecOutputHandler::ProcessSequenceStatus(SequenceId seqId, int64_t finishReason) {
     if (finishReason == static_cast<int64_t>(InferStatusType::ITERATION_CONTINUE)) {
         return;
     }
-    MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-End] DP RankId: " << dpRankId_
-                                                              << ". Sequence finished. seqId: " << seqId
-                                                              << "; finishReason: "
-                                                              << finishReason);
+    MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-End] DP RankId: " << dpRankId_ << ". Sequence finished. seqId: "
+                                                                      << seqId << "; finishReason: " << finishReason);
     if (finishReason == static_cast<int64_t>(InferStatusType::END_OF_SENTENCE)) {
         finishedSeqIds_.PushBack(seqId);
     } else {
@@ -213,8 +210,7 @@ void ModelExecOutputHandler::ProcessSequenceStatus(SequenceId seqId, int64_t fin
     }
 }
 
-void ModelExecOutputHandler::UpdateThinkingStatus(SequenceGroupSPtr &seqGrp, int64_t outputToken)
-{
+void ModelExecOutputHandler::UpdateThinkingStatus(SequenceGroupSPtr &seqGrp, int64_t outputToken) {
     if (schedulerConfig_->earlyStoppingIds.size() == 0) {
         return;
     }
@@ -231,8 +227,7 @@ void ModelExecOutputHandler::UpdateThinkingStatus(SequenceGroupSPtr &seqGrp, int
     }
 }
 
-void ModelExecOutputHandler::UpdateResponse(SequenceGroupSPtr &seqGrp, ResponseSPtr &response)
-{
+void ModelExecOutputHandler::UpdateResponse(SequenceGroupSPtr &seqGrp, ResponseSPtr &response) {
     if (response == nullptr || response->responseContents.size() == 0) {
         return;
     }
@@ -240,23 +235,21 @@ void ModelExecOutputHandler::UpdateResponse(SequenceGroupSPtr &seqGrp, ResponseS
     std::vector<TokenId> &outTokenIds = response->responseContents[0].outTokenIds;
     std::vector<float> &outLogProbs = response->responseContents[0].outLogProbs;
     std::vector<TokenId> &topTokenIds = response->responseContents[0].topLogProbTokenIds;
-    std::vector<float> &topLogProbs =  response->responseContents[0].topLogProbs;
+    std::vector<float> &topLogProbs = response->responseContents[0].topLogProbs;
 
     std::vector<TokenId> &stopIds = schedulerConfig_->earlyStoppingIds;
     outTokenIds.insert(outTokenIds.end(), stopIds.begin(), stopIds.end());
     speculativeTokenNum += stopIds.size();
     outLogProbs.insert(outLogProbs.end(), stopIds.size(), 0);
     if (seqGrp->topLogProbs_ > 0) {
-        std::for_each(stopIds.begin(), stopIds.end(), [&](TokenId token) {
-            topTokenIds.insert(topTokenIds.end(), seqGrp->topLogProbs_, token);
-        });
+        std::for_each(stopIds.begin(), stopIds.end(),
+                      [&](TokenId token) { topTokenIds.insert(topTokenIds.end(), seqGrp->topLogProbs_, token); });
         topLogProbs.insert(topLogProbs.end(), seqGrp->topLogProbs_ * stopIds.size(), 0);
     }
 }
 
 void ModelExecOutputHandler::HandleGreedySampling(const model_execute_data::SequenceOutput &sample,
-                                                  ResponseSPtr &response)
-{
+                                                  ResponseSPtr &response) {
     auto spanGreedySampling = PROF(INFO, Domain("Engine").SpanStart("HandleGreedySampling"));
     SequenceGroupSPtr seqGrp = LiveInferContext::GetInstance(localDPRank_)->GetSeqGroup(sample.seq_id());
     int64_t tokenIdx = 0;
@@ -274,8 +267,8 @@ void ModelExecOutputHandler::HandleGreedySampling(const model_execute_data::Sequ
                 UpdateThinkingStatus(seqGrp, output_token);
             }
         } else if (schedulerConfig_->layerwiseDisaggregated) {
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] "<<"seq id is "
-                << sample.seq_id() << ", output_token is -1");
+            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|handler] " << "seq id is " << sample.seq_id()
+                                                                    << ", output_token is -1");
         }
     }
     if (seqGrp != nullptr && seqGrp->exceededThinkingbudget_) {
@@ -287,8 +280,7 @@ void ModelExecOutputHandler::HandleGreedySampling(const model_execute_data::Sequ
 }
 
 void ModelExecOutputHandler::HandleParallelSampling(const model_execute_data::CompletionSequenceGroupOutput &output,
-                                                    LiveInferContextSPtr &liveInferContext)
-{
+                                                    LiveInferContextSPtr &liveInferContext) {
     auto spanParallelSampling = PROF(INFO, Domain("Engine").SpanStart("HandleParallelSampling"));
 
     SequenceGroupSPtr rootSeqGrp = FindRootSequenceGroup(output, liveInferContext);
@@ -343,8 +335,7 @@ void ModelExecOutputHandler::HandleParallelSampling(const model_execute_data::Co
 
 void ModelExecOutputHandler::CreateNewSequenceGroup(const model_execute_data::SequenceOutput &sample,
                                                     SequenceGroupSPtr &rootSeqGrp,
-                                                    LiveInferContextSPtr &liveInferContext) const
-{
+                                                    LiveInferContextSPtr &liveInferContext) const {
     if (!rootSeqGrp->seqId2ParallelSeqGroup_.Get(sample.parent_seq_id())) {
         MINDIE_LLM_LOG_ERROR("Can not find sequence group for parent seq id=" << sample.parent_seq_id());
         throw std::runtime_error("Can not find sequence group for parent seq id");
@@ -353,8 +344,8 @@ void ModelExecOutputHandler::CreateNewSequenceGroup(const model_execute_data::Se
     std::vector<TokenId> promptTokenIds = parentSeqGrp->firstSeq->data_.promptTokenIds;
 
     // 创建新 Sequence 和 SequenceGroup
-    SequenceSPtr newSeq = std::make_shared<Sequence>(
-        sample.seq_id(), parentSeqGrp->firstSeq->blockSize_, promptTokenIds);
+    SequenceSPtr newSeq =
+        std::make_shared<Sequence>(sample.seq_id(), parentSeqGrp->firstSeq->blockSize_, promptTokenIds);
     std::vector<TokenId> &outputTokenIds = newSeq->data_.outputTokenIds;
     std::copy(sample.output_token().begin(), sample.output_token().end(), std::back_inserter(outputTokenIds));
     SequenceGroupSPtr newSeqGrp =
@@ -370,8 +361,7 @@ void ModelExecOutputHandler::CreateNewSequenceGroup(const model_execute_data::Se
 }
 
 void ModelExecOutputHandler::UpdateSequenceGroup(const model_execute_data::SequenceOutput &sample,
-                                                 SequenceGroupSPtr &rootSeqGrp) const
-{
+                                                 SequenceGroupSPtr &rootSeqGrp) const {
     if (rootSeqGrp == nullptr) {
         throw std::runtime_error("rootSeqGrp is null.");
     }
@@ -397,9 +387,8 @@ void ModelExecOutputHandler::UpdateSequenceGroup(const model_execute_data::Seque
     seqGrp->parentSeqId_ = sample.parent_seq_id();
 }
 
-void ModelExecOutputHandler::AddOutputsToResponse(ResponseSPtr response,
-    const model_execute_data::CompletionSequenceGroupOutput &output) const
-{
+void ModelExecOutputHandler::AddOutputsToResponse(
+    ResponseSPtr response, const model_execute_data::CompletionSequenceGroupOutput &output) const {
     response->numParallelTokens = static_cast<size_t>(output.samples(0).num_parallel_tokens());
     // enumerate different sequences in Parallel Sampling
     for (const model_execute_data::SequenceOutput &sample : output.samples()) {
@@ -411,7 +400,7 @@ void ModelExecOutputHandler::AddOutputsToResponse(ResponseSPtr response,
             trailingPlaceholderNum++;
         }
         if (trailingPlaceholderNum == tokenNum) {
-            continue; // 没有有效的 token, 不需要返回给上层
+            continue;  // 没有有效的 token, 不需要返回给上层
         }
         // add new ParallelResponse for this sequence sample
         response->responseContents.emplace_back(ResponseContent{
@@ -419,8 +408,8 @@ void ModelExecOutputHandler::AddOutputsToResponse(ResponseSPtr response,
             .parentSeqId = sample.parent_seq_id(),
             .finishReason = static_cast<InferStatusType>(sample.finish_reason()),
             .speculativeTokenNum = static_cast<size_t>(sample.num_speculative_tokens()),
-            .outTokenIds = std::vector<TokenId>(
-                sample.output_token().begin(), sample.output_token().begin() + tokenNum),
+            .outTokenIds =
+                std::vector<TokenId>(sample.output_token().begin(), sample.output_token().begin() + tokenNum),
             .outLogProbs = std::vector<float>(sample.logprob().begin(), sample.logprob().end()),
             .cumLogProb = sample.cumulative_logprobs(),
             .truncationIndex = sample.truncation_index(),
@@ -429,15 +418,13 @@ void ModelExecOutputHandler::AddOutputsToResponse(ResponseSPtr response,
             .srcBlockTable = {},
             .singleLLMPrefillReqHandlerId = 0,
             .pdErrorCode = 0,
-            .isThinking = false
-        });
+            .isThinking = false});
     }
 }
 
 ResponseSPtr ModelExecOutputHandler::ConvertSequenceGroupOutputToResponse(
     const model_execute_data::CompletionSequenceGroupOutput &output, uint64_t &queueWaitTime,
-    uint64_t &currentPrefixCachedTokenNums)
-{
+    uint64_t &currentPrefixCachedTokenNums) {
     LiveInferContextSPtr liveInferContext = LiveInferContext::GetInstance(localDPRank_);
     // 并行采样时，从 liveInferContext->seqId2RootSeqGroupMap_ 中获取 seqGroup
     // 只有 RootSeqGroup 包含创建 InferResponse 所需要的信息
@@ -488,8 +475,7 @@ ResponseSPtr ModelExecOutputHandler::ConvertSequenceGroupOutputToResponse(
 }
 
 void ModelExecOutputHandler::SetResponseFlags(const model_execute_data::CompletionSequenceGroupOutput &output,
-                                              ResponseSPtr response) const
-{
+                                              ResponseSPtr response) const {
     // 检查是否所有序列都已完成
     size_t continueSeqCount =
         static_cast<size_t>(std::count_if(output.samples().begin(), output.samples().end(), [](const auto &sample) {
@@ -497,9 +483,8 @@ void ModelExecOutputHandler::SetResponseFlags(const model_execute_data::Completi
         }));
     if (continueSeqCount == 0) {
         response->isEos = true;
-        MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-End] DP RankId: " << dpRankId_
-                                                                  << ". Send eos response. seqId: "
-                                                                  << output.samples(0).seq_id());
+        MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-End] DP RankId: " << dpRankId_ << ". Send eos response. seqId: "
+                                                                          << output.samples(0).seq_id());
     }
     response->inferStatusFlag = static_cast<InferStatusType>(output.samples(0).finish_reason());
     LiveInferContextSPtr liveInferContext = LiveInferContext::GetInstance(localDPRank_);
@@ -514,8 +499,7 @@ ConcurrentDeque<SequenceId> &ModelExecOutputHandler::GetFinishedSeqIds() { retur
 
 ConcurrentDeque<SequenceId> &ModelExecOutputHandler::GetExceptionSeqIds() { return execExceptionSeqIds_; }
 
-ConcurrentDeque<std::pair<SequenceId, TokenId>> &ModelExecOutputHandler::GetSeqIdToOutputTokenQueue()
-{
+ConcurrentDeque<std::pair<SequenceId, TokenId>> &ModelExecOutputHandler::GetSeqIdToOutputTokenQueue() {
     return seqIdToOutputTokenQueue_;
 }
 

@@ -17,19 +17,19 @@ import torch
 @dataclass
 class ModuleMetadata:
     """Base class for module metadata.
-    
+
     This abstract base class defines the interface for metadata used during
     model forward passes. Subclasses should implement all abstract methods.
     """
-    
+
     @staticmethod
     @abstractmethod
-    def from_model_input(model_input: Any) -> 'ModuleMetadata':
+    def from_model_input(model_input: Any) -> "ModuleMetadata":
         """Create metadata from model input.
-        
+
         Args:
             model_input: Model input data.
-            
+
         Returns:
             Instance of metadata.
         """
@@ -39,7 +39,7 @@ class ModuleMetadata:
     @abstractmethod
     def is_enabled() -> bool:
         """Check if this metadata type is enabled.
-        
+
         Returns:
             True if enabled, False otherwise.
         """
@@ -49,7 +49,7 @@ class ModuleMetadata:
     @abstractmethod
     def register_buffer(max_num_token: int, device: torch.device) -> None:
         """Register buffer for metadata.
-        
+
         Args:
             max_num_token: Maximum number of tokens.
             device: Target device.
@@ -57,14 +57,14 @@ class ModuleMetadata:
         pass
 
     @classmethod
-    def from_dict(cls, dict_data: Dict[str, Any]) -> 'ModuleMetadata':
+    def from_dict(cls, dict_data: Dict[str, Any]) -> "ModuleMetadata":
         """Create metadata from dictionary.
-        
+
         NOTE: This method will be deprecated after `model_runner_exp.py` is in use.
-        
+
         Args:
             dict_data: Dictionary containing metadata fields.
-            
+
         Returns:
             Instance of metadata.
         """
@@ -75,7 +75,7 @@ class ModuleMetadata:
     @abstractmethod
     def to_device(self, device: torch.device) -> None:
         """Move metadata tensors to the specified device.
-        
+
         Args:
             device: Target device.
         """
@@ -84,7 +84,7 @@ class ModuleMetadata:
     @abstractmethod
     def copy(self, num_actual_tokens: int, num_tokens: int) -> None:
         """Copy metadata with new token counts.
-        
+
         Args:
             num_actual_tokens: Actual number of tokens.
             num_tokens: Total number of tokens (including padding).
@@ -95,10 +95,11 @@ class ModuleMetadata:
         """Record the stream for metadata tensors.
 
         Subclasses are not allowed to have nested structures.
-        
+
         Args:
             stream: NPU stream to record.
         """
+
         def _record(obj):
             if isinstance(obj, torch.Tensor) and obj.is_npu:
                 obj.record_stream(stream)

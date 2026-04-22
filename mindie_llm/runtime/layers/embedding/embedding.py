@@ -20,7 +20,7 @@ from mindie_llm.runtime.layers.quantization.unquantized import UnquantizedEmbedd
 from mindie_llm.runtime.layers.parameter import BaseParameter, ColumnParameter
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.utils import even_divide
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 
 
 class VocabParallelEmbedding(CustomLayer):
@@ -40,6 +40,7 @@ class VocabParallelEmbedding(CustomLayer):
         partition_weights: Whether to partition the embedding weights.
             Defaults to False.
     """
+
     def __init__(
         self,
         num_embeddings: int,
@@ -87,7 +88,7 @@ class VocabParallelEmbedding(CustomLayer):
             param: The parameter to load the weight into.
             loaded_weight: The weight tensor read from file to be loaded into the parameter.
         """
-        model_quant_type = get_model_quant_type(getattr(self, 'quant_config', None))
+        model_quant_type = get_model_quant_type(getattr(self, "quant_config", None))
         if model_quant_type in [QuantType.W8A8SC]:
             loaded_weight = F.pad(loaded_weight, (0, 0, 0, 1))
             param.data = torch.empty_like(loaded_weight, device=param.data.device, dtype=param.data.dtype)
@@ -112,11 +113,8 @@ class VocabParallelEmbedding(CustomLayer):
         embed_out = self.quant_method.apply(self, x)
 
         if self.is_parallel:
-            hidden_state = \
-                torch.zeros_like(embed_out).repeat(self.tp_size, 1, 1)
-            dist.all_gather_into_tensor(hidden_state,
-                                        embed_out,
-                                        group=self.parallel_info.process_group)
+            hidden_state = torch.zeros_like(embed_out).repeat(self.tp_size, 1, 1)
+            dist.all_gather_into_tensor(hidden_state, embed_out, group=self.parallel_info.process_group)
             hidden_state = hidden_state.permute(1, 0, 2).contiguous()
             hidden_state = hidden_state.view(hidden_state.shape[0], -1)
         else:
@@ -175,6 +173,7 @@ class ParallelLMHead(VocabParallelEmbedding):
             uses unquantized method. Defaults to None.
         prefix: Prefix string used to construct the full layer name in the state dictionary. Defaults to "".
     """
+
     def __init__(
         self,
         num_embeddings: int,
@@ -222,11 +221,7 @@ class ParallelLMHead(VocabParallelEmbedding):
         self.prefix = embed_tokens.prefix
         return self
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        lm_head_indices: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, lm_head_indices: torch.Tensor | None = None) -> torch.Tensor:
         """Forward pass of the parallel language model head.
 
         Args:
@@ -243,7 +238,7 @@ class ParallelLMHead(VocabParallelEmbedding):
             lm_head_out = self.quant_method.apply(self, hidden_states)
         else:
             lm_head_out = self.quant_method.apply(self, hidden_states)
-        
+
         if self.tp_size > 1:
             logits = torch.zeros_like(lm_head_out).repeat(self.tp_size, 1, 1)
             dist.all_gather_into_tensor(logits, lm_head_out, group=self.parallel_info.process_group)
@@ -255,7 +250,7 @@ class ParallelLMHead(VocabParallelEmbedding):
 
     def _post_init(self) -> None:
         """Post-initialization: configure layer-specific parallel info and quantization method.
-        
+
         Note that although `ParallelLMHead inherits from VocabParallelEmbedding, it uses
         different parallel info (lm_head_tp) and quantization method type (linear) compared
         to the parent class.
@@ -285,11 +280,14 @@ class ParallelLMHead(VocabParallelEmbedding):
 
         if self.has_bias:
             self.bias = BaseParameter(
-                torch.empty(even_divide(self.num_embeddings, self.tp_size), dtype=self.bias_dtype))
-            self.bias.add_attrs({
-                "output_dim": 0,
-                "weight_loader": self.weight_loader,
-            })
+                torch.empty(even_divide(self.num_embeddings, self.tp_size), dtype=self.bias_dtype)
+            )
+            self.bias.add_attrs(
+                {
+                    "output_dim": 0,
+                    "weight_loader": self.weight_loader,
+                }
+            )
         else:
             self.register_parameter("bias", None)
 
@@ -303,7 +301,7 @@ def maybe_slice_cross_tp(input_, parallel_info):
     world_size = parallel_info.group_size
     if world_size <= 1:
         return input_
-    
+
     pad_size = (world_size - (input_.shape[0] % world_size)) % world_size
     if pad_size > 0:
         input_ = F.pad(input_, (0, 0, 0, pad_size))

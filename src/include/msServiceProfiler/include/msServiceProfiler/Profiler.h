@@ -15,18 +15,13 @@
 
 // 定义日志级别枚举
 namespace msServiceProfiler {
-    enum class Level {
-        INFO,
-        WARNING,
-        ERROR
-    };
+enum class Level { INFO, WARNING, ERROR };
 }
 
 // 定义 Profiler 类模板
 namespace msServiceProfiler {
-    template <Level level = Level::INFO>
-    class Profiler {
-    };
-}
+template <Level level = Level::INFO>
+class Profiler {};
+}  // namespace msServiceProfiler
 
 #endif  // PROFILER_H

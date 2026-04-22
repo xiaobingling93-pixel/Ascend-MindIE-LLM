@@ -14,6 +14,7 @@
 #define BALANCE_POLICY_H
 
 #include <vector>
+
 #include "block_manager/block_manager_interface.h"
 
 namespace mindie_llm {
@@ -27,14 +28,13 @@ struct BalancerConstraintParam {
     uint64_t minFreeBlockNumForDP_;
 
     BalancerConstraintParam(size_t maxReqNum, size_t dispatchNum, size_t minFreeBlockForDp)
-        : maxReqNumPerWavePerDP_(maxReqNum), dispatchNumAtThisWave_(dispatchNum),
-          minFreeBlockNumForDP_(minFreeBlockForDp)
-    {
-    }
+        : maxReqNumPerWavePerDP_(maxReqNum),
+          dispatchNumAtThisWave_(dispatchNum),
+          minFreeBlockNumForDP_(minFreeBlockForDp) {}
 };
 
 class IBalancePolicy {
-public:
+   public:
     virtual ~IBalancePolicy() = default;
 
     virtual void SetConstraint(const BalancerConstraintParam &param) = 0;
@@ -45,6 +45,6 @@ public:
 using BalancePolicyPtr = std::unique_ptr<IBalancePolicy>;
 BalancePolicyPtr MakeBalancePolicy(BalancePolicyType type);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

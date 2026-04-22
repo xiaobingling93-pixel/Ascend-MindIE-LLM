@@ -346,12 +346,22 @@ TEST_F(VllmOpenAiCompletionsInferTest, TestSetupInferParamsWithResponseFormat) {
     EXPECT_TRUE(inferInterface->SetupInferParams(request, errorMsg));
     EXPECT_TRUE(request->responseFormat.has_value());
 
-    // invalid response_format - type is invalid
+    // valid response_format - type is valid
     request = std::make_shared<Request>(RequestIdNew("mockRequest"));
     inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
         "prompt": "mock test",
         "model": "llama_65b",
         "response_format": {"type": "text"}
+    })");
+    EXPECT_TRUE(inferInterface->SetupInferParams(request, errorMsg));
+    EXPECT_FALSE(request->responseFormat.has_value());
+
+    // invalid response_format - type is invalid
+    request = std::make_shared<Request>(RequestIdNew("mockRequest"));
+    inferInterface->reqJsonBody_ = OrderedJson::parse(R"({
+        "prompt": "mock test",
+        "model": "llama_65b",
+        "response_format": {"type": "invalid_type"}
     })");
     EXPECT_FALSE(inferInterface->SetupInferParams(request, errorMsg));
 

@@ -15,53 +15,55 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
+#include "single_req_infer_interface_base.h"
 using OrderedJson = nlohmann::ordered_json;
 
 namespace mindie_llm {
 class SingleReqVllmOpenAiCompletionsInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqVllmOpenAiCompletionsInferInterface(
         const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute = false,
         const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool BuildResponseJson(ResponseSPtr response, const std::vector<BestNTokens> &tempTokens,
                            RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
     void SetDMIReComputeBuilder() override;
-    const InferParam::FeatureSupport &GetFeatureSupport() const override
-    {
+    const InferParam::FeatureSupport &GetFeatureSupport() const override {
         static constexpr InferParam::FeatureSupport kSupport{true, true, true, false};
         return kSupport;
     }
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
-protected:
+
+   protected:
     bool ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp) override;
     void SendStreamResponse(RespBodyQueue &jsonStrings) override;
-private:
+
+   private:
     bool CheckModelName(const std::string &modelName, std::string &foundModelName);
     bool AssignModel(nlohmann::ordered_json &body, std::string &model, std::string &error);
-    bool SetReturnSeqCount(RequestSPtr req, std::string& msg);
-    bool CheckReturnSeqCount(RequestSPtr req, std::string& msg) const;
+    bool SetReturnSeqCount(RequestSPtr req, std::string &msg);
+    bool CheckReturnSeqCount(RequestSPtr req, std::string &msg) const;
     std::string ChangeUtf8Str(std::string &input) const;
-    bool EncodeNonStreamJsonObject(RespBodyQueue &jsonStrs,
-        std::map<uint64_t, std::string>& responseTextMap, const bool &needSort = false);
+    bool EncodeNonStreamJsonObject(RespBodyQueue &jsonStrs, std::map<uint64_t, std::string> &responseTextMap,
+                                   const bool &needSort = false);
     bool EncodeResponse(RespBodyQueue &jsonStrs);
-    bool EncodeStreamJsonObject(RespBodyQueue &jsonStrings,
-        std::map<uint64_t, std::string>& responseTextMap, const bool &needSort = false) noexcept;
+    bool EncodeStreamJsonObject(RespBodyQueue &jsonStrings, std::map<uint64_t, std::string> &responseTextMap,
+                                const bool &needSort = false) noexcept;
     bool EncodeStreamResponse(RespBodyQueue &jsonStrings) noexcept;
-    std::string BuildReComputeBody(const std::vector<BestNTokens>& tokens);
-    void BuildStopWords(nlohmann::ordered_json& newReqJsonObj);
-    void BuildResponseFormat(nlohmann::ordered_json& newReqJsonObj);
+    std::string BuildReComputeBody(const std::vector<BestNTokens> &tokens);
+    void BuildStopWords(nlohmann::ordered_json &newReqJsonObj);
+    void BuildResponseFormat(nlohmann::ordered_json &newReqJsonObj);
     std::map<uint64_t, std::string> cachedStreamTextMap{};
     // encode logprobs
     bool EncodeLogprobsFullText(nlohmann::ordered_json &choiceJsonObj, const uint64_t seqId) noexcept;
     bool EncodeLogprobsStream(nlohmann::ordered_json &choiceJsonObj, const uint64_t seqId,
-        const StreamCache& cache) noexcept;
-    bool EncodeSingleTokenLogrobs(nlohmann::ordered_json &singleToken, const uint64_t &baseIndex,
-        const uint64_t seqId, const StreamCache* cache = nullptr) noexcept;
+                              const StreamCache &cache) noexcept;
+    bool EncodeSingleTokenLogrobs(nlohmann::ordered_json &singleToken, const uint64_t &baseIndex, const uint64_t seqId,
+                                  const StreamCache *cache = nullptr) noexcept;
     uint64_t wordOffset = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // ENDPOINT_VLLM_OPENAI_COMPLETIOINS_INFER_H

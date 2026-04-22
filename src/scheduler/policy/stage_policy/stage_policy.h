@@ -13,15 +13,15 @@
 #ifndef ISTAGE_POLICY_H
 #define ISTAGE_POLICY_H
 
-#include "concurrent_deque.h"
 #include "basic_types.h"
+#include "concurrent_deque.h"
 #include "policy/seq_group_collection.h"
 
 namespace mindie_llm {
 enum class StagePolicyType { PREFILL_FIRST, FIXED_COST_TIME_TPT_FIRST, LATENCY_FIRST, EDGE_CLOUD };
 
 class StagePolicy {
-public:
+   public:
     StagePolicy() = default;
     virtual ~StagePolicy() = default;
     virtual PDPriorityType Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting,
@@ -35,12 +35,11 @@ public:
     virtual void SetPrefillPercentage(uint32_t) {}
     // 在配比微调场景下，根据当前等待队列、运行队列和交换队列中的请求类型，和当前prefill请求执行占比，决定当前Flex节点的角色
     virtual Role GetFlexRole(ConcurrentDeque<SequenceGroupSPtr> &, ConcurrentDeque<SequenceGroupSPtr> &,
-                             ConcurrentDeque<SequenceGroupSPtr> &)
-    {
+                             ConcurrentDeque<SequenceGroupSPtr> &) {
         return Role::FlexP;
     }
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

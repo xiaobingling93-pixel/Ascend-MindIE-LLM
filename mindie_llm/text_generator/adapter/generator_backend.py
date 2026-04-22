@@ -46,91 +46,109 @@ class GeneratorBackend:
     """
 
     def __init__(self, model_config: Dict[str, Any]) -> None:
-        self.model_name = parse_config(model_config, 'model_name', required=False, parse_type=ParseType.TO_STR)
-        backend_type = parse_config(model_config, 'backend_type', required=True)
-        num_threads = parse_config(model_config, 'num_threads', parse_type=ParseType.TO_INT, default_value=8)
-        self.npu_device_id = parse_config(model_config, 'npu_device_id', required=True, parse_type=ParseType.TO_INT)
-        self.local_rank = parse_config(model_config, 'local_rank', required=True, parse_type=ParseType.TO_INT)
-        self.rank = parse_config(model_config, 'rank', required=True, parse_type=ParseType.TO_INT)
-        self.world_size = parse_config(model_config, 'world_size', required=True, parse_type=ParseType.TO_INT)
-        self.trust_remote_code = parse_config(model_config, 'trust_remote_code', required=True,
-                                              parse_type=ParseType.TO_BOOL, default_value=False)
-        self.distributed_enable = parse_config(model_config, 'distributed_enable', required=False, 
-                                                parse_type=ParseType.TO_BOOL, default_value=False)
-        self.max_batch_size = parse_config(model_config, 'max_batch_size', required=False, 
-                                                parse_type=ParseType.TO_INT, default_value=0)
-        self.local_super_device_id = parse_config(model_config, 'local_super_device_id', required=False, 
-                                                  parse_type=ParseType.TO_STR, default_value=None)
-        self.block_size = parse_config(model_config, 'block_size', required=False,
-                                       parse_type=ParseType.TO_INT, default_value=128)
-        self.splitfuse_enabled = parse_config(model_config, 'splitfuse_enabled', required=False,
-                                              parse_type=ParseType.TO_BOOL, default_value=False)
-        self.kv_pool_backend = parse_config(model_config, 'kv_pool_backend', required=False, 
-                                        parse_type=ParseType.TO_STR, default_value='')
-        self.kv_pool_config_path = parse_config(model_config, 'kv_pool_config_path', required=False, 
-                                        parse_type=ParseType.TO_STR, default_value='')
-        self.kv_pool_async_write = parse_config(model_config, 'kv_pool_async_write', required=False,
-                                        parse_type=ParseType.TO_BOOL, default_value=False)
+        self.model_name = parse_config(model_config, "model_name", required=False, parse_type=ParseType.TO_STR)
+        backend_type = parse_config(model_config, "backend_type", required=True)
+        num_threads = parse_config(model_config, "num_threads", parse_type=ParseType.TO_INT, default_value=8)
+        self.npu_device_id = parse_config(model_config, "npu_device_id", required=True, parse_type=ParseType.TO_INT)
+        self.local_rank = parse_config(model_config, "local_rank", required=True, parse_type=ParseType.TO_INT)
+        self.rank = parse_config(model_config, "rank", required=True, parse_type=ParseType.TO_INT)
+        self.world_size = parse_config(model_config, "world_size", required=True, parse_type=ParseType.TO_INT)
+        self.trust_remote_code = parse_config(
+            model_config, "trust_remote_code", required=True, parse_type=ParseType.TO_BOOL, default_value=False
+        )
+        self.distributed_enable = parse_config(
+            model_config, "distributed_enable", required=False, parse_type=ParseType.TO_BOOL, default_value=False
+        )
+        self.max_batch_size = parse_config(
+            model_config, "max_batch_size", required=False, parse_type=ParseType.TO_INT, default_value=0
+        )
+        self.local_super_device_id = parse_config(
+            model_config, "local_super_device_id", required=False, parse_type=ParseType.TO_STR, default_value=None
+        )
+        self.block_size = parse_config(
+            model_config, "block_size", required=False, parse_type=ParseType.TO_INT, default_value=128
+        )
+        self.splitfuse_enabled = parse_config(
+            model_config, "splitfuse_enabled", required=False, parse_type=ParseType.TO_BOOL, default_value=False
+        )
+        self.kv_pool_backend = parse_config(
+            model_config, "kv_pool_backend", required=False, parse_type=ParseType.TO_STR, default_value=""
+        )
+        self.kv_pool_config_path = parse_config(
+            model_config, "kv_pool_config_path", required=False, parse_type=ParseType.TO_STR, default_value=""
+        )
+        self.kv_pool_async_write = parse_config(
+            model_config, "kv_pool_async_write", required=False, parse_type=ParseType.TO_BOOL, default_value=False
+        )
 
         if self.world_size < 1 or self.world_size > MAX_WORLD_SIZE:
             raise ValueError("World size should be in the range of 1 to 1048576.")
         if self.rank < 0 or self.rank >= self.world_size:
             raise ValueError("Rank should be in the range of 0 to world_size - 1.")
-        dp = parse_config(model_config, 'dp', required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        dp = parse_config(model_config, "dp", required=False, parse_type=ParseType.TO_INT, default_value=-1)
         self.dp = dp
-        tp = parse_config(model_config, 'tp', required=False, parse_type=ParseType.TO_INT, default_value=-1)
-        attn_inner_sp = parse_config(model_config, 'sp', required=False, parse_type=ParseType.TO_INT, default_value=-1)
-        cp = parse_config(model_config, 'cp', required=False, parse_type=ParseType.TO_INT, default_value=-1)
-        moe_tp = parse_config(model_config, 'moe_tp', required=False, parse_type=ParseType.TO_INT, default_value=-1)
-        moe_ep = parse_config(model_config, 'moe_ep', required=False, parse_type=ParseType.TO_INT, default_value=-1)
-        soc_version = parse_config(model_config, 'soc_version', required=False, parse_type=ParseType.TO_INT,
-                                   default_value=-1)
+        tp = parse_config(model_config, "tp", required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        attn_inner_sp = parse_config(model_config, "sp", required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        cp = parse_config(model_config, "cp", required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        moe_tp = parse_config(model_config, "moe_tp", required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        moe_ep = parse_config(model_config, "moe_ep", required=False, parse_type=ParseType.TO_INT, default_value=-1)
+        soc_version = parse_config(
+            model_config, "soc_version", required=False, parse_type=ParseType.TO_INT, default_value=-1
+        )
         num_lccl_comm_shards = parse_config(
-            model_config, 'num_lccl_comm_shards', parse_type=ParseType.TO_INT, default_value=1)
+            model_config, "num_lccl_comm_shards", parse_type=ParseType.TO_INT, default_value=1
+        )
         lccl_comm_shard_id = parse_config(
-            model_config, 'lccl_comm_shard_id', parse_type=ParseType.TO_INT, default_value=0)
+            model_config, "lccl_comm_shard_id", parse_type=ParseType.TO_INT, default_value=0
+        )
         if self.local_rank < 0 or self.local_rank >= self.world_size:
             raise ValueError("Local rank should be in the range of 0 to world_size - 1.")
-        max_loras = parse_config(model_config, 'max_loras', required=False, parse_type=ParseType.TO_INT, default_value=0)
-        max_lora_rank = parse_config(model_config, 'max_lora_rank', required=False, parse_type=ParseType.TO_INT, default_value=0)
+        max_loras = parse_config(
+            model_config, "max_loras", required=False, parse_type=ParseType.TO_INT, default_value=0
+        )
+        max_lora_rank = parse_config(
+            model_config, "max_lora_rank", required=False, parse_type=ParseType.TO_INT, default_value=0
+        )
         self.__parse_config_key(model_config)
-        lwd_next_p_head_prior = parse_config(model_config, 'lwdNextPHeadPrior', 
-                                         parse_type=ParseType.TO_BOOL, default_value=False)
+        lwd_next_p_head_prior = parse_config(
+            model_config, "lwdNextPHeadPrior", parse_type=ParseType.TO_BOOL, default_value=False
+        )
 
         sampler_config = SamplerConfig(
             backend_type=backend_type,
             npu_id=self.npu_device_id,
             num_threads=num_threads,
             rank=self.rank,
-            splitfuse_enabled=self.splitfuse_enabled
+            splitfuse_enabled=self.splitfuse_enabled,
         )
         self.sampler = Sampler(sampler_config)
 
         model_config["rank"] = self.rank
         model_config["world_size"] = self.world_size
-        model_config['npu_device_id'] = self.npu_device_id
-        model_config['local_rank'] = self.local_rank
-        model_config['dp'] = dp
-        model_config['tp'] = tp
-        model_config['attn_inner_sp'] = attn_inner_sp
-        model_config['sp'] = attn_inner_sp
-        model_config['cp'] = cp
-        model_config['moe_tp'] = moe_tp
-        model_config['moe_ep'] = moe_ep
-        model_config['soc_version'] = soc_version
-        model_config['distributed_enable'] = self.distributed_enable
-        model_config['max_batch_size'] = self.max_batch_size
-        model_config['num_lccl_comm_shards'] = num_lccl_comm_shards
-        model_config['lccl_comm_shard_id'] = lccl_comm_shard_id
-        model_config['max_loras'] = max_loras
-        model_config['max_lora_rank'] = max_lora_rank
-        model_config['sampler_config'] = sampler_config
-        model_config['lwdNextPHeadPrior'] = lwd_next_p_head_prior
+        model_config["npu_device_id"] = self.npu_device_id
+        model_config["local_rank"] = self.local_rank
+        model_config["dp"] = dp
+        model_config["tp"] = tp
+        model_config["attn_inner_sp"] = attn_inner_sp
+        model_config["sp"] = attn_inner_sp
+        model_config["cp"] = cp
+        model_config["moe_tp"] = moe_tp
+        model_config["moe_ep"] = moe_ep
+        model_config["soc_version"] = soc_version
+        model_config["distributed_enable"] = self.distributed_enable
+        model_config["max_batch_size"] = self.max_batch_size
+        model_config["num_lccl_comm_shards"] = num_lccl_comm_shards
+        model_config["lccl_comm_shard_id"] = lccl_comm_shard_id
+        model_config["max_loras"] = max_loras
+        model_config["max_lora_rank"] = max_lora_rank
+        model_config["sampler_config"] = sampler_config
+        model_config["lwdNextPHeadPrior"] = lwd_next_p_head_prior
         if bool(self.kv_pool_config_path) and bool(self.kv_pool_backend):
-            model_config['mempool_type'] = \
+            model_config["mempool_type"] = (
                 MemPoolType.ASYNC_WRITE if self.kv_pool_async_write else MemPoolType.SYNC_WRITE
+            )
         else:
-            model_config['mempool_type'] = MemPoolType.DISABLED
+            model_config["mempool_type"] = MemPoolType.DISABLED
 
         self.backend_type = backend_type
         self.model_wrapper = get_model_wrapper(model_config, backend_type)
@@ -138,7 +156,7 @@ class GeneratorBackend:
         self.config_dict = self.model_wrapper.config_dict
         self.update_config(model_config)
         self.model_info = self.model_wrapper.model_info
-        self.num_speculative_tokens = model_config.get('num_speculative_tokens', 0)
+        self.num_speculative_tokens = model_config.get("num_speculative_tokens", 0)
         self.llm_config = None
         self.enable_dap = False
         self.obfuscation_func = None
@@ -178,22 +196,22 @@ class GeneratorBackend:
         pass
 
     def notify_force_stop_exception(self):
-        '''
+        """
         Notify that a FORCE STOP exception has occurred in the inference thread.
         This method should be called from the inference thread when catching FORCE STOP exceptions.
-        '''
+        """
         self.force_stop_exception_occurred.set()
         logger.info(f"FORCE STOP exception detected and notified for device {self.npu_device_id}")
 
     def execute_recover_command(self, command: str) -> dict:
-        '''
+        """
         Execute recover related command.
         Args:
             command (str): recover command, including "CMD_PAUSE_ENGINE".
         Returns:
             dict: {"command_result": int, "error_msg": str, "npu_device_id": int}.
                   command_result: 0 for success, 1 for failure.
-        '''
+        """
         error_msg = ""
         command_result = 1
         try:
@@ -220,19 +238,19 @@ class GeneratorBackend:
             if key in self.config_dict.keys():
                 setattr(self.config, key, value)
 
-    @timer.track_time('forward')
+    @timer.track_time("forward")
     def forward(self, model_inputs: ModelInput, **kwargs) -> Any:
         """Call the `forward` method of the model wrapper, which should return a Tensor of corresponding backend."""
         result = self.model_wrapper.forward(model_inputs, **kwargs)
         return result
 
-    @timer.track_time('sample')
+    @timer.track_time("sample")
     def sample(
-            self,
-            logits: Any,
-            sampling_metadata: Optional[Union[SamplingMetadata, SamplingData]] = None,
-            sampling_param: Optional[SamplingParam] = None,
-            **kwargs
+        self,
+        logits: Any,
+        sampling_metadata: Optional[Union[SamplingMetadata, SamplingData]] = None,
+        sampling_param: Optional[SamplingParam] = None,
+        **kwargs,
     ) -> Union[SamplingOutput, Tuple[np.ndarray, Optional[np.ndarray]]]:
         """Call the sampler of mindie-llm.
 
@@ -258,8 +276,8 @@ class GeneratorBackend:
         sampling_data = None
         if isinstance(sampling_metadata, SamplingData):
             sampling_data = sampling_metadata
-        elif 'sampling_data' in kwargs:
-            sampling_data = kwargs.get('sampling_data')
+        elif "sampling_data" in kwargs:
+            sampling_data = kwargs.get("sampling_data")
         if sampling_data is not None:  # Enter deprecated branch
             sampling_metadata = SamplingMetadata.from_deprecated(sampling_data, sampling_param)
             output = self.sampler(logits, sampling_metadata)
@@ -292,7 +310,7 @@ class GeneratorBackend:
         return command_result, error_msg
 
     def _execute_cmd_reinit_npu(self):
-        '''Reinitialize NPU. Subclasses must override with backend-specific logic.'''
+        """Reinitialize NPU. Subclasses must override with backend-specific logic."""
         raise NotImplementedError("Subclasses must implement _execute_cmd_reinit_npu")
 
     def _wait_for_force_stop_exception(self):
@@ -301,21 +319,19 @@ class GeneratorBackend:
             exception_detected = self.force_stop_exception_occurred.wait(timeout=timeout)
             if exception_detected:
                 logger.info(
-                    f"FORCE STOP exception detected for device {self.npu_device_id}, "
-                    "stop_device execution successful"
+                    f"FORCE STOP exception detected for device {self.npu_device_id}, stop_device execution successful"
                 )
                 return True
             else:
                 logger.warning(
-                    f"Timeout waiting for FORCE STOP exception for device {self.npu_device_id} "
-                    f"after {timeout} seconds"
+                    f"Timeout waiting for FORCE STOP exception for device {self.npu_device_id} after {timeout} seconds"
                 )
                 return False
         else:
             return True
 
     def _handle_uce_error(self):
-        '''Check and recover UCE error in kvcache. Returns (command_result, error_msg).'''
+        """Check and recover UCE error in kvcache. Returns (command_result, error_msg)."""
         command_result = 0
         error_msg = ""
         res = torch.npu.check_uce_in_memory(self.npu_device_id)
@@ -323,17 +339,17 @@ class GeneratorBackend:
             logger.info(f"Encountered HBM UCE error, check_uce_in_memory result: {res}")
             command_result = 2
             if not self._check_and_recover_uce_in_kvcache():
-                logger.warning(f"HBM UCE address not in any kvcache, should trigger reschedule")
+                logger.warning("HBM UCE address not in any kvcache, should trigger reschedule")
                 command_result = 1
                 error_msg = "HBM uce address not overlap kvcache address, should trigger reschedule"
         elif res == 1:
-            logger.warning(f"Encountered HBM UCE error, but unknown UCE address, should trigger reschedule")
+            logger.warning("Encountered HBM UCE error, but unknown UCE address, should trigger reschedule")
             command_result = 1
             error_msg = "HBM uce address unknown, should trigger reschedule"
         return command_result, error_msg
 
     def _check_and_recover_uce_in_kvcache(self):
-        '''Check and recover UCE error in kvcache. Returns True if recovered, False otherwise.'''
+        """Check and recover UCE error in kvcache. Returns True if recovered, False otherwise."""
         uce_addr_list = torch_npu.npu._get_uce_addr()
         logger.info(f"UCE address list: {uce_addr_list}")
         if len(uce_addr_list) == 0:

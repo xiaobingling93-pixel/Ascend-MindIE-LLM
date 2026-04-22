@@ -26,20 +26,20 @@ def filter_urls_from_error(error_message: Exception) -> Exception:
         Exception: The modified exception object with URLs filtered out.
     """
     # Define regex patterns for different URL types
-    domain_pattern = r'://(?:[a-zA-Z0-9.-]{1,253}(?:\.[a-zA-Z]{2,63})(?::[0-9]{1,5})?)'
+    domain_pattern = r"://(?:[a-zA-Z0-9.-]{1,253}(?:\.[a-zA-Z]{2,63})(?::[0-9]{1,5})?)"
     ipv4_pattern = (
-        r'://(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}'
-        r'(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::[0-9]{1,5})?'
+        r"://(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+        r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?::[0-9]{1,5})?"
     )
-    ipv6_pattern = r'://(?:\[[0-9a-fA-F:]{3,39}\])(?::[0-9]{1,5})?'
-    url_pattern = rf'{domain_pattern}|{ipv4_pattern}|{ipv6_pattern}'
-    
+    ipv6_pattern = r"://(?:\[[0-9a-fA-F:]{3,39}\])(?::[0-9]{1,5})?"
+    url_pattern = rf"{domain_pattern}|{ipv4_pattern}|{ipv6_pattern}"
+
     # Process each argument in the exception's args tuple
     args = list(error_message.args)
     for i, arg in enumerate(args):
         if isinstance(arg, str):
-            args[i] = re.sub(url_pattern, '***', arg)
-    
+            args[i] = re.sub(url_pattern, "***", arg)
+
     # Update the exception's args with filtered values
     error_message.args = tuple(args)
     return error_message

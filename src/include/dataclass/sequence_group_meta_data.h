@@ -9,12 +9,12 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef SEQUENCE_GROUP_META_DATA_H
 #define SEQUENCE_GROUP_META_DATA_H
 #include "basic_types.h"
-#include "sequence.h"
 #include "sampling.h"
+#include "sequence.h"
 
 namespace mindie_llm {
 struct SequenceGroupState {
@@ -40,13 +40,13 @@ struct SequenceGroupMetaData {
 
     std::vector<size_t> promptLens_;
 
-    std::vector<TokenId> tokenIds_; // prompt的tokenid
+    std::vector<TokenId> tokenIds_;  // prompt的tokenid
 
-    std::vector<BlockIds> blockIds_; // 个数和promptLens_相关，无需额外定义block的个数
+    std::vector<BlockIds> blockIds_;  // 个数和promptLens_相关，无需额外定义block的个数
 
-    uint64_t dpInstanceId_; // the instance ids of P Node dp
+    uint64_t dpInstanceId_;  // the instance ids of P Node dp
 
-    std::vector<BlockIds> srcBlockIds_; // // the block ids in P Node
+    std::vector<BlockIds> srcBlockIds_;  // // the block ids in P Node
 
     std::vector<size_t> computedLens_;
 
@@ -76,8 +76,8 @@ struct SequenceGroupMetaData {
 
     std::vector<size_t> prefillBlockRankId_;
 
-    std::vector<SequenceId> reservedSeqIds_; // 并行采样时预留的seqid
-    
+    std::vector<SequenceId> reservedSeqIds_;  // 并行采样时预留的seqid
+
     // ChunkedPrefill相关参数，beamsearch场景下长度>1，常规场景下长度为1
     std::vector<bool> isReqPrefill_;
 
@@ -95,10 +95,10 @@ struct SequenceGroupMetaData {
     std::vector<size_t> lwdCloudSpRankPromptTokenNum_;
     std::vector<size_t> lwdCloudSpRankBlockNum_;
     std::vector<BlockId> lwdCloudBlockIds_;
-    
-    std::optional<std::string> responseFormat_; // JSON 结构化输出约束
 
-    std::vector<TokenId> predictedTokenIds_; // PD分离/重计算场景下完整的已生成输出前缀，用于同步grammar等状态
+    std::optional<std::string> responseFormat_;  // JSON 结构化输出约束
+
+    std::vector<TokenId> predictedTokenIds_;  // PD分离/重计算场景下完整的已生成输出前缀，用于同步grammar等状态
 };
 
 struct SequenceGroupMetaDatas {
@@ -111,5 +111,5 @@ struct SequenceGroupMetaDatas {
 
     int64_t maxSeqLen = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

@@ -8,21 +8,15 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 
-from typing import Any
 
 import torch
-import torch_npu
-from torch import nn
 
 from mindie_llm.runtime.config.huggingface_config import HuggingFaceConfig
 from mindie_llm.runtime.layers.normalization import RMSNorm
 from mindie_llm.runtime.config.mindie_llm_config import MindIELLMConfig
 
 from mindie_llm.runtime.layers.quantization.quantization_config_base import QuantizationConfigBase
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
-from mindie_llm.runtime.models.qwen2.qwen2 import (
-    Qwen2Attention, Qwen2Mlp, Qwen2Layer, Qwen2Model, Qwen2ForCausalLM
-)
+from mindie_llm.runtime.models.qwen2.qwen2 import Qwen2Attention, Qwen2Mlp, Qwen2Layer, Qwen2Model, Qwen2ForCausalLM
 
 
 class Qwen3Attention(Qwen2Attention):
@@ -59,10 +53,10 @@ class Qwen3Attention(Qwen2Attention):
     """
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        quant_config: QuantizationConfigBase = None,
     ):
         """
         Initialize the Qwen3 attention module.
@@ -76,9 +70,11 @@ class Qwen3Attention(Qwen2Attention):
 
         if config.use_qk_norm:
             self.q_norm = RMSNorm(
-                self.head_dim, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.q_norm")
+                self.head_dim, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.q_norm"
+            )
             self.k_norm = RMSNorm(
-                self.head_dim, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.k_norm")
+                self.head_dim, config.rms_norm_eps, quant_config=quant_config, prefix=f"{prefix}.k_norm"
+            )
 
     def forward(
         self,
@@ -135,10 +131,10 @@ class Qwen3Mlp(Qwen2Mlp):
     """
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        quant_config: QuantizationConfigBase = None,
     ):
         """
         Initialize the Qwen3 MLP module.
@@ -149,7 +145,7 @@ class Qwen3Mlp(Qwen2Mlp):
             quant_config: Quantization configuration (optional)
         """
         super().__init__(config, prefix, quant_config)
- 
+
 
 class Qwen3Layer(Qwen2Layer):
     """
@@ -178,15 +174,16 @@ class Qwen3Layer(Qwen2Layer):
         input_layernorm: Input layer normalization
         post_attention_layernorm: Post-attention layer normalization
     """
+
     attn_cls = Qwen3Attention
     mlp_cls = Qwen3Mlp
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str,
-            layer_idx: int,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: HuggingFaceConfig,
+        prefix: str,
+        layer_idx: int,
+        quant_config: QuantizationConfigBase = None,
     ) -> None:
         """
         Initialize the Qwen3 transformer layer.
@@ -199,7 +196,7 @@ class Qwen3Layer(Qwen2Layer):
         """
         super().__init__(config, prefix, layer_idx, quant_config)
 
-        
+
 class Qwen3Model(Qwen2Model):
     """
     Qwen3 base model.
@@ -223,13 +220,11 @@ class Qwen3Model(Qwen2Model):
         layers: List of transformer layers
         norm: Final layer normalization
     """
+
     layer_cls = Qwen3Layer
 
     def __init__(
-            self,
-            config: HuggingFaceConfig,
-            prefix: str = "model",
-            quant_config: QuantizationConfigBase = None
+        self, config: HuggingFaceConfig, prefix: str = "model", quant_config: QuantizationConfigBase = None
     ) -> None:
         """
         Initialize the Qwen3 base model.

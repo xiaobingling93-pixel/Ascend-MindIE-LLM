@@ -13,17 +13,17 @@
 #ifndef SIMULATE_TASK_RUNNER_H
 #define SIMULATE_TASK_RUNNER_H
 
-#include <memory>
 #include <atomic>
-#include <thread>
 #include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <set>
 #include <shared_mutex>
 #include <string>
-#include <set>
-#include <vector>
+#include <thread>
 #include <utility>
-#include <mutex>
-#include <condition_variable>
+#include <vector>
 
 namespace mindie_llm {
 
@@ -50,8 +50,7 @@ struct SimulateHealthStatus {
 
     bool IsHealthy() const { return lastStatus == SimulateResult::Status::SUCCESS; }
 
-    uint64_t GetSecondsSinceLastUpdate() const
-    {
+    uint64_t GetSecondsSinceLastUpdate() const {
         auto now = std::chrono::steady_clock::now();
         return std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdateTime).count();
     }
@@ -59,17 +58,17 @@ struct SimulateHealthStatus {
 
 /// @brief 虚推执行器接口
 class ISimulateExecutor {
-public:
+   public:
     virtual ~ISimulateExecutor() = default;
     virtual SimulateResult RunSimulateOnce() = 0;
 };
 
 /// @brief 虚推任务运行器，管理定时虚推任务和 NPU 利用率检测
 class SimulateTaskRunner {
-public:
+   public:
     enum class RunMode {
-        SIMULATE_AND_NPU = 0, // 默认：虚推 + NPU 采样
-        NPU_ONLY = 1          // 仅 NPU 采样（集中式 slave）
+        SIMULATE_AND_NPU = 0,  // 默认：虚推 + NPU 采样
+        NPU_ONLY = 1           // 仅 NPU 采样（集中式 slave）
     };
 
     SimulateTaskRunner();
@@ -78,9 +77,8 @@ public:
     SimulateTaskRunner(const SimulateTaskRunner&) = delete;
     SimulateTaskRunner& operator=(const SimulateTaskRunner&) = delete;
 
-    bool Init(std::shared_ptr<ISimulateExecutor> executor,
-              const std::vector<std::pair<int, int>>& npuDeviceCardIds, int npuThreshold,
-              RunMode runMode = RunMode::SIMULATE_AND_NPU, int chipPerCard = 1);
+    bool Init(std::shared_ptr<ISimulateExecutor> executor, const std::vector<std::pair<int, int>>& npuDeviceCardIds,
+              int npuThreshold, RunMode runMode = RunMode::SIMULATE_AND_NPU, int chipPerCard = 1);
 
     /// @brief 检查是否初始化成功
     bool IsValid() const { return isValid_; }
@@ -95,7 +93,7 @@ public:
     bool IsPaused() const { return paused_.load(); }
     int GetNpuUtilization() const { return npuUtil_.load(); }
 
-private:
+   private:
     void TaskLoop();
     void NpuCheckLoop();
     void CheckAicoreUtilization();
@@ -107,10 +105,10 @@ private:
 
     std::shared_ptr<ISimulateExecutor> executor_;
     std::vector<std::pair<int, int>> npuDeviceCardIds_;  // NPU 设备卡 ID 集合（Init 时传入，不可为空）
-    bool isValid_{false};  // 是否初始化成功
-    int npuThreshold_ = 10; // 适配大部分场景的检测阈值
+    bool isValid_{false};                                // 是否初始化成功
+    int npuThreshold_ = 10;                              // 适配大部分场景的检测阈值
     RunMode runMode_{RunMode::SIMULATE_AND_NPU};
-    int chipPerCard_{1}; // A2=1, A3=2
+    int chipPerCard_{1};  // A2=1, A3=2
 
     // 虚推任务线程
     std::thread taskThread_;
@@ -123,7 +121,7 @@ private:
     std::thread npuCheckThread_;
     std::atomic<bool> npuCheckStopRequested_{false};
     std::atomic<bool> npuCheckRequested_{false};  // 触发标志，避免虚假唤醒
-    std::atomic<int> npuUtil_{-1};  // -1 表示未检测
+    std::atomic<int> npuUtil_{-1};                // -1 表示未检测
     std::atomic<bool> slaveNpuReportTimeoutThisRound_{false};
 
     // NPU 检测同步原语
@@ -139,7 +137,6 @@ private:
     int loopsSinceSimulate_{0};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // SIMULATE_TASK_RUNNER_H
-
+#endif  // SIMULATE_TASK_RUNNER_H

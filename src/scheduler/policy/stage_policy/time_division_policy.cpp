@@ -10,12 +10,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <cmath>
 #include "time_division_policy.h"
 
+#include <cmath>
+
 namespace mindie_llm {
-void TimeDivisionPolicy::MarkInferenceEndTimeStamp()
-{
+void TimeDivisionPolicy::MarkInferenceEndTimeStamp() {
     uint64_t endTime = GetNowTimeStamp();
     // 计算当前时间与上次记录的时间差
     if (inferenceStartTimeRecords_.empty()) {
@@ -37,13 +37,11 @@ void TimeDivisionPolicy::MarkInferenceEndTimeStamp()
     UpdateSlideWindow();
 }
 
-void TimeDivisionPolicy::MarkInferenceStartTimeStamp(PDPriorityType type)
-{
+void TimeDivisionPolicy::MarkInferenceStartTimeStamp(PDPriorityType type) {
     inferenceStartTimeRecords_.push(std::make_pair(type, GetNowTimeStamp()));
 }
 
-void TimeDivisionPolicy::UpdateSlideWindow()
-{
+void TimeDivisionPolicy::UpdateSlideWindow() {
     auto totalTime = prefillInferenceTime_ + decodeInferenceTime_;
     while (inferenceTimeWindow_.size() != 0 && totalTime > windowDuration_) {
         auto [type, inferTime] = inferenceTimeWindow_.front();
@@ -61,8 +59,7 @@ void TimeDivisionPolicy::UpdateSlideWindow()
 
 PDPriorityType TimeDivisionPolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting,
                                          ConcurrentDeque<SequenceGroupSPtr> &running,
-                                         ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                         ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     (void)running;
     (void)swapped;
     uint64_t totalTime = prefillInferenceTime_ + decodeInferenceTime_;
@@ -84,8 +81,7 @@ PDPriorityType TimeDivisionPolicy::Apply(ConcurrentDeque<SequenceGroupSPtr> &wai
     return type;
 }
 
-uint64_t TimeDivisionPolicy::GetNowTimeStamp() const
-{
+uint64_t TimeDivisionPolicy::GetNowTimeStamp() const {
     return std::chrono::duration_cast<std::chrono::microseconds>(
                std::chrono::high_resolution_clock::now().time_since_epoch())
         .count();
@@ -95,15 +91,19 @@ void TimeDivisionPolicy::SetPrefillPercentage(uint32_t prefillPercentage) { pref
 
 Role TimeDivisionPolicy::GetFlexRole(ConcurrentDeque<SequenceGroupSPtr> &waiting,
                                      ConcurrentDeque<SequenceGroupSPtr> &running,
-                                     ConcurrentDeque<SequenceGroupSPtr> &swapped)
-{
+                                     ConcurrentDeque<SequenceGroupSPtr> &swapped) {
     PDPriorityType type = Apply(waiting, running, swapped);
     Role role = Role::FlexPnD;
     switch (type) {
-        case PDPriorityType::PREFILL_FIRST: role = Role::FlexP; break;
+        case PDPriorityType::PREFILL_FIRST:
+            role = Role::FlexP;
+            break;
 
-        case PDPriorityType::DECODE_FIRST: role = Role::FlexD; break;
-        default: break;
+        case PDPriorityType::DECODE_FIRST:
+            role = Role::FlexD;
+            break;
+        default:
+            break;
     }
 
     if (HasFlexLocalReq(waiting, running, swapped) && !HasPrefillReq(waiting) &&
@@ -114,4 +114,4 @@ Role TimeDivisionPolicy::GetFlexRole(ConcurrentDeque<SequenceGroupSPtr> &waiting
     return role;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -19,16 +19,16 @@
 #define MIES_HTTPS_SERVER_HELPER_H
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 
-#include "httplib.h"
 #include "http_rest_resource.h"
+#include "httplib.h"
 #include "threadpool_monitor.h"
 
 namespace mindie_llm {
 class HttpsServerHelper : public httplib::Server {
-public:
-    HttpsServerHelper(bool openSSL, const std::function<bool(SSL_CTX &sslCtx)> &setupSslCtxCallback, uint32_t maxLinkNum)
-        : openSSL(openSSL)
-    {
+   public:
+    HttpsServerHelper(bool openSSL, const std::function<bool(SSL_CTX &sslCtx)> &setupSslCtxCallback,
+                      uint32_t maxLinkNum)
+        : openSSL(openSSL) {
         ctx_ = SSL_CTX_new(TLS_method());
         if (ctx_) {
             if (!setupSslCtxCallback(*ctx_)) {
@@ -49,23 +49,23 @@ public:
 
     void AddRequestToMonitor(std::shared_ptr<RequestContext> reqContextPtr) const;
 
-    void RemoveMonitorRequest(const std::string &requestUuid)
-    {
+    void RemoveMonitorRequest(const std::string &requestUuid) {
         if (threadpool_ != nullptr) {
             threadpool_->RemoveMonitorRequest(requestUuid);
         }
     }
 
-    ThreadPoolMonitor* threadpool_ {nullptr};
-private:
+    ThreadPoolMonitor *threadpool_{nullptr};
+
+   private:
     SSL_CTX *ctx_;
     bool process_and_close_socket(socket_t sock) override;
     bool ProcessHttpSocket(socket_t sock);
     bool ProcessHttpsSocket(socket_t sock);
     void ShutdownAndCloseSocket(socket_t sock);
     std::mutex ctxMutex_;
-    bool openSSL{ false };
+    bool openSSL{false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_HTTPS_SERVER_HELPER_H
+#endif  // MIES_HTTPS_SERVER_HELPER_H

@@ -10,11 +10,8 @@
 
 from dataclasses import dataclass
 
-from mindie_llm.runtime.models.qwen3.config_qwen3 import Qwen3Config
 from mindie_llm.runtime.models.qwen3.input_builder_qwen3 import Qwen3InputBuilder
-from mindie_llm.runtime.models.base.router import BaseRouter
 from mindie_llm.runtime.models.qwen2.router_qwen2 import Qwen2Router
-from mindie_llm.runtime.utils.helpers.safety.hf import safe_get_tokenizer_from_pretrained
 
 
 @dataclass
@@ -46,7 +43,7 @@ class Qwen3Router(Qwen2Router):
         if hasattr(self.config, "max_position_embeddings") and self.config.max_position_embeddings:
             kwargs["max_length"] = self.config.max_position_embeddings
         return Qwen3InputBuilder(self.tokenizer, **kwargs)
-    
+
     def _get_tool_calls_parser(self):
         """
         Get the tool call parser identifier for Qwen3 models.

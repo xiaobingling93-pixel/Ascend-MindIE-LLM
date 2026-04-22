@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef CPU_NPU_BLOCK_ALLOCATOR_H
 #define CPU_NPU_BLOCK_ALLOCATOR_H
 
@@ -24,7 +24,7 @@
 namespace mindie_llm {
 
 class CpuNpuBlockAllocator : public DeviceAwareBlockAllocator {
-public:
+   public:
     /// @brief
     /// @param allocatorType: HASHLESS or PREFIXCACHING. if caching is enabled, PREFIXCACHING should be used.
     /// @param numCpuBlocks: CPU Blocks.
@@ -58,7 +58,7 @@ public:
     size_t GetNumFreeBlock(DeviceType deviceType) const override;
 
     size_t GetNumFreeBlock(DeviceType deviceType, size_t rankId) const override;
-    
+
     // assume npu block id is 0~99, and cpu block id is 100~199, block 101 has physical block id 1. Physical block id is
     // used to calculate address offset in executor.
     PhysicalBlockId GetPhysicalBlockId(BlockId globalBlockId) const override;
@@ -75,8 +75,8 @@ public:
     // only touched blocks will be marked as computed. and the blockIds parameter is not used.
     void MarkBlocksAsComputed() override;
     // Usage scenario required.
-    std::vector<BlockId>
-    GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const override;
+    std::vector<BlockId> GetCommonComputedBlockIds(
+        const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const override;
 
     std::vector<size_t> GetAllRankCommonComputedBlockNum(
         const std::vector<std::vector<std::vector<BlockId>>> &rankedComputedSeqBlockIds) const override;
@@ -98,12 +98,12 @@ public:
 
     void ReplaceToken(BlockObjSPtr block, size_t startIndex, TokenId newToken) override;
 
-private:
+   private:
     size_t rankSize_;
 
-    std::vector<BlockAllocatorSPtr> cpuAllocators_; // CPU有rankSize个allocator
+    std::vector<BlockAllocatorSPtr> cpuAllocators_;  // CPU有rankSize个allocator
 
-    std::vector<BlockAllocatorSPtr> npuAllocators_; // NPU有rankSize个allocator
+    std::vector<BlockAllocatorSPtr> npuAllocators_;  // NPU有rankSize个allocator
 
     std::unordered_map<BlockId, BlockId> swapMapping_;
 
@@ -116,6 +116,6 @@ private:
 
     BlockAllocatorSPtr GetAllocator(DeviceType deviceType, size_t rankIdx = 0) const;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -27,8 +27,15 @@ class BaseTokenizerWrapper:
     def tokenize(self, inputs, **kwargs):
         pass
 
-    def detokenize(self, all_token_ids: list[int], skip_special_tokens: bool, use_tool_calls: bool, is_chat_req: bool,
-                   stream: bool, **kwargs):
+    def detokenize(
+        self,
+        all_token_ids: list[int],
+        skip_special_tokens: bool,
+        use_tool_calls: bool,
+        is_chat_req: bool,
+        stream: bool,
+        **kwargs,
+    ):
         """
         detokenize
         Args:

@@ -10,16 +10,17 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "single_req_vllm_openai_infer_interface.h"
+
 #include <regex>
 
-#include "endpoint_def.h"
-#include "parse_protocol.h"
-#include "http_rest_resource.h"
-#include "parameters_checker.h"
-#include "infer_tokenizer.h"
-#include "common_util.h"
 #include "base64_util.h"
+#include "common_util.h"
 #include "config_manager_impl.h"
+#include "endpoint_def.h"
+#include "http_rest_resource.h"
+#include "infer_tokenizer.h"
+#include "parameters_checker.h"
+#include "parse_protocol.h"
 
 using OrderedJson = nlohmann::ordered_json;
 
@@ -28,42 +29,32 @@ static constexpr double MAX_OPENAI_REPETITION_PENALTY = 2.0;
 static constexpr auto FUNCTION_NAME_PATTERN = L"^[a-zA-Z0-9_\u4e00-\u9fa5-]{1,64}$";
 
 SingleReqVllmOpenAiInferInterface::SingleReqVllmOpenAiInferInterface(
-    const std::shared_ptr<SingleLLMReqHandlerBase>& singleLLMReqHandlerBase, bool isReCompute,
+    const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute,
     const std::vector<LoraParamSPtr> loraConfigs) noexcept
-    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs}
-{
+    : SingleReqInferInterfaceBase{singleLLMReqHandlerBase, isReCompute, loraConfigs} {
     inputParam->isChatReq = true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg)
-{
-    if (!(AssignIgnoreEos(reqJsonBody_, tmpReq, msg) &&
-          AssignStopStrings(reqJsonBody_, tmpReq, msg) &&
-          AssignStopTokenIds(reqJsonBody_, tmpReq, msg) &&
-          AssignIncludeStopStrInOutput(reqJsonBody_, tmpReq, msg) &&
-          AssignTemperature(reqJsonBody_, tmpReq, msg, true) &&
-          AssignTopK(reqJsonBody_, tmpReq, msg, false, true) &&
-          AssignTopP(reqJsonBody_, tmpReq, msg) &&
-          AssignSeed(reqJsonBody_, tmpReq, msg) &&
+bool SingleReqVllmOpenAiInferInterface::SetupInferParams(RequestSPtr tmpReq, std::string &msg) {
+    if (!(AssignIgnoreEos(reqJsonBody_, tmpReq, msg) && AssignStopStrings(reqJsonBody_, tmpReq, msg) &&
+          AssignStopTokenIds(reqJsonBody_, tmpReq, msg) && AssignIncludeStopStrInOutput(reqJsonBody_, tmpReq, msg) &&
+          AssignTemperature(reqJsonBody_, tmpReq, msg, true) && AssignTopK(reqJsonBody_, tmpReq, msg, false, true) &&
+          AssignTopP(reqJsonBody_, tmpReq, msg) && AssignSeed(reqJsonBody_, tmpReq, msg) &&
           AssignThinkingConfig(reqJsonBody_, tmpReq, inputParam, msg) &&
           AssignRepetitionPenalty(reqJsonBody_, tmpReq, msg, MAX_OPENAI_REPETITION_PENALTY) &&
-          AssignFrequencyPenalty(reqJsonBody_, tmpReq, msg) &&
-          AssignPresencePenalty(reqJsonBody_, tmpReq, msg) &&
-          AssignSkipSpecialTokens(reqJsonBody_, tmpReq, msg) &&
-          AssignBestOf(reqJsonBody_, tmpReq, msg) &&
-          AssignN(reqJsonBody_, tmpReq, msg) &&
-          AssignBeamSearch(reqJsonBody_, tmpReq, msg) &&
-          AssignOpenAILogprobs(reqJsonBody_, tmpReq, msg) &&
-          AssignMaxTokens(reqJsonBody_, inputParam, msg) &&
-          AssignStream(reqJsonBody_, inputParam, msg) &&
-          AssignLoraId(reqJsonBody_, tmpReq, this->model, msg) &&
+          AssignFrequencyPenalty(reqJsonBody_, tmpReq, msg) && AssignPresencePenalty(reqJsonBody_, tmpReq, msg) &&
+          AssignSkipSpecialTokens(reqJsonBody_, tmpReq, msg) && AssignBestOf(reqJsonBody_, tmpReq, msg) &&
+          AssignN(reqJsonBody_, tmpReq, msg) && AssignBeamSearch(reqJsonBody_, tmpReq, msg) &&
+          AssignOpenAILogprobs(reqJsonBody_, tmpReq, msg) && AssignMaxTokens(reqJsonBody_, inputParam, msg) &&
+          AssignStream(reqJsonBody_, inputParam, msg) && AssignLoraId(reqJsonBody_, tmpReq, this->model, msg) &&
           AssignResponseFormat(reqJsonBody_, tmpReq, msg))) {
         return false;
     }
 
     if (!SetReturnSeqCount(tmpReq, msg)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            CHECK_ERROR), "Body in request format invalid for id=" << requestId_);
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR),
+                   "Body in request format invalid for id=" << requestId_);
         return false;
     }
     auto ctx = BuildValidationContext();
@@ -73,8 +64,7 @@ bool SingleReqVllmOpenAiInferInterface::SetupInferParams(RequestSPtr tmpReq, std
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::ParseTextInput(nlohmann::ordered_json &body, std::string &msg)
-{
+bool SingleReqVllmOpenAiInferInterface::ParseTextInput(nlohmann::ordered_json &body, std::string &msg) {
     const std::string messageKey = "messages";
     const std::string roleKey = "role";
     const std::string contentKey = "content";
@@ -102,7 +92,7 @@ bool SingleReqVllmOpenAiInferInterface::ParseTextInput(nlohmann::ordered_json &b
             return false;
         }
 
-         // 指定了tool_call时sassistant的content可以为空
+        // 指定了tool_call时sassistant的content可以为空
         if (paramItem[roleKey] == "tool" && !ValidToolCallID(paramItem, msg)) {
             return false;
         }
@@ -135,8 +125,7 @@ bool SingleReqVllmOpenAiInferInterface::ParseTextInput(nlohmann::ordered_json &b
     return CheckTextInputLen(inputParam->textInput, msg);
 }
 
-bool SingleReqVllmOpenAiInferInterface::SetReturnSeqCount(RequestSPtr req, std::string &errMsg)
-{
+bool SingleReqVllmOpenAiInferInterface::SetReturnSeqCount(RequestSPtr req, std::string &errMsg) {
     if (req->useBeamSearch.value_or(false)) {
         returnSeqCount_ = req->n.value_or(1);
         return true;
@@ -146,8 +135,7 @@ bool SingleReqVllmOpenAiInferInterface::SetReturnSeqCount(RequestSPtr req, std::
     } else if (req->bestOf.has_value() && !req->n.has_value()) {
         if (inputParam->streamMode) {
             std::stringstream ss;
-            ss << "best_of must be equal to n in stream mode, but best_of is " << req->bestOf.value()
-                << ", n is None.";
+            ss << "best_of must be equal to n in stream mode, but best_of is " << req->bestOf.value() << ", n is None.";
             errMsg = ss.str();
             return false;
         }
@@ -157,15 +145,15 @@ bool SingleReqVllmOpenAiInferInterface::SetReturnSeqCount(RequestSPtr req, std::
     } else {
         if (!inputParam->streamMode && req->bestOf < req->n) {
             std::stringstream ss;
-            ss << "best_of must be greater than or equal to n, but best_of is " << req->bestOf.value()
-                << ", n is " << req->n.value() << ".";
+            ss << "best_of must be greater than or equal to n, but best_of is " << req->bestOf.value() << ", n is "
+               << req->n.value() << ".";
             errMsg = ss.str();
             return false;
         }
         if (inputParam->streamMode && req->bestOf != req->n) {
             std::stringstream ss;
-            ss << "best_of must be equal to n in stream mode, but best_of is " << req->bestOf.value()
-                << ", n is " << req->n.value() << ".";
+            ss << "best_of must be equal to n in stream mode, but best_of is " << req->bestOf.value() << ", n is "
+               << req->n.value() << ".";
             errMsg = ss.str();
             return false;
         }
@@ -182,8 +170,7 @@ bool SingleReqVllmOpenAiInferInterface::SetReturnSeqCount(RequestSPtr req, std::
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::CheckTextInputLen(std::string &textInput, std::string &msg) const
-{
+bool SingleReqVllmOpenAiInferInterface::CheckTextInputLen(std::string &textInput, std::string &msg) const {
     std::string errorMsg = "";
     std::u16string utf16 = GetU16Str(textInput, &errorMsg);
     if (!errorMsg.empty()) {
@@ -192,14 +179,13 @@ bool SingleReqVllmOpenAiInferInterface::CheckTextInputLen(std::string &textInput
     }
     if (utf16.length() == 0 || utf16.length() > GetMaxInputLen()) {
         msg = "Messages len not in (0, " + std::to_string(GetMaxInputLen()) + ", but the length of inputs is " +
-            std::to_string(utf16.length());
+              std::to_string(utf16.length());
         return false;
     }
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::ValidToolCall(OrderedJson &toolCalls, std::string &msg) const
-{
+bool SingleReqVllmOpenAiInferInterface::ValidToolCall(OrderedJson &toolCalls, std::string &msg) const {
     for (OrderedJson &toolCall : toolCalls) {
         if (!toolCall.contains("id") || toolCall["id"].is_null()) {
             msg = "Tool call param contains no id.";
@@ -228,8 +214,10 @@ bool SingleReqVllmOpenAiInferInterface::ValidToolCall(OrderedJson &toolCalls, st
         }
         std::string functionName = function["name"].get<std::string>();
         if (!std::regex_match(String2Wstring(functionName), std::wregex(FUNCTION_NAME_PATTERN))) {
-            msg = "The name of function must be a-z, A-Z, 0-9, common chinese characters, underscores and dashe "
-            "within max length of 64, unexpected function name: " + functionName;
+            msg =
+                "The name of function must be a-z, A-Z, 0-9, common chinese characters, underscores and dashe "
+                "within max length of 64, unexpected function name: " +
+                functionName;
             return false;
         }
         if (!function.contains("arguments") || function["arguments"].is_null()) {
@@ -244,8 +232,7 @@ bool SingleReqVllmOpenAiInferInterface::ValidToolCall(OrderedJson &toolCalls, st
 
     return true;
 }
-bool SingleReqVllmOpenAiInferInterface::ValidAssistantMessage(OrderedJson &message, std::string &msg) const
-{
+bool SingleReqVllmOpenAiInferInterface::ValidAssistantMessage(OrderedJson &message, std::string &msg) const {
     if (message.contains("tool_calls") && !message["tool_calls"].is_null()) {
         if (ValidToolCall(message["tool_calls"], msg)) {
             // if tool calls is valid, content can be none or length is 0
@@ -269,8 +256,7 @@ bool SingleReqVllmOpenAiInferInterface::ValidAssistantMessage(OrderedJson &messa
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::ValidToolCallID(OrderedJson &paramItem, std::string &msg) const
-{
+bool SingleReqVllmOpenAiInferInterface::ValidToolCallID(OrderedJson &paramItem, std::string &msg) const {
     const std::string toolCallID = "tool_call_id";
     if (!paramItem.contains(toolCallID) || paramItem[toolCallID].is_null()) {
         msg = "Request param contains not tool_call_id or tool_call_id null while role is tool";
@@ -290,8 +276,7 @@ bool SingleReqVllmOpenAiInferInterface::ValidToolCallID(OrderedJson &paramItem, 
 }
 
 bool SingleReqVllmOpenAiInferInterface::ValidMessagesArray(OrderedJson &body, OrderedJson &messges,
-                                                           std::string &msg) const
-{
+                                                           std::string &msg) const {
     const std::string messageKey = "messages";
     const std::string roleKey = "role";
     const std::string contentKey = "content";
@@ -310,7 +295,7 @@ bool SingleReqVllmOpenAiInferInterface::ValidMessagesArray(OrderedJson &body, Or
             msg = "Request param contains not role or role null";
             return false;
         } else if (paramItem[roleKey] != "system" && paramItem[roleKey] != "assistant" &&
-            paramItem[roleKey] != "user"  && paramItem[roleKey] != "tool") {
+                   paramItem[roleKey] != "user" && paramItem[roleKey] != "tool") {
             msg = "Request param contains role must be system, assistant, user or tool";
             return false;
         }
@@ -342,15 +327,14 @@ bool SingleReqVllmOpenAiInferInterface::ValidMessagesArray(OrderedJson &body, Or
     return true;
 }
 
-void SingleReqVllmOpenAiInferInterface::FilterToolChoice(OrderedJson &filterTools)
-{
+void SingleReqVllmOpenAiInferInterface::FilterToolChoice(OrderedJson &filterTools) {
     const std::string toolChoiceStr = inputParam->toolChoice;
     const OrderedJson toolChoiceObject = inputParam->toolChoiceObject;
     OrderedJson toolsObject = inputParam->toolsObject;
 
     if (toolChoiceStr == "none") {
         return;
-    } else if (toolChoiceStr == "auto" || toolChoiceStr =="required" || toolChoiceStr == "") {
+    } else if (toolChoiceStr == "auto" || toolChoiceStr == "required" || toolChoiceStr == "") {
         filterTools = toolsObject;
     } else if (toolChoiceObject.is_object()) {
         const OrderedJson function = toolChoiceObject["function"];
@@ -369,9 +353,8 @@ void SingleReqVllmOpenAiInferInterface::FilterToolChoice(OrderedJson &filterTool
     return;
 }
 
-bool SingleReqVllmOpenAiInferInterface::PrepareMessageArray(
-    nlohmann::ordered_json &body, std::string &msg, OrderedJson& messageArray)
-{
+bool SingleReqVllmOpenAiInferInterface::PrepareMessageArray(nlohmann::ordered_json &body, std::string &msg,
+                                                            OrderedJson &messageArray) {
     const std::string toolsKey = "tools";
     const std::string toolChoiceKey = "tool_choice";
     const std::string roleKey = "role";
@@ -404,8 +387,7 @@ bool SingleReqVllmOpenAiInferInterface::PrepareMessageArray(
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::ParseToolCall(nlohmann::ordered_json &body, std::string &msg)
-{
+bool SingleReqVllmOpenAiInferInterface::ParseToolCall(nlohmann::ordered_json &body, std::string &msg) {
     const std::string messageKey = "messages";
     if (this->isReCompute_) {
         // 重计算的请求中，messages为token字符串, 如：1,2,3,4,5。不需要解析数组
@@ -436,8 +418,7 @@ bool SingleReqVllmOpenAiInferInterface::ParseToolCall(nlohmann::ordered_json &bo
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::CheckToolType(const OrderedJson &toolParam, std::string &error) const
-{
+bool SingleReqVllmOpenAiInferInterface::CheckToolType(const OrderedJson &toolParam, std::string &error) const {
     if (!toolParam.contains("type")) {
         error = "Tool param invalid, tool type not exist";
         return false;
@@ -456,8 +437,7 @@ bool SingleReqVllmOpenAiInferInterface::CheckToolType(const OrderedJson &toolPar
     }
 }
 
-bool SingleReqVllmOpenAiInferInterface::CheckFunction(const OrderedJson &toolParam, std::string &error) const
-{
+bool SingleReqVllmOpenAiInferInterface::CheckFunction(const OrderedJson &toolParam, std::string &error) const {
     if (!toolParam.contains("function")) {
         error = "Tool param invalid, tool function not exist";
         return false;
@@ -478,16 +458,17 @@ bool SingleReqVllmOpenAiInferInterface::CheckFunction(const OrderedJson &toolPar
     }
     std::string functionName = func["name"].get<std::string>();
     if (!std::regex_match(String2Wstring(functionName), std::wregex(FUNCTION_NAME_PATTERN))) {
-        error = "The name of function must be a-z, A-Z, 0-9, common chinese characters, underscores and dashe "
-        "within max length of 64, unexpected function name: " + functionName;
+        error =
+            "The name of function must be a-z, A-Z, 0-9, common chinese characters, underscores and dashe "
+            "within max length of 64, unexpected function name: " +
+            functionName;
         return false;
     }
 
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::CheckToolObject(const OrderedJson &tool, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::CheckToolObject(const OrderedJson &tool, std::string &error) {
     auto result = CheckToolType(tool, error);
     if (!result) {
         return result;
@@ -496,8 +477,7 @@ bool SingleReqVllmOpenAiInferInterface::CheckToolObject(const OrderedJson &tool,
     return CheckFunction(tool, error);
 }
 
-bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsString(const std::string &toolChoice, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsString(const std::string &toolChoice, std::string &error) {
     if (toolChoice == "none" || toolChoice == "auto" || toolChoice == "required") {
         inputParam->toolChoice = toolChoice;
         return true;
@@ -507,8 +487,7 @@ bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsString(const std::string 
     return false;
 }
 
-bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsObject(const OrderedJson &toolChoice, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsObject(const OrderedJson &toolChoice, std::string &error) {
     auto result = CheckToolObject(toolChoice, error);
     if (!result) {
         return result;
@@ -519,8 +498,7 @@ bool SingleReqVllmOpenAiInferInterface::GetToolChoiceAsObject(const OrderedJson 
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::ParseOpenAiTools(const OrderedJson &jsonObj, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::ParseOpenAiTools(const OrderedJson &jsonObj, std::string &error) {
     // Initialize useToolsCall to false by default
     inputParam->useToolsCall = false;
 
@@ -536,8 +514,7 @@ bool SingleReqVllmOpenAiInferInterface::ParseOpenAiTools(const OrderedJson &json
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::AssignOpenAiTools(const OrderedJson &jsonObj, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::AssignOpenAiTools(const OrderedJson &jsonObj, std::string &error) {
     if (!jsonObj.contains("tools") || jsonObj["tools"].is_null() || jsonObj["tools"].empty()) {
         return true;
     }
@@ -561,8 +538,7 @@ bool SingleReqVllmOpenAiInferInterface::AssignOpenAiTools(const OrderedJson &jso
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::AssignOpenAiToolChoice(const OrderedJson &jsonObj, std::string &error)
-{
+bool SingleReqVllmOpenAiInferInterface::AssignOpenAiToolChoice(const OrderedJson &jsonObj, std::string &error) {
     if (!jsonObj.contains("tool_choice") || jsonObj["tool_choice"].is_null()) {
         return true;
     }
@@ -577,8 +553,8 @@ bool SingleReqVllmOpenAiInferInterface::AssignOpenAiToolChoice(const OrderedJson
     }
 }
 
-bool SingleReqVllmOpenAiInferInterface::CheckModelName(const std::string &modelName, std::string &foundModelName) const
-{
+bool SingleReqVllmOpenAiInferInterface::CheckModelName(const std::string &modelName,
+                                                       std::string &foundModelName) const {
     auto &modelParam = GetModelDeployConfig();
     for (auto &mParam : modelParam) {
         if (mParam.modelName == modelName) {
@@ -587,7 +563,7 @@ bool SingleReqVllmOpenAiInferInterface::CheckModelName(const std::string &modelN
         }
     }
     // 如果没有在模型中找到，转向去lora列表中找
-    for (const auto& lora_config : loraConfigs_) {
+    for (const auto &lora_config : loraConfigs_) {
         if (modelName == lora_config->loraName) {
             foundModelName = lora_config->loraName;
             return true;
@@ -597,8 +573,7 @@ bool SingleReqVllmOpenAiInferInterface::CheckModelName(const std::string &modelN
 }
 
 bool SingleReqVllmOpenAiInferInterface::ParseModelName(nlohmann::ordered_json &body, std::string &outModel,
-                                                       std::string &err)
-{
+                                                       std::string &err) {
     const std::string key = "model";
     if (!body.contains(key) || body[key].is_null()) {
         err = "Request contains not model or model null";
@@ -620,16 +595,14 @@ bool SingleReqVllmOpenAiInferInterface::ParseModelName(nlohmann::ordered_json &b
     return true;
 }
 
-
-static bool CheckHasMedia(const OrderedJson &jsonObj) noexcept
-{
+static bool CheckHasMedia(const OrderedJson &jsonObj) noexcept {
     const std::string imageKey = "image_url";
     const std::string videoKey = "video_url";
     const std::string audioKey = "audio_url";
 
     bool hasMedia = false;
 
-    for (const auto& param : jsonObj) {
+    for (const auto &param : jsonObj) {
         if (param.contains(imageKey) || param.contains(videoKey) || param.contains(audioKey)) {
             hasMedia = true;
             break;
@@ -639,8 +612,7 @@ static bool CheckHasMedia(const OrderedJson &jsonObj) noexcept
 }
 
 bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg,
-                                                                   uint64_t &timestamp)
-{
+                                                                   uint64_t &timestamp) {
     try {
         const std::string messageKey = "messages";
         const std::string roleKey = "role";
@@ -651,14 +623,13 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
         nlohmann::ordered_json jsonBody = body;
         // content list
         if (jsonBody.contains(messageKey) && jsonBody[messageKey].is_array()) {
-            for (auto& message : jsonBody[messageKey]) {
-                if (message.contains(contentKey) && message[contentKey] != nullptr &&
-                    message[contentKey].is_array()) {
+            for (auto &message : jsonBody[messageKey]) {
+                if (message.contains(contentKey) && message[contentKey] != nullptr && message[contentKey].is_array()) {
                     if (CheckHasMedia(message[contentKey])) {
                         break;
                     }
                     std::string combineText;
-                    for (const auto& contentItem : message[contentKey]) {
+                    for (const auto &contentItem : message[contentKey]) {
                         if (contentItem.is_object() && contentItem.contains(typeKey) &&
                             contentItem[typeKey] == textKey && contentItem.contains(textKey)) {
                             combineText += contentItem[textKey].get<std::string>();
@@ -694,14 +665,14 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
         }
         if (inputParam->useToolsCall) {
             if (!ParseToolCall(body, msg)) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-                    SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
                 return false;
             }
         } else {
             if (!ParseTextInput(body, msg)) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-                    SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
                 return false;
             }
         }
@@ -710,8 +681,10 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
             if (!this->GetTokensFromInput(inputParam->textInput, reqTokens_, this->respTokenMap[SPECIAL_SEQ_ID_PRESET],
                                           msg)) {
                 msg = "Failed to get token from input: " + msg;
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-                    SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR), msg);
+                ULOG_ERROR(
+                    SUBMODLE_NAME_ENDPOINT,
+                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                    msg);
                 return false;
             }
         } else {
@@ -722,25 +695,25 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
             } else {
                 chatTemplate = "";
             }
-            auto status = TokenizerProcessPool::GetInstance().Encode(inputParam->textInput, reqTokens_,
-                                                                     ENCODE_CHAT_FLAG, timestamp,
-                                                                     inputParam->enableThinking,
-                                                                     chatTemplate);
+            auto status =
+                TokenizerProcessPool::GetInstance().Encode(inputParam->textInput, reqTokens_, ENCODE_CHAT_FLAG,
+                                                           timestamp, inputParam->enableThinking, chatTemplate);
             if (!status.IsOk()) {
                 msg = status.StatusMsg();
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER,
-                    LOCAL_INVOKING_ERROR), msg << ". The requestId is " << requestId_);
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_TOKENIZER, LOCAL_INVOKING_ERROR),
+                           msg << ". The requestId is " << requestId_);
                 return false;
             }
             PROF(encodeSpan.Metric("recvTokenSize", reqTokens_.size()));
         }
 
         if (reqTokens_.size() == 0 || reqTokens_.size() > MAX_TOKENS_NUM) {
-            msg = "Messages token length must be in (0, " + std::to_string(MAX_TOKENS_NUM) +
-                "], but got " + std::to_string(reqTokens_.size()) +
-                ". This could be caused by invalid input format or empty content.";
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                CHECK_ERROR), msg);
+            msg = "Messages token length must be in (0, " + std::to_string(MAX_TOKENS_NUM) + "], but got " +
+                  std::to_string(reqTokens_.size()) +
+                  ". This could be caused by invalid input format or empty content.";
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, CHECK_ERROR), msg);
             return false;
         }
         return true;
@@ -750,26 +723,27 @@ bool SingleReqVllmOpenAiInferInterface::ValidateAndPrepareReqToken(nlohmann::ord
     }
 }
 
-void SingleReqVllmOpenAiInferInterface::SetDMIReComputeBuilder()
-{
+void SingleReqVllmOpenAiInferInterface::SetDMIReComputeBuilder() {
     singleLLMReqHandlerBase_->SetDMIReComputeBuildCallBack(
         std::bind(&SingleReqVllmOpenAiInferInterface::BuildVllmOpenAIReComputeBody, this, std::placeholders::_1));
 }
 
 bool SingleReqVllmOpenAiInferInterface::BuildResponseJson(ResponseSPtr response,
-    const std::vector<BestNTokens> &tempTokens, RespBodyQueue &jsonStrings, const uint64_t &timestamp)
-{
+                                                          const std::vector<BestNTokens> &tempTokens,
+                                                          RespBodyQueue &jsonStrings, const uint64_t &timestamp) {
     bool res = true;
     if (inputParam->streamMode) {
         if (!ProcessResponseStream(response, tempTokens, jsonStrings, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process OpenAI response stream");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process OpenAI response stream");
             return false;
         }
     } else {
         if (!ProcessResponseSingle(response, timestamp)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ABNORMAL_TRANSMISSION_ERROR), "Failed to process OpenAI response single");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Failed to process OpenAI response single");
             return false;
         }
         res = EncodeResponse(jsonStrings);
@@ -777,61 +751,61 @@ bool SingleReqVllmOpenAiInferInterface::BuildResponseJson(ResponseSPtr response,
     return res;
 }
 
-void SingleReqVllmOpenAiInferInterface::GetUtf8CodeFromStr(const std::string &input, OrderedJson &bytes) const
-{
-    for (unsigned char c: input) {
+void SingleReqVllmOpenAiInferInterface::GetUtf8CodeFromStr(const std::string &input, OrderedJson &bytes) const {
+    for (unsigned char c : input) {
         bytes.emplace_back(static_cast<int>(c));
     }
 }
 
-std::string SingleReqVllmOpenAiInferInterface::ChangeUtf8Str(std::string &input) const
-{
+std::string SingleReqVllmOpenAiInferInterface::ChangeUtf8Str(std::string &input) const {
     try {
         return CleanStringForJson(input);
     } catch (const std::exception &e) {
         // 处理转换错误
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to change str to utf8. " << e.what());
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to change str to utf8. " << e.what());
         return " ";
     }
 }
 
-void SingleReqVllmOpenAiInferInterface::SendStreamResponse(RespBodyQueue &jsonStrings)
-{
+void SingleReqVllmOpenAiInferInterface::SendStreamResponse(RespBodyQueue &jsonStrings) {
     if (request_->useBeamSearch.value_or(false) && !isEnd) {
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "use beam search and Inference didn't finished");
         return;
     }
     if (!EncodeStreamResponse(jsonStrings)) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ABNORMAL_TRANSMISSION_ERROR), "Failed to encode buffer");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                   "Failed to encode buffer");
         return;
     }
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "Response has ended is " << isEnd << ", requestId is " << requestId_);
 }
 
 bool SingleReqVllmOpenAiInferInterface::EncodeSingleTokenLogrobs(OrderedJson &singleToken, const uint64_t &baseIndex,
-    const uint64_t seqId, const StreamCache* cache) noexcept
-{
+                                                                 const uint64_t seqId,
+                                                                 const StreamCache *cache) noexcept {
     std::vector<int64_t> oneToken(1);
     for (uint64_t j = 0; j < request_->topLogprobs.value(); j++) {
         // content
         OrderedJson tokenLogProbs;
         std::string tokenStr;
-        const auto& logprobsTokensMapRef = (cache == nullptr ? logprobsTokensMap : cache->logprobsTokensMap);
-        if (!mindie_llm::SafeGetMapVectorValue(logprobsTokensMapRef, seqId, baseIndex + j,
-                                               oneToken[0], "LogprobsTokensMap")) {
+        const auto &logprobsTokensMapRef = (cache == nullptr ? logprobsTokensMap : cache->logprobsTokensMap);
+        if (!mindie_llm::SafeGetMapVectorValue(logprobsTokensMapRef, seqId, baseIndex + j, oneToken[0],
+                                               "LogprobsTokensMap")) {
             return false;
         }
         if (!DecodeSingleToken(oneToken, tokenStr, 0, 0, false)) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ABNORMAL_TRANSMISSION_ERROR), "Convert logprobs token to string failed. LogId is " << requestId_);
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                       "Convert logprobs token to string failed. LogId is " << requestId_);
             return false;
         }
         float logprobsValueFloat;
-        const auto& logprobsMapRef = (cache == nullptr ? logprobsMap : cache->logprobsMap);
-        if (!mindie_llm::SafeGetMapVectorValue(logprobsMapRef, seqId, baseIndex + j,
-                                               logprobsValueFloat, "LogprobsMap")) {
+        const auto &logprobsMapRef = (cache == nullptr ? logprobsMap : cache->logprobsMap);
+        if (!mindie_llm::SafeGetMapVectorValue(logprobsMapRef, seqId, baseIndex + j, logprobsValueFloat,
+                                               "LogprobsMap")) {
             return false;
         }
         double logprobsValue = static_cast<double>(logprobsValueFloat);
@@ -845,8 +819,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeSingleTokenLogrobs(OrderedJson &si
 }
 
 bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsFullText(OrderedJson &choiceJsonObj,
-    const uint64_t seqId) noexcept
-{
+                                                               const uint64_t seqId) noexcept {
     // no logprobs info need to be encoded in response
     if (!request_->logprobs.has_value() || !request_->logprobs.value() || !request_->topLogprobs.has_value()) {
         choiceJsonObj["logprobs"] = nullptr;
@@ -858,8 +831,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsFullText(OrderedJson &choi
         // current output token
         std::string curToken;
         std::vector<int64_t> oneToken(1);
-        if (!mindie_llm::SafeGetMapVectorValue(postTokenIdMap, seqId, i, oneToken[0],
-                                               "PostTokenIdMap")) {
+        if (!mindie_llm::SafeGetMapVectorValue(postTokenIdMap, seqId, i, oneToken[0], "PostTokenIdMap")) {
             return false;
         }
         if (!DecodeSingleToken(oneToken, curToken, 0, 0, request_->skipSpecialTokens.value_or(true))) {
@@ -870,8 +842,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsFullText(OrderedJson &choi
         }
         uint64_t baseIndex = i * request_->topLogprobs.value();
         float curLogprobsFloat;
-        if (!mindie_llm::SafeGetMapVectorValue(pickedLogprobMap, seqId, i, curLogprobsFloat,
-                                               "PickedLogprobMap")) {
+        if (!mindie_llm::SafeGetMapVectorValue(pickedLogprobMap, seqId, i, curLogprobsFloat, "PickedLogprobMap")) {
             return false;
         }
         double curLogprobs = static_cast<double>(curLogprobsFloat);
@@ -890,8 +861,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsFullText(OrderedJson &choi
 }
 
 bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsStream(OrderedJson &choiceJsonObj, const uint64_t seqId,
-    const StreamCache& cache) noexcept
-{
+                                                             const StreamCache &cache) noexcept {
     // no logprobs info need to be encoded in response
     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "EncodeLogprobsStream cache input : " << cache.ToString());
     if (!request_->logprobs.has_value() || !request_->logprobs.value() || !request_->topLogprobs.has_value()) {
@@ -904,15 +874,14 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsStream(OrderedJson &choice
     std::vector<int64_t> oneToken(1);
     auto prevDecodeIndexIt = cache.prevDecodeIndex.find(seqId);
     if (prevDecodeIndexIt == cache.prevDecodeIndex.end()) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-            SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
-            "PrevDecodeIndex sequence id " << seqId << " not found.");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ABNORMAL_TRANSMISSION_ERROR),
+                   "PrevDecodeIndex sequence id " << seqId << " not found.");
         return false;
     }
     uint32_t prevIndex = prevDecodeIndexIt->second;
-    
-    if (!mindie_llm::SafeGetMapVectorValue(cache.postTokenIdMap, seqId, prevIndex, oneToken[0],
-                                           "PostTokenIdMap")) {
+
+    if (!mindie_llm::SafeGetMapVectorValue(cache.postTokenIdMap, seqId, prevIndex, oneToken[0], "PostTokenIdMap")) {
         return false;
     }
     if (!DecodeSingleToken(oneToken, curToken, 0, 0, request_->skipSpecialTokens.value_or(true))) {
@@ -923,8 +892,8 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsStream(OrderedJson &choice
     }
     uint64_t logprobsIdx = static_cast<uint64_t>(prevIndex) * request_->topLogprobs.value();
     float curLogprobsFloat;
-    if (!mindie_llm::SafeGetMapVectorValue(cache.pickedLogprobMap, seqId, prevIndex,
-                                           curLogprobsFloat, "PickedLogprobMap")) {
+    if (!mindie_llm::SafeGetMapVectorValue(cache.pickedLogprobMap, seqId, prevIndex, curLogprobsFloat,
+                                           "PickedLogprobMap")) {
         return false;
     }
     double curLogprobs = static_cast<double>(curLogprobsFloat);
@@ -942,9 +911,8 @@ bool SingleReqVllmOpenAiInferInterface::EncodeLogprobsStream(OrderedJson &choice
 }
 
 bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue &jsonStrs,
-    std::map<uint64_t, std::string> &responseTextMap,
-    const bool &needSort)
-{
+                                                                  std::map<uint64_t, std::string> &responseTextMap,
+                                                                  const bool &needSort) {
     try {
         OrderedJson tmpJsonObj;
         tmpJsonObj["id"] = requestId_;
@@ -963,7 +931,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue 
                 accuLogprobs.resize(returnSeqCount_);
             }
             responseText.reserve(accuLogprobs.size());
-            for (const auto& [seqId, _] : accuLogprobs) {
+            for (const auto &[seqId, _] : accuLogprobs) {
                 responseText.emplace_back(seqId, responseTextMap[seqId]);
             }
         } else {
@@ -972,7 +940,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue 
 
         uint32_t index = 0;
         size_t completeTokenCount = 0;
-        for (auto& [seqId, fullText] : responseText) {
+        for (auto &[seqId, fullText] : responseText) {
             OrderedJson choiceJsonObj;
             choiceJsonObj["index"] = index++;
             choiceJsonObj["message"]["role"] = "assistant";
@@ -986,11 +954,13 @@ bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue 
                 choiceJsonObj["message"]["tool_calls"] = toolsCallObjectMap[seqId];
             }
             if (!EncodeLogprobsFullText(choiceJsonObj, seqId)) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ENCODE_DECODE_ERROR), "Failed to encode open ai logprobs for single response");
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                           "Failed to encode open ai logprobs for single response");
             }
-            choiceJsonObj["finish_reason"] = finishReasonMap[seqId] == "length" ? "length" : \
-                (finishReasonMap[seqId] == "tool_calls" ? "tool_calls" : "stop");
+            choiceJsonObj["finish_reason"] = finishReasonMap[seqId] == "length"
+                                                 ? "length"
+                                                 : (finishReasonMap[seqId] == "tool_calls" ? "tool_calls" : "stop");
             if (choiceJsonObj["finish_reason"] == "tool_calls") {
                 choiceJsonObj["message"]["content"] = ChangeUtf8Str(toolsCallContentMap[seqId]);
             } else {
@@ -1018,13 +988,13 @@ bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue 
         ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "mindieLlmBenchmarkEnable value is " << benchmarkVal);
         if (benchmarkVal == BENCHMARK_ENABLE_SYNC || benchmarkVal == BENCHMARK_ENABLE_ASYNC) {
             auto status = InsertPerfInfoIntoJson(tmpJsonObj["usage"],
-                {PerfInfoType::PERF_BATCH_SZIE, PerfInfoType::PERF_QUEUE_WAIT_TIME},
-                {"batch_size", "queue_wait_time"});
+                                                 {PerfInfoType::PERF_BATCH_SZIE, PerfInfoType::PERF_QUEUE_WAIT_TIME},
+                                                 {"batch_size", "queue_wait_time"});
             if (!status.IsOk()) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-                    SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
-                    "Failed to insert performance informations for requestId " << requestId_ << ", error msg is "
-                    << status.StatusMsg());
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                           GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                           "Failed to insert performance informations for requestId " << requestId_ << ", error msg is "
+                                                                                      << status.StatusMsg());
             }
             tmpJsonObj["prefill_time"] = singleLLMReqHandlerBase_->GetMetrics().firstTokenCost;
             tmpJsonObj["decode_time_arr"] = singleLLMReqHandlerBase_->GetMetrics().decodeTime;
@@ -1032,14 +1002,14 @@ bool SingleReqVllmOpenAiInferInterface::EncodeNonStreamJsonObject(RespBodyQueue 
         jsonStrs.push(tmpJsonObj.dump());
         return true;
     } catch (...) {
-        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-            ENCODE_DECODE_ERROR), "Failed to encode open ai generate response");
+        ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                   "Failed to encode open ai generate response");
         return false;
     }
 }
 
-bool SingleReqVllmOpenAiInferInterface::EncodeResponse(RespBodyQueue &jsonStrs)
-{
+bool SingleReqVllmOpenAiInferInterface::EncodeResponse(RespBodyQueue &jsonStrs) {
     // when candidate count is 1, no need to sort response text by accumulated probes
     if (returnSeqCount_ == 1 && fullTextMap.size() == 1) {
         return EncodeNonStreamJsonObject(jsonStrs, fullTextMap);
@@ -1057,9 +1027,8 @@ bool SingleReqVllmOpenAiInferInterface::EncodeResponse(RespBodyQueue &jsonStrs)
         "finish_reason":null
     }]
  */
-static void EncodeOpenAiFirstStreamResponse(RespBodyQueue &jsonStrings,
-    const size_t seqNum, const std::string inputId, const std::string model, const bool neverSendResponse) noexcept
-{
+static void EncodeOpenAiFirstStreamResponse(RespBodyQueue &jsonStrings, const size_t seqNum, const std::string inputId,
+                                            const std::string model, const bool neverSendResponse) noexcept {
     if (!neverSendResponse) {
         return;
     }
@@ -1081,9 +1050,8 @@ static void EncodeOpenAiFirstStreamResponse(RespBodyQueue &jsonStrings,
 }
 
 bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &jsonStrings,
-    std::map<uint64_t, std::string> &responseTextMap,
-    const bool &needSort) noexcept
-{
+                                                               std::map<uint64_t, std::string> &responseTextMap,
+                                                               const bool &needSort) noexcept {
     bool useBeamSearch = request_->useBeamSearch.value_or(false);
     auto encodeLogprobsFunc = [this, useBeamSearch](OrderedJson &choiceJsonObj, const uint64_t seqId,
                                                     const StreamCache &cache) -> bool {
@@ -1098,19 +1066,18 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
     if (needSort) {
         // sort response text by accumulated probes and truncate by returnSeqCount_
         std::vector<std::pair<uint64_t, double>> accuLogprobs(probesMap.cbegin(), probesMap.cend());
-        std::sort(accuLogprobs.begin(), accuLogprobs.end(), [](const auto& a, const auto& b) {
-            return a.second > b.second;
-        });
+        std::sort(accuLogprobs.begin(), accuLogprobs.end(),
+                  [](const auto &a, const auto &b) { return a.second > b.second; });
         if (returnSeqCount_ < accuLogprobs.size()) {
             accuLogprobs.resize(returnSeqCount_);
         }
         responseSeqIds.reserve(accuLogprobs.size());
-        for (const auto& [seqId, _] : accuLogprobs) {
+        for (const auto &[seqId, _] : accuLogprobs) {
             responseSeqIds.emplace_back(seqId);
         }
     } else {
         responseSeqIds.reserve(responseTextMap.size());
-        for (const auto& [seqId, _] : responseTextMap) {
+        for (const auto &[seqId, _] : responseTextMap) {
             responseSeqIds.emplace_back(seqId);
         }
     }
@@ -1119,7 +1086,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
     if (!GetAvailableOutputCache(canOutCache)) {
         return false;
     }
-    for (auto& item: canOutCache) {
+    for (auto &item : canOutCache) {
         EncodeOpenAiFirstStreamResponse(jsonStrings, responseSeqIds.size(), requestId_, model, neverSendResponse_);
         try {
             uint32_t index = 0;
@@ -1139,8 +1106,8 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
                 // when we use beamsearch feature in stream mode,
                 // we send all things in one response like what we do in non-stream mode
                 std::string outputContent = useBeamSearch ? item.fullTextMap[seqId] : item.postSingleText[seqId];
-                std::string reasoninContent = useBeamSearch ? item.reasoningContentFullTextMap[seqId] :
-                    item.reasoningContentStreamMap[seqId];
+                std::string reasoninContent =
+                    useBeamSearch ? item.reasoningContentFullTextMap[seqId] : item.reasoningContentStreamMap[seqId];
                 if (useBeamSearch || item.parsingContentFlag[seqId].first) {
                     choiceJsonObj["delta"]["reasoning_content"] = ChangeUtf8Str(reasoninContent);
                 }
@@ -1157,25 +1124,28 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
                         item.eosMap.at(seqId) == InferStatusType::ITERATION_CONTINUE) {
                         continue;
                     }
-                } catch (const std::out_of_range&) {
+                } catch (const std::out_of_range &) {
                     // skipCurrentRoundMap 或 eosMap 中不存在该 seqId，继续处理
-                    ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                        ENCODE_DECODE_ERROR), "Missing seqId in skipCurrentRoundMap or eosMap. SeqId is " << seqId);
+                    ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                               GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                               "Missing seqId in skipCurrentRoundMap or eosMap. SeqId is " << seqId);
                     return false;
                 }
-                if (!choiceJsonObj["delta"].contains("reasoning_content")
-                    && !choiceJsonObj["delta"].contains("content") && !choiceJsonObj["delta"].contains("tool_calls")) {
+                if (!choiceJsonObj["delta"].contains("reasoning_content") &&
+                    !choiceJsonObj["delta"].contains("content") && !choiceJsonObj["delta"].contains("tool_calls")) {
                     choiceJsonObj["delta"]["content"] = "";
                 }
                 if (!encodeLogprobsFunc(choiceJsonObj, seqId, item)) {
-                    ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                    ENCODE_DECODE_ERROR), "Failed to encode open ai logprobs for stream response");
+                    ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                               GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                               "Failed to encode open ai logprobs for stream response");
                 }
                 if (item.eosMap[seqId] == InferStatusType::ITERATION_CONTINUE) {
                     choiceJsonObj["finish_reason"] = nullptr;
                 } else {
-                    choiceJsonObj["finish_reason"] = item.finishReasonMap[seqId] == "length" ? "length" :
-                        (toolsCalled[seqId] ? "tool_calls" : "stop");
+                    choiceJsonObj["finish_reason"] = item.finishReasonMap[seqId] == "length"
+                                                         ? "length"
+                                                         : (toolsCalled[seqId] ? "tool_calls" : "stop");
                     if (GetServerConfig().fullTextEnabled) {
                         tmpJsonObj["full_text"] = item.fullTextMap[seqId];
                     }
@@ -1193,14 +1163,15 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
                     const int benchmarkVal = EnvUtil::GetInstance().GetInt("MINDIE_LLM_BENCHMARK_ENABLE", 0);
                     ULOG_DEBUG(SUBMODLE_NAME_ENDPOINT, "mindieLlmBenchmarkEnable value is " << benchmarkVal);
                     if (benchmarkVal == BENCHMARK_ENABLE_SYNC || benchmarkVal == BENCHMARK_ENABLE_ASYNC) {
-                        auto status = InsertPerfInfoIntoJson(tmpJsonObj["usage"],
-                            {PerfInfoType::PERF_BATCH_SZIE, PerfInfoType::PERF_QUEUE_WAIT_TIME},
+                        auto status = InsertPerfInfoIntoJson(
+                            tmpJsonObj["usage"], {PerfInfoType::PERF_BATCH_SZIE, PerfInfoType::PERF_QUEUE_WAIT_TIME},
                             {"batch_size", "queue_wait_time"});
                         if (!status.IsOk()) {
-                            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR,
-                                SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
-                                "Failed to insert performance informations for requestId " << requestId_
-                                << ", error msg is " << status.StatusMsg());
+                            ULOG_ERROR(
+                                SUBMODLE_NAME_ENDPOINT,
+                                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                                "Failed to insert performance informations for requestId "
+                                    << requestId_ << ", error msg is " << status.StatusMsg());
                         }
                     }
                     endedSeqIds.insert(seqId);
@@ -1208,23 +1179,22 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamJsonObject(RespBodyQueue &js
                 tmpJsonObj["choices"].emplace_back(choiceJsonObj);
                 jsonStrings.push("data: " + tmpJsonObj.dump() + "\n\n");
             }
-            if (std::all_of(item.eosMap.begin(), item.eosMap.end(), [](auto eos) {
-                return eos.second != InferStatusType::ITERATION_CONTINUE;
-                })) {
+            if (std::all_of(item.eosMap.begin(), item.eosMap.end(),
+                            [](auto eos) { return eos.second != InferStatusType::ITERATION_CONTINUE; })) {
                 jsonStrings.push("data: [DONE]\n\n");
             }
             neverSendResponse_ = false;
         } catch (...) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE,
-                ENCODE_DECODE_ERROR), "Failed to encode open ai stream response");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
+                       GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SINGLE_INFERENCE, ENCODE_DECODE_ERROR),
+                       "Failed to encode open ai stream response");
             return false;
         }
     }
     return true;
 }
 
-bool SingleReqVllmOpenAiInferInterface::EncodeStreamResponse(RespBodyQueue &jsonStrings) noexcept
-{
+bool SingleReqVllmOpenAiInferInterface::EncodeStreamResponse(RespBodyQueue &jsonStrings) noexcept {
     // when beamsearch isn't used, return true stream
     if (!request_->useBeamSearch.value_or(false)) {
         return EncodeStreamJsonObject(jsonStrings, inputParam->postSingleText);
@@ -1243,8 +1213,7 @@ bool SingleReqVllmOpenAiInferInterface::EncodeStreamResponse(RespBodyQueue &json
     return EncodeStreamJsonObject(jsonStrings, fullTextMap, true);
 }
 
-std::string SingleReqVllmOpenAiInferInterface::BuildVllmOpenAIReComputeBody(const std::vector<BestNTokens>& tokens)
-{
+std::string SingleReqVllmOpenAiInferInterface::BuildVllmOpenAIReComputeBody(const std::vector<BestNTokens> &tokens) {
     OrderedJson newReqJsonObj;
     if (tokens.size() != 0) {
         ConvertTokenToMap(tokens);
@@ -1294,8 +1263,7 @@ std::string SingleReqVllmOpenAiInferInterface::BuildVllmOpenAIReComputeBody(cons
     return newReqJsonObj.dump();
 }
 
-void SingleReqVllmOpenAiInferInterface::BuildStopWords(nlohmann::ordered_json& newReqJsonObj)
-{
+void SingleReqVllmOpenAiInferInterface::BuildStopWords(nlohmann::ordered_json &newReqJsonObj) {
     if (request_->stopStrList.has_value()) {
         newReqJsonObj["stop"] = nlohmann::ordered_json(request_->stopStrList.value());
     }
@@ -1307,8 +1275,7 @@ void SingleReqVllmOpenAiInferInterface::BuildStopWords(nlohmann::ordered_json& n
     }
 }
 
-void SingleReqVllmOpenAiInferInterface::BuildThinkingConfig(nlohmann::ordered_json& newReqJsonObj)
-{
+void SingleReqVllmOpenAiInferInterface::BuildThinkingConfig(nlohmann::ordered_json &newReqJsonObj) {
     if (request_->enableThinking.has_value()) {
         newReqJsonObj["chat_template_kwargs"]["enable_thinking"] = request_->enableThinking.value();
     }
@@ -1317,8 +1284,7 @@ void SingleReqVllmOpenAiInferInterface::BuildThinkingConfig(nlohmann::ordered_js
     }
 }
 
-void SingleReqVllmOpenAiInferInterface::BuildResponseFormat(nlohmann::ordered_json& newReqJsonObj)
-{
+void SingleReqVllmOpenAiInferInterface::BuildResponseFormat(nlohmann::ordered_json &newReqJsonObj) {
     if (request_->responseFormat.has_value()) {
         auto responseFormatJson = nlohmann::json::parse(request_->responseFormat.value(), nullptr, false);
         if (!responseFormatJson.is_discarded()) {
@@ -1327,4 +1293,4 @@ void SingleReqVllmOpenAiInferInterface::BuildResponseFormat(nlohmann::ordered_js
     }
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

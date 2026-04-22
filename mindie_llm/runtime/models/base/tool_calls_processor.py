@@ -24,7 +24,7 @@ from mindie_llm.runtime.utils.helpers.json_completor import FillMode, complete_j
 from mindie_llm.utils.log.logging import logger, message_filter
 
 JSON_END_WITH_QUOTATION = '"}'
-JSON_END_CURLY_BRACKET = '}'
+JSON_END_CURLY_BRACKET = "}"
 SPECIAL_DELTA_PREFIXES = ['{"', "{'"]
 
 INIT_RETURN_NONE = {}
@@ -79,8 +79,6 @@ class DeltaToolCall(BaseModel):
 
 
 class ToolCallsProcessorWithXml(ToolCallsProcessor):
-
-
     def __init__(self, tokenizer) -> None:
         """Initializes the XML-based tool call processor.
 
@@ -120,7 +118,7 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
     @property
     def tool_call_regex(self) -> Pattern:
         raise NotImplementedError("Subclasses must implement the 'tool_call_regex' property.")
-    
+
     @property
     def decode_spilt_token(self) -> int:
         return self.tool_call_start_token
@@ -132,7 +130,7 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
         Returns:
             str: A randomly generated tool call ID prefixed with 'call_'.
         """
-        return "call_" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(TOOL_CALL_ID_LEN))
+        return "call_" + "".join(random.choice(string.ascii_letters + string.digits) for _ in range(TOOL_CALL_ID_LEN))
 
     @staticmethod
     def _get_tool_calls_json(matches: list[str]) -> list[dict[str, Any]]:
@@ -170,24 +168,23 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
         for item in tool_calls:
             tool_call = {
                 NAME: item[NAME],
-                ARGUMENTS: json.dumps(item[ARGUMENTS], ensure_ascii=False) \
-                    if isinstance(item[ARGUMENTS], dict) else item[ARGUMENTS]
+                ARGUMENTS: json.dumps(item[ARGUMENTS], ensure_ascii=False)
+                if isinstance(item[ARGUMENTS], dict)
+                else item[ARGUMENTS],
             }
-            res = {
-                "type": "function",
-                "id": self._random_tool_calls_id(),
-                "function": tool_call
-            }
+            res = {"type": "function", "id": self._random_tool_calls_id(), "function": tool_call}
             call_res.append(res)
         spilt_token = self.decode_spilt_token
         return {CONTENT: content.split(spilt_token)[0], TOOL_CALLS: call_res}
 
-
-    def decode_stream(self, all_token_ids: list[int], 
-                      prev_decode_index: int, 
-                      curr_decode_index: int,
-                      skip_special_tokens: bool, 
-                      delta_text: str) -> dict[str, Any]:
+    def decode_stream(
+        self,
+        all_token_ids: list[int],
+        prev_decode_index: int,
+        curr_decode_index: int,
+        skip_special_tokens: bool,
+        delta_text: str,
+    ) -> dict[str, Any]:
         """Processes streaming output to extract incremental tool call information.
 
         Args:
@@ -206,9 +203,9 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
             delta_text = self._preprocess_delta_text(delta_text)
             tool_call_portion_dict = self._decode_stream_tool_calls_portion(
                 history_token_ids, all_token_ids, full_text, delta_text
-                )
+            )
             if DECODE_STREAM_RETURNVALUE in tool_call_portion_dict.keys():
-                return tool_call_portion_dict[DECODE_STREAM_RETURNVALUE] 
+                return tool_call_portion_dict[DECODE_STREAM_RETURNVALUE]
             return self._decode_stream_tool_calls(tool_call_portion_dict)
         except Exception:
             logger.error("An exception occurred when parsing the function call. The large model response is invalid.")
@@ -218,12 +215,8 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
         return delta_text
 
     def _decode_stream_tool_calls_portion(
-            self,
-            history_token_ids: list[int],
-            all_token_ids: list[int],
-            full_text: str,
-            delta_text: str
-        ) -> dict[str, Any]:
+        self, history_token_ids: list[int], all_token_ids: list[int], full_text: str, delta_text: str
+    ) -> dict[str, Any]:
         """Determines the current state of tool call parsing in streaming mode.
 
         Args:
@@ -238,18 +231,22 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
         output_dict = {}
         output_dict.update({DELTA_TEXT: delta_text})
         # tool call has not yet started, return {CONTENT: delta_text}
-        if self.tool_call_start_token_id not in all_token_ids:  
+        if self.tool_call_start_token_id not in all_token_ids:
             output_dict.update({DECODE_STREAM_RETURNVALUE: {CONTENT: delta_text}})
             return output_dict
         # count tool call symbol numbers
-        prev_tool_start_count, prev_tool_end_count, cur_tool_start_count, cur_tool_end_count = (
-            self._count_tool_tokens(history_token_ids, all_token_ids))
+        prev_tool_start_count, prev_tool_end_count, cur_tool_start_count, cur_tool_end_count = self._count_tool_tokens(
+            history_token_ids, all_token_ids
+        )
         # set json fill mode
         fill_mode = FillMode.Full if self.current_tool_name_sent else FillMode.BraceOnly
         output_dict.update({FILL_MODE: fill_mode})
         # case1：common content
-        if (cur_tool_start_count == cur_tool_end_count and prev_tool_end_count == cur_tool_end_count
-                and self.tool_call_end_token not in delta_text):
+        if (
+            cur_tool_start_count == cur_tool_end_count
+            and prev_tool_end_count == cur_tool_end_count
+            and self.tool_call_end_token not in delta_text
+        ):
             output_dict.update({DECODE_STREAM_RETURNVALUE: {CONTENT: delta_text}})
             return output_dict
         # case2：start new tool_call
@@ -275,10 +272,17 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
                 current_tool_call = self._get_tool_calls_json(matches)
                 cur_arguments = current_tool_call[-1].get(ARGUMENTS)
                 if cur_arguments == {}:
-                    output_dict.update({DECODE_STREAM_RETURNVALUE: {TOOL_CALLS: [
-                        DeltaToolCall(index=self.current_tool_id,
-                                      function=DeltaFunctionCall(arguments="{}")).model_dump(exclude_none=True)
-                    ]}})
+                    output_dict.update(
+                        {
+                            DECODE_STREAM_RETURNVALUE: {
+                                TOOL_CALLS: [
+                                    DeltaToolCall(
+                                        index=self.current_tool_id, function=DeltaFunctionCall(arguments="{}")
+                                    ).model_dump(exclude_none=True)
+                                ]
+                            }
+                        }
+                    )
                 else:
                     output_dict.update({DECODE_STREAM_RETURNVALUE: INIT_RETURN_NONE})
                 return output_dict
@@ -287,21 +291,24 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
                 return output_dict
             diff = delta_text[: delta_text.rindex(JSON_END_WITH_QUOTATION)] + JSON_END_WITH_QUOTATION
 
-            output_dict.update({DECODE_STREAM_RETURNVALUE: {TOOL_CALLS: [
-                DeltaToolCall(index=self.current_tool_id,
-                              function=DeltaFunctionCall(arguments=diff)).model_dump(exclude_none=True)
-            ]}})
+            output_dict.update(
+                {
+                    DECODE_STREAM_RETURNVALUE: {
+                        TOOL_CALLS: [
+                            DeltaToolCall(
+                                index=self.current_tool_id, function=DeltaFunctionCall(arguments=diff)
+                            ).model_dump(exclude_none=True)
+                        ]
+                    }
+                }
+            )
             return output_dict
         else:
             delta_text = delta_text.replace(self.tool_call_start_token, "").replace(self.tool_call_end_token, "")
             output_dict.update({DELTA_TEXT: delta_text, DECODE_STREAM_RETURNVALUE: {CONTENT: delta_text}})
         return output_dict
 
-    def _count_tool_tokens(
-            self,
-            history_token_ids: list[int],
-            all_token_ids: list[int]
-        ) -> tuple[int, int, int, int]:
+    def _count_tool_tokens(self, history_token_ids: list[int], all_token_ids: list[int]) -> tuple[int, int, int, int]:
         """Counts occurrences of tool call start and end tokens in token sequences.
 
         Args:
@@ -318,10 +325,7 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
         cur_tool_end_count = all_token_ids.count(self.tool_call_end_token_id)
         return prev_tool_start_count, prev_tool_end_count, cur_tool_start_count, cur_tool_end_count
 
-    def _decode_stream_tool_calls(
-            self, 
-            tool_call_portion_dict: dict[str, Any]
-        ) -> dict[str, Any]:
+    def _decode_stream_tool_calls(self, tool_call_portion_dict: dict[str, Any]) -> dict[str, Any]:
         """Processes the tool call portion of streaming output to generate delta updates.
 
         Args:
@@ -352,9 +356,9 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
             tool_call_portion = tool_call_portion_dict[TOOL_CALL_PORTION]
             delta_text = tool_call_portion_dict[DELTA_TEXT]
             fill_mode = tool_call_portion_dict[FILL_MODE]
-            current_tool_call = complete_json_for_tool_calls(
-                tool_call_portion or "{}", fill_mode
-            ) if tool_call_portion else None
+            current_tool_call = (
+                complete_json_for_tool_calls(tool_call_portion or "{}", fill_mode) if tool_call_portion else None
+            )
         except Exception:
             # Invalid JSON fragment newline characters.
             return INIT_RETURN_NONE
@@ -365,15 +369,17 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
                 return INIT_RETURN_NONE
             self.current_tool_name_sent = True
             # OpenAI format
-            return {TOOL_CALLS: [
-                DeltaToolCall(
-                    index=self.current_tool_id, 
-                    type="function", 
-                    id=self._random_tool_calls_id(),
-                    function=DeltaFunctionCall(name=current_tool_call.get(NAME))
+            return {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id,
+                        type="function",
+                        id=self._random_tool_calls_id(),
+                        function=DeltaFunctionCall(name=current_tool_call.get(NAME)),
                     ).model_dump(exclude_none=True)
-            ]}
-        
+                ]
+            }
+
         delta = {}
         # case2：send param
         cur_arguments = current_tool_call.get(ARGUMENTS)
@@ -395,35 +401,42 @@ class ToolCallsProcessorWithXml(ToolCallsProcessor):
                 else:
                     argument_portion = None
             else:
-                argument_portion = cur_arguments_json[:last_brace_index + 1]
+                argument_portion = cur_arguments_json[: last_brace_index + 1]
             # Calculate the real delta
             start_pos = argument_portion.rfind(delta_text)
             if start_pos == -1:
-                return INIT_RETURN_NONE    
-            arguments_delta = argument_portion[:start_pos + len(delta_text)]
+                return INIT_RETURN_NONE
+            arguments_delta = argument_portion[: start_pos + len(delta_text)]
             # Send initial parameter delta and mark
-            delta = {TOOL_CALLS: [
-                DeltaToolCall(
-                    index=self.current_tool_id,
-                    function=DeltaFunctionCall(arguments=arguments_delta).model_dump(exclude_none=True)
-                ).model_dump(exclude_none=True)
-            ]}
+            delta = {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id,
+                        function=DeltaFunctionCall(arguments=arguments_delta).model_dump(exclude_none=True),
+                    ).model_dump(exclude_none=True)
+                ]
+            }
             self.current_tool_arguments_sent = True
         # Subsequent parameter incremental update
         elif cur_arguments and self.current_tool_arguments_sent:
             # case2-2:arguments delta content
-            if isinstance(delta_text, str) and len(delta_text.rstrip()) >= 1 and delta_text.rstrip()[
-                -1] == JSON_END_CURLY_BRACKET:
+            if (
+                isinstance(delta_text, str)
+                and len(delta_text.rstrip()) >= 1
+                and delta_text.rstrip()[-1] == JSON_END_CURLY_BRACKET
+            ):
                 # delete the end brace of the whole tool call json
-                if _count_closing_braces_at_end(tool_call_portion) > \
-                    _count_closing_braces_at_end(json.dumps(cur_arguments, ensure_ascii=False)):
+                if _count_closing_braces_at_end(tool_call_portion) > _count_closing_braces_at_end(
+                    json.dumps(cur_arguments, ensure_ascii=False)
+                ):
                     delta_text = delta_text.rstrip()[:-1]
-            delta = {TOOL_CALLS: [
-                DeltaToolCall(
-                    index=self.current_tool_id,
-                    function=DeltaFunctionCall(arguments=delta_text)
-                ).model_dump(exclude_none=True)
-            ]}
+            delta = {
+                TOOL_CALLS: [
+                    DeltaToolCall(
+                        index=self.current_tool_id, function=DeltaFunctionCall(arguments=delta_text)
+                    ).model_dump(exclude_none=True)
+                ]
+            }
         return delta
 
 
@@ -459,7 +472,7 @@ class ToolCallsProcessorManager:
     >>> @ToolCallsProcessorManager.register_module(module_names=["module_name"], force=True)
     >>> class ModuleName(ToolCallsProcessor):
     >>>     # define your module
-    >>> 
+    >>>
     >>> # using as function:
     >>> class ModuleName(ToolCallsProcessor):
     >>>     # define your module
@@ -513,18 +526,18 @@ class ToolCallsProcessorManager:
 
     @classmethod
     def register_module(
-            cls, 
-            module_names: Optional[Union[str, list[str], None]] = None, 
-            force: bool = True, 
-            module: Union[type, None] = None
-        ) -> Union[type, Callable]:
+        cls,
+        module_names: Optional[Union[str, list[str], None]] = None,
+        force: bool = True,
+        module: Union[type, None] = None,
+    ) -> Union[type, Callable]:
         """
         Register a ToolCallsProcessor module with given name(s) to the ToolCallParserManager.
         Can be used as a decorator or a function.
 
         Args:
-            module_names (Optional[Union[str, list[str], None]]): 
-                The names of the module to be registered. Can be string, list of string or None. 
+            module_names (Optional[Union[str, list[str], None]]):
+                The names of the module to be registered. Can be string, list of string or None.
                 When set to None, the name of the given module will be used.
             force (bool, optional): Whether to force register the module even if the given name is already existed.
             module (Union[type, None], optional): The module to be registered.
@@ -533,11 +546,8 @@ class ToolCallsProcessorManager:
             Union[type, Callable]: The registered module.
 
         """
-        def _register_module(
-                module: type, 
-                module_names: Optional[Union[str, list[str]]] = None, 
-                force: bool = True
-            ):
+
+        def _register_module(module: type, module_names: Optional[Union[str, list[str]]] = None, force: bool = True):
             if not issubclass(module, ToolCallsProcessor):
                 raise TypeError("module to be registered must be subclass of ToolCallsProcessor")
 
@@ -557,9 +567,10 @@ class ToolCallsProcessorManager:
                     continue
                 # check if name is existed
                 if not force and name in cls._tool_calls_processors:
-                    warn_msg = \
-                        f"'{name}' is already registered with module '{cls._tool_calls_processors[name].__name__}', " \
+                    warn_msg = (
+                        f"'{name}' is already registered with module '{cls._tool_calls_processors[name].__name__}', "
                         f"will skip this module register"
+                    )
                     logger.warning(message_filter(warn_msg))
                     continue
                 cls._tool_calls_processors[name] = module

@@ -237,7 +237,6 @@ function install_python_whl() {
     mindie_llm_wheel_path=$(find $install_dir/bin/ -name mindie_llm*.whl)
     model_wrapper_wheel_path=$(find $install_dir/bin/ -name model_wrapper*.whl)
     llm_manager_python_api_demo_wheel_path=$(find $install_dir/bin/ -name llm_manager_python_api_demo*.whl)
-    tokenizer_wheel_path=$(find $install_dir/bin/ -name mies_tokenizer*.whl)
     mie_ops_wheel_path=$(find $install_dir/bin/ -name mie_ops*.whl)
 
     print "INFO" "Ready to start install mindie_llm at ${mindie_llm_wheel_path}"
@@ -252,9 +251,6 @@ function install_python_whl() {
     else
         print "WARNING" "llm_manager_python_api_demo wheel not found, skipping installation"
     fi
-    chmod 640 ${log_file}
-    $python_interpreter -m pip install ${tokenizer_wheel_path} --log-file ${log_file} --force-reinstall || \
-    { print "ERROR" "Failed to install tokenizer wheel in mindie-llm"; exit 1; }
     if [ -n "$mie_ops_wheel_path" ]; then
         chmod 640 ${log_file}
         $python_interpreter -m pip install ${mie_ops_wheel_path} --log-file ${log_file} --force-reinstall || \
@@ -316,7 +312,7 @@ function install_process() {
     fi
     if [ -n "${ARCH}" ]; then
         if [ "${arch_pkg}" != "${ARCH}" ]; then
-            print "ERROR" "Install failed, pkg arch ${arch_pkg} is not consistent with the current enviroment architecture ${ARCH}."
+            print "ERROR" "Install failed, pkg arch ${arch_pkg} is not consistent with the current environment architecture ${ARCH}."
             exit 1
         fi
     fi

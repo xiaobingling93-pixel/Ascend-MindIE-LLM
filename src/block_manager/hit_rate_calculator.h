@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef HIT_RATE_CALCULATOR_H
 #define HIT_RATE_CALCULATOR_H
 
@@ -17,7 +17,7 @@
 
 namespace mindie_llm {
 class HitRateCalculator {
-public:
+   public:
     HitRateCalculator() = default;
 
     ~HitRateCalculator() = default;
@@ -26,10 +26,10 @@ public:
 
     virtual double GetHitRate() const;
 
-protected:
+   protected:
     uint64_t hitNum_ = 0;
     uint64_t missNum_ = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

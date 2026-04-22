@@ -16,8 +16,7 @@
 namespace mindie_llm {
 PDDSPolicy::PDDSPolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockSpaceManagerSPtr &blockManager,
                        Role role)
-    : FcfsPolicy(schedulerConfig, blockManager), role_(role)
-{
+    : FcfsPolicy(schedulerConfig, blockManager), role_(role) {
     if (schedulerConfig == nullptr) {
         throw std::invalid_argument("schedulerConfig is null");
     }
@@ -26,8 +25,7 @@ PDDSPolicy::PDDSPolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockS
     }
 }
 
-PolicyOutput PDDSPolicy::Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection)
-{
+PolicyOutput PDDSPolicy::Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) {
     if (collection == nullptr) {
         throw std::invalid_argument("collection is null");
     }
@@ -40,14 +38,14 @@ PolicyOutput PDDSPolicy::Apply(SchedulingBudget &budget, std::shared_ptr<SeqGrou
             }
             // fall through to default case
             return SchedulePrefill(budget);
-        case Role::D: return ScheduleDecode(budget);
+        case Role::D:
+            return ScheduleDecode(budget);
         default:
             throw std::runtime_error("the role is not support. role = " + std::to_string(static_cast<uint8_t>(role_)));
     }
 }
 
-PolicyOutput PDDSPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget)
-{
+PolicyOutput PDDSPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget) {
     PrefillOutputs prefillOut;
     RunningOutputs runningOut;
     SwappedInOutputs swappedInOut;
@@ -66,9 +64,10 @@ PolicyOutput PDDSPolicy::ScheduleChunkedPrefill(SchedulingBudget &budget)
 // the inplemetation of KVTransferSchedulePolicy
 KVTransferSchedulePolicy::KVTransferSchedulePolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig,
                                                    BlockSpaceManagerSPtr &blockManager, Role role)
-    : policyHelper_(schedulerConfig, blockManager), schedulerConfig_(schedulerConfig), blockManager_(blockManager),
-      role_(role)
-{
+    : policyHelper_(schedulerConfig, blockManager),
+      schedulerConfig_(schedulerConfig),
+      blockManager_(blockManager),
+      role_(role) {
     if (schedulerConfig == nullptr) {
         throw std::invalid_argument("schedulerConfig is null");
     }
@@ -78,8 +77,7 @@ KVTransferSchedulePolicy::KVTransferSchedulePolicy(std::shared_ptr<SchedulerConf
 }
 
 KVTransferPolicyOutput KVTransferSchedulePolicy::Apply(SchedulingBudget &budget,
-                                                       std::shared_ptr<SeqGroupCollection> &collection)
-{
+                                                       std::shared_ptr<SeqGroupCollection> &collection) {
     if (collection == nullptr) {
         throw std::invalid_argument("collection is null");
     }
@@ -88,16 +86,14 @@ KVTransferPolicyOutput KVTransferSchedulePolicy::Apply(SchedulingBudget &budget,
     return ScheduleKVTransferInD(budget);
 }
 
-KVTransferPolicyOutput KVTransferSchedulePolicy::ScheduleKVTransferInD(SchedulingBudget &budget, bool enableChunking)
-{
+KVTransferPolicyOutput KVTransferSchedulePolicy::ScheduleKVTransferInD(SchedulingBudget &budget, bool enableChunking) {
     std::vector<ScheduledSequenceGroupSPtr> pullSeqGroups = PickPullSeqGroup(budget, enableChunking);
 
     return BuildTransferPolicyOutput(pullSeqGroups);
 }
 
 std::vector<ScheduledSequenceGroupSPtr> KVTransferSchedulePolicy::PickPullSeqGroup(SchedulingBudget &budget,
-                                                                                   bool enableChunking)
-{
+                                                                                   bool enableChunking) {
     std::vector<ScheduledSequenceGroupSPtr> pullSeqGroups;
 
     while (!queuesCollection_->waiting_.empty()) {
@@ -143,12 +139,11 @@ std::vector<ScheduledSequenceGroupSPtr> KVTransferSchedulePolicy::PickPullSeqGro
 }
 
 KVTransferPolicyOutput KVTransferSchedulePolicy::BuildTransferPolicyOutput(
-    std::vector<ScheduledSequenceGroupSPtr> &pullSeqGroups) const
-{
+    std::vector<ScheduledSequenceGroupSPtr> &pullSeqGroups) const {
     KVTransferPolicyOutput output;
     output.pullSeqGroups = std::move(pullSeqGroups);
     output.withdrewSeqGroups.insert(output.withdrewSeqGroups.end(), queuesCollection_->waiting_.begin(),
                                     queuesCollection_->waiting_.end());
     return output;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

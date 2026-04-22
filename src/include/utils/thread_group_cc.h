@@ -9,56 +9,61 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef THREAD_GROUP_CC_H
 #define THREAD_GROUP_CC_H
 
-#include <any>
-#include <iostream>
-#include <vector>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <algorithm>
+#include <any>
+#include <condition_variable>
+#include <iostream>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 namespace mindie_llm {
 // 集合通信类型
 enum class CollectiveType : int8_t {
-    BARRIER,    // 屏障同步
-    BROADCAST,  // 广播
-    GATHER,     // 收集
-    SCATTER,    // 分发
-    ALL_TO_ALL, // 全交换
-    REDUCE      // 归约
+    BARRIER,     // 屏障同步
+    BROADCAST,   // 广播
+    GATHER,      // 收集
+    SCATTER,     // 分发
+    ALL_TO_ALL,  // 全交换
+    REDUCE       // 归约
 };
 
 // 归约操作类型
 enum class ReduceOp {
-    SUM,     // 求和
-    PRODUCT, // 求积
-    MAX,     // 最大值
-    MIN,     // 最小值
+    SUM,      // 求和
+    PRODUCT,  // 求积
+    MAX,      // 最大值
+    MIN,      // 最小值
 };
 
 class ThreadGroupCC {
-public:
-    static ThreadGroupCC &GetInstance(size_t numThreads = 2); // 2: thread group at least two thread
+   public:
+    static ThreadGroupCC &GetInstance(size_t numThreads = 2);  // 2: thread group at least two thread
 
     ~ThreadGroupCC() = default;
 
     template <typename T>
     void AllGather(const std::vector<T> &sendData, std::vector<std::vector<T>> &recvData, size_t idx);
-protected:
+
+   protected:
     explicit ThreadGroupCC(size_t numThreads);
 
-    template <typename T> void AllGatherSend_(const std::vector<T> &sendData, size_t idx);
-    template <typename T> void AllGatherRecv_(std::vector<std::vector<T>> &recvData, size_t idx);
+    template <typename T>
+    void AllGatherSend_(const std::vector<T> &sendData, size_t idx);
+    template <typename T>
+    void AllGatherRecv_(std::vector<std::vector<T>> &recvData, size_t idx);
 
-    template <typename T> static void CopyData2Buf_(const std::vector<T> &src, std::vector<std::any> &dst);
-    template <typename T> static void CopyBuf2Data_(const std::vector<std::any> &src, std::vector<T> &dst);
+    template <typename T>
+    static void CopyData2Buf_(const std::vector<T> &src, std::vector<std::any> &dst);
+    template <typename T>
+    static void CopyBuf2Data_(const std::vector<std::any> &src, std::vector<T> &dst);
 
-private:
-    size_t numThreads_; // shared by all cc primitives
+   private:
+    size_t numThreads_;  // shared by all cc primitives
 
     // barrier needed
     std::mutex barrierMtx_;
@@ -108,17 +113,16 @@ private:
 };
 
 template <typename T>
-void ThreadGroupCC::AllGather(const std::vector<T> &sendData, std::vector<std::vector<T>> &recvData, size_t idx)
-{
+void ThreadGroupCC::AllGather(const std::vector<T> &sendData, std::vector<std::vector<T>> &recvData, size_t idx) {
     AllGatherSend_(sendData, idx);
     AllGatherRecv_(recvData, idx);
 }
 
-template <typename T> void ThreadGroupCC::AllGatherSend_(const std::vector<T> &sendData, size_t idx)
-{
+template <typename T>
+void ThreadGroupCC::AllGatherSend_(const std::vector<T> &sendData, size_t idx) {
     if (idx >= allGatherBuf_.size()) {
         throw std::out_of_range("AllGather index out of range: " + std::to_string(idx) +
-            " >= " + std::to_string(allGatherBuf_.size()));
+                                " >= " + std::to_string(allGatherBuf_.size()));
     }
 
     // 1. sender发送数据，每个线程将自己的数据放入缓冲区
@@ -126,8 +130,8 @@ template <typename T> void ThreadGroupCC::AllGatherSend_(const std::vector<T> &s
     std::unique_lock<std::mutex> lock(allGatherMtx_);
     for (size_t i = 0; i < numThreads_; ++i) {
         if (idx >= allGatherReadyVec_[i].size() || idx >= allGatherReaderDoneVec_[i].size()) {
-            throw std::runtime_error("AllGather index out of range: " + std::to_string(idx) +
-                " >= numThreads_" + std::to_string(i));
+            throw std::runtime_error("AllGather index out of range: " + std::to_string(idx) + " >= numThreads_" +
+                                     std::to_string(i));
         }
         allGatherReadyVec_[i][idx] = true;
         allGatherReaderDoneVec_[i][idx] = false;
@@ -135,8 +139,8 @@ template <typename T> void ThreadGroupCC::AllGatherSend_(const std::vector<T> &s
     allGatherDataReadyCv_.notify_all();
 }
 
-template <typename T> void ThreadGroupCC::AllGatherRecv_(std::vector<std::vector<T>> &recvData, size_t idx)
-{
+template <typename T>
+void ThreadGroupCC::AllGatherRecv_(std::vector<std::vector<T>> &recvData, size_t idx) {
     {
         std::unique_lock<std::mutex> lock(allGatherMtx_);
 
@@ -168,20 +172,20 @@ template <typename T> void ThreadGroupCC::AllGatherRecv_(std::vector<std::vector
     });
 }
 
-template <typename T> void ThreadGroupCC::CopyData2Buf_(const std::vector<T> &src, std::vector<std::any> &dst)
-{
+template <typename T>
+void ThreadGroupCC::CopyData2Buf_(const std::vector<T> &src, std::vector<std::any> &dst) {
     dst.resize(src.size());
     for (size_t i = 0; i < dst.size(); ++i) {
         dst[i] = std::make_any<T>(src[i]);
     }
 }
-template <typename T> void ThreadGroupCC::CopyBuf2Data_(const std::vector<std::any> &src, std::vector<T> &dst)
-{
+template <typename T>
+void ThreadGroupCC::CopyBuf2Data_(const std::vector<std::any> &src, std::vector<T> &dst) {
     dst.resize(src.size());
     for (size_t i = 0; i < dst.size(); ++i) {
         dst[i] = std::any_cast<T>(src[i]);
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

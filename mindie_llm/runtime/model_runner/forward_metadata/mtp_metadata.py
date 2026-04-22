@@ -23,16 +23,15 @@ class MtpMetadata(ModuleMetadata):
 
     @staticmethod
     def from_model_input(model_inputs):
-        return MtpMetadata(
-            last_hidden_states=model_inputs.last_hidden_states
-        )
+        return MtpMetadata(last_hidden_states=model_inputs.last_hidden_states)
 
     @staticmethod
     def register_buffer(max_num_token, device, hf_config):
-        input_buffer.register("last_hidden_states",
-            torch.zeros((max_num_token, hf_config.hidden_size),
-            dtype=hf_config.torch_dtype, device=device))
-        
+        input_buffer.register(
+            "last_hidden_states",
+            torch.zeros((max_num_token, hf_config.hidden_size), dtype=hf_config.torch_dtype, device=device),
+        )
+
     def copy(self, num_actual_tokens, num_tokens):
         if self.last_hidden_states is not None:
             input_buffer.get("last_hidden_states")[:num_actual_tokens, :].copy_(

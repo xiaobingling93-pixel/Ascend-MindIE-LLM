@@ -13,12 +13,12 @@
 #ifndef CONFIG_INTERACTION_H
 #define CONFIG_INTERACTION_H
 
+#include <regex>
 #include <string>
 #include <vector>
-#include <regex>
 
-#include "config_info.h"
 #include "base_config_manager.h"
+#include "config_info.h"
 
 namespace mindie_llm {
 
@@ -27,7 +27,7 @@ namespace mindie_llm {
  * 直接使用ConfigManager的配置内容，实现配置间的数据传递
  */
 class ConfigInteraction {
-public:
+   public:
     ConfigInteraction() = default;
     ~ConfigInteraction() = default;
 
@@ -53,15 +53,15 @@ public:
      * @return 是否成功执行
      */
     static bool UpdatePluginEnabledStatus(const std::vector<ModelDeployConfig> &modelDeployConfigs,
-        ServerConfigManager &serverConfigManager);
+                                          ServerConfigManager &serverConfigManager);
 
     static bool UpdateDeepseekEnabledStatus(const std::vector<ModelDeployConfig> &modelDeployConfigs,
-        ServerConfigManager &serverConfigManager);
+                                            ServerConfigManager &serverConfigManager);
 
     static bool UpdateMtpEnabledStatus(const std::vector<ModelDeployConfig> &modelDeployConfigs,
-        ServerConfigManager &serverConfigManager);
+                                       ServerConfigManager &serverConfigManager);
 
-private:
+   private:
     /**
      * 检查插件参数中是否包含指定插件
      * @param pluginParams 插件参数字符串
@@ -73,11 +73,11 @@ private:
 
     // 不支持的插件类型
     static const std::vector<std::string> UNSUPPORTED_PLUGINS;
-    
+
     // 组合正则表达式模式
     static std::string GetCombinedRegexPattern();
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // CONFIG_INTERACTION_H
+#endif  // CONFIG_INTERACTION_H

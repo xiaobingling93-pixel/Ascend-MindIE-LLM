@@ -15,8 +15,8 @@
 
 #include "block_manager_interface.h"
 #include "config_info.h"
-#include "seq_group_collection.h"
 #include "scheduling_budget.h"
+#include "seq_group_collection.h"
 
 namespace mindie_llm {
 enum class PolicyType { FCFS, PRIORITY };
@@ -65,7 +65,7 @@ struct KVTransferPolicyOutput {
 };
 
 class Policy {
-public:
+   public:
     Policy() = default;
     virtual ~Policy() = default;
     virtual PolicyOutput Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) = 0;
@@ -73,10 +73,10 @@ public:
 };
 
 class KVTransferPolicy {
-public:
+   public:
     virtual ~KVTransferPolicy() = default;
     virtual KVTransferPolicyOutput Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) = 0;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -24,11 +24,11 @@ from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext
 
 class AclGraphModelWrapperExp(ModelWrapper):
     """Experimental ACL graph model wrapper.
-    
+
     This wrapper provides an interface for running models with ACL graph backend.
     It handles model initialization, input preparation, and forward passes.
     """
-    
+
     def __init__(
         self,
         rank: int,
@@ -39,7 +39,7 @@ class AclGraphModelWrapperExp(ModelWrapper):
         **kwargs: Any,
     ) -> None:
         """Initialize the ACL graph model wrapper.
-        
+
         Args:
             rank: Process rank in distributed setup.
             local_rank: Local rank in distributed setup.
@@ -63,29 +63,29 @@ class AclGraphModelWrapperExp(ModelWrapper):
                 - sampler_config: Sampler configuration.
                 - distributed_enable: Whether distributed mode is enabled.
         """
-        logger.debug(f"Enter AclGraphModelWrapper initialization.")
+        logger.debug("Enter AclGraphModelWrapper initialization.")
         self.model_runner = ModelRunnerExp(
             model_name_or_path=model_id,
             rank=rank,
             local_rank=local_rank,
             npu_id=npu_device_id,
             world_size=world_size,
-            trust_remote_code=kwargs.get('trust_remote_code', False),
-            load_tokenizer=kwargs.get('load_tokenizer', True),
-            tokenizer_path=kwargs.get('tokenizer_path', None),
+            trust_remote_code=kwargs.get("trust_remote_code", False),
+            load_tokenizer=kwargs.get("load_tokenizer", True),
+            tokenizer_path=kwargs.get("tokenizer_path", None),
             max_position_embeddings=kwargs.get("max_position_embeddings"),
-            num_speculative_tokens=kwargs.get('num_speculative_tokens'),
+            num_speculative_tokens=kwargs.get("num_speculative_tokens"),
             max_batch_size=kwargs.get("max_batch_size", -1),
             models_dict=kwargs.get("models", None),
-            tp=kwargs.get('tp', -1),
-            dp=kwargs.get('dp', -1),
-            cp=kwargs.get('cp', -1),
-            moe_tp=kwargs.get('moe_tp', -1),
-            moe_ep=kwargs.get('moe_ep', -1),
-            role=kwargs.get('role', 'standard'),
+            tp=kwargs.get("tp", -1),
+            dp=kwargs.get("dp", -1),
+            cp=kwargs.get("cp", -1),
+            moe_tp=kwargs.get("moe_tp", -1),
+            moe_ep=kwargs.get("moe_ep", -1),
+            role=kwargs.get("role", "standard"),
             max_seq_len=kwargs.get("max_seq_len", -1),
             block_size=kwargs.get("block_size", -1),
-            sampler_config=kwargs.get('sampler_config', None),
+            sampler_config=kwargs.get("sampler_config", None),
             distributed_enable=kwargs.get("distributed_enable", False),
         )
         # NOTE: These attributes maybe depreciated after TG is refactored.
@@ -116,7 +116,7 @@ class AclGraphModelWrapperExp(ModelWrapper):
             enable_nz=self.model_runner.enable_nz,
             kvcache_quant_layers=self.model_runner.kvcache_quant_layers,
             index_head_dim=self.model_runner.index_head_dim,
-            num_index_heads=self.model_runner.num_index_heads
+            num_index_heads=self.model_runner.num_index_heads,
         )
         self.max_position_embeddings = self.model_runner.max_position_embeddings
         self.adapter_manager = self.model_runner.adapter_manager
@@ -125,37 +125,35 @@ class AclGraphModelWrapperExp(ModelWrapper):
         self.is_multimodal = getattr(self.model, "is_multimodal", False)
 
     def forward(
-        self,
-        model_inputs: ModelInput,
-        npu_cache: Optional[Any] = None,
-        **kwargs: Any
+        self, model_inputs: ModelInput, npu_cache: Optional[Any] = None, **kwargs: Any
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Perform forward pass through the model.
-        
+
         Args:
             model_inputs: Model input data.
             npu_cache: Optional NPU cache for KV cache.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             Logits tensor, or tuple of (logits, hidden_states) if speculative tokens enabled.
         """
         model_inputs, kwargs = self.prepare_model_inputs(model_inputs, **kwargs)
         result = self.forward_from_model_inputs(
-            npu_cache, model_inputs.input_ids, model_inputs.position_ids, model_inputs.forward_context, **kwargs)
+            npu_cache, model_inputs.input_ids, model_inputs.position_ids, model_inputs.forward_context, **kwargs
+        )
         return result
 
     def prepare_model_inputs(self, model_inputs: ModelInput, **kwargs) -> ModelInput:
         """Prepare model inputs for forward pass.
-        
+
         Performs H2D (Host to Device) operations and builds forward context.
         NOTE: `PluginManager` will modify `model_inputs.input_lengths`.
         Assign `forward_context.seq_lens` to `model_inputs.input_lengths` so that
         they can share same address.
-        
+
         Args:
             model_inputs: Model input data.
-            
+
         Returns:
             Prepared model inputs with forward context.
         """
@@ -168,7 +166,7 @@ class AclGraphModelWrapperExp(ModelWrapper):
         if q_lens is not None:
             model_inputs.q_lens = torch.tensor(q_lens).to(self.device)
             kwargs["q_lens"] = model_inputs.q_lens
-        mtp_logits_gather_indices = kwargs.get('mtp_logits_gather_indices', None)
+        mtp_logits_gather_indices = kwargs.get("mtp_logits_gather_indices", None)
         if mtp_logits_gather_indices is not None:
             kwargs["mtp_logits_gather_indices"] = mtp_logits_gather_indices.to(self.device)
         shard_effective_token_indices = kwargs.get("shard_effective_token_indices", None)
@@ -184,9 +182,11 @@ class AclGraphModelWrapperExp(ModelWrapper):
             sub_position_ids = torch.tensor(sub_model_inputs.position_ids, dtype=torch.int64).to(self.device)
             sub_slots = torch.tensor(sub_model_inputs.slots).to(self.device)
             sub_input_lengths = torch.tensor(sub_model_inputs.context_length).to(self.device)
-            sub_lm_head_indices = torch.tensor(
-                sub_model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device) \
-                if sub_model_inputs.prefill_head_indices is not None else None
+            sub_lm_head_indices = (
+                torch.tensor(sub_model_inputs.prefill_head_indices, dtype=torch.int32).to(self.device)
+                if sub_model_inputs.prefill_head_indices is not None
+                else None
+            )
             sub_block_tables = torch.tensor(sub_model_inputs.block_tables, dtype=torch.int32).to(self.device)
             sub_model_inputs.input_ids = sub_input_ids
             sub_model_inputs.position_ids = sub_position_ids
@@ -214,30 +214,24 @@ class AclGraphModelWrapperExp(ModelWrapper):
         input_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         forward_context: Optional[ForwardContext] = None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Perform forward pass from prepared model inputs.
-        
+
         Args:
             npu_cache: Optional NPU cache for KV cache.
             input_ids: Input token IDs tensor.
             position_ids: Position IDs tensor.
             forward_context: Forward context containing metadata.
-            
+
         Returns:
             Logits tensor, or tuple of (logits, hidden_states) if speculative tokens enabled.
-            
+
         Raises:
             Exception: If forward pass fails.
         """
         try:
-            result = self.model_runner.forward(
-                npu_cache,
-                input_ids,
-                position_ids,
-                forward_context,
-                **kwargs
-            )
+            result = self.model_runner.forward(npu_cache, input_ids, position_ids, forward_context, **kwargs)
         except Exception as e:
             logger.error(f"Error in `forward_tensor`: {e}")
             raise e
@@ -246,13 +240,13 @@ class AclGraphModelWrapperExp(ModelWrapper):
 
     def generate_position_ids(self, input_ids: np.ndarray) -> Iterable:
         """Generate position IDs from input token IDs.
-        
+
         Args:
             input_ids: Input token IDs array.
-            
+
         Returns:
             Position IDs iterable.
-            
+
         Raises:
             Exception: If position ID generation fails.
         """
@@ -263,20 +257,16 @@ class AclGraphModelWrapperExp(ModelWrapper):
             raise e
         return position_ids
 
-    def make_context(
-        self,
-        conversation: List[Dict[str, str]],
-        **kwargs: Any
-    ) -> Any:
+    def make_context(self, conversation: List[Dict[str, str]], **kwargs: Any) -> Any:
         """Make context from conversation.
-        
+
         Args:
             conversation: List of conversation dictionaries with role and content.
             **kwargs: Additional keyword arguments.
-            
+
         Returns:
             Generated context.
-            
+
         Raises:
             Exception: If context generation fails.
         """
@@ -289,9 +279,9 @@ class AclGraphModelWrapperExp(ModelWrapper):
 
     def resume_hccl_comm(self) -> None:
         """Resume HCCL communication.
-        
+
         NOTE: Aclgraph currently doesn't support this function.
-        
+
         Raises:
             NotImplementedError: Always raised as this function is not supported.
         """

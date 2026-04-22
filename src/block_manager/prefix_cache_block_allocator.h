@@ -9,25 +9,25 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef PREFIX_CACHE_BLOCK_ALLOCATOR_H
 #define PREFIX_CACHE_BLOCK_ALLOCATOR_H
 
 #include <unordered_set>
 
-#include "block_tracker.h"
-#include "prefix_cache_block.h"
 #include "block_allocator.h"
+#include "block_tracker.h"
+#include "evictor.h"
 #include "hashless_block_allocator.h"
 #include "hit_rate_calculator.h"
-#include "evictor.h"
 #include "log.h"
+#include "prefix_cache_block.h"
 
 namespace mindie_llm {
 
 class PrefixCacheBlockAllocator : public BlockAllocator,
                                   public std::enable_shared_from_this<PrefixCacheBlockAllocator> {
-public:
+   public:
     PrefixCacheBlockAllocator(BlockId beginBlockId, size_t numBlocks, size_t blockSize, BlockObjPoolSPtr blockObjPool);
 
     ~PrefixCacheBlockAllocator() override = default;
@@ -60,8 +60,8 @@ public:
 
     BlockId CowBlockIfNotAppendable(BlockObjSPtr &block) override;
 
-    std::vector<BlockId>
-    GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &computedSeqBlockIds) override;
+    std::vector<BlockId> GetCommonComputedBlockIds(
+        const std::vector<std::vector<BlockId>> &computedSeqBlockIds) override;
 
     size_t GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks) override;
 
@@ -86,7 +86,7 @@ public:
     void AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds) override;
 
     void ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken) override;
-    
+
     // PrefixCacheBlockAllocator专有方法
 
     bool IsBlockCached(const BlockObjSPtr &block) const;
@@ -95,7 +95,7 @@ public:
 
     bool IsBlockComputed(BlockId blockId) const;
 
-private:
+   private:
     BlockId beginBlockId_;
 
     size_t blockSize_;
@@ -134,6 +134,6 @@ private:
     BlockId MayBeAllocateEvictedBlockId();
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

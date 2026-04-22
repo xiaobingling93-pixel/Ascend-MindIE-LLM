@@ -12,3 +12,9 @@ exclude = '''
   | dist
 )/
 '''
+
+[tool.codespell]
+skip = "examples/atb_models/requirements/*"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

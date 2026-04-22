@@ -12,15 +12,15 @@
 
 #include "post_scheduler.h"
 
-#include <vector>
 #include <stdexcept>
+#include <vector>
+
+#include "log.h"
 #include "process_group.h"
 #include "thread_group_cc.h"
-#include "log.h"
 
 namespace mindie_llm {
-void PostScheduler::SyncBatchInfo(BatchInfo &batchInfo, size_t dpRank, bool enableDistributed)
-{
+void PostScheduler::SyncBatchInfo(BatchInfo &batchInfo, size_t dpRank, bool enableDistributed) {
     if (enableDistributed) {
         SyncBatchInfoAcrossNodes(batchInfo);
     } else {
@@ -29,8 +29,7 @@ void PostScheduler::SyncBatchInfo(BatchInfo &batchInfo, size_t dpRank, bool enab
 }
 
 void PostScheduler::SyncSeqLenList(std::vector<std::vector<int64_t>> &tokenNumList, std::vector<int64_t> &batchSizeList,
-                                   size_t paddingSize, size_t dpRank, bool enableDistributed)
-{
+                                   size_t paddingSize, size_t dpRank, bool enableDistributed) {
     // 1. add padding data
     AddPaddingData(tokenNumList, paddingSize);
 
@@ -46,12 +45,12 @@ void PostScheduler::SyncSeqLenList(std::vector<std::vector<int64_t>> &tokenNumLi
 }
 
 void PostScheduler::AllGatherBatchesAcrossDPs(std::vector<std::vector<SequenceGroupMetaDatas>> &allDpMetas,
-    std::vector<std::vector<SchedulerOutputs>> &allDpOutputs, size_t dpRank)
-{
+                                              std::vector<std::vector<SchedulerOutputs>> &allDpOutputs, size_t dpRank) {
     if (allDpMetas.empty() || allDpOutputs.empty()) {
-        throw std::invalid_argument("Input containers cannot be empty. "
-            "allDpMetas size: " + std::to_string(allDpMetas.size()) +
-            ", allDpOutputs size: " + std::to_string(allDpOutputs.size()));
+        throw std::invalid_argument(
+            "Input containers cannot be empty. "
+            "allDpMetas size: " +
+            std::to_string(allDpMetas.size()) + ", allDpOutputs size: " + std::to_string(allDpOutputs.size()));
     }
     std::vector<SequenceGroupMetaDatas> sendMetaData = allDpMetas[0];
     ThreadGroupCC::GetInstance().AllGather(sendMetaData, allDpMetas, dpRank);
@@ -61,8 +60,7 @@ void PostScheduler::AllGatherBatchesAcrossDPs(std::vector<std::vector<SequenceGr
 }
 
 std::unordered_set<SequenceId> PostScheduler::AllGatherCleanSeqIdsAcrossDPs(
-    std::unordered_set<SequenceId> &curCleanSeqIdSet, size_t dpRank)
-{
+    std::unordered_set<SequenceId> &curCleanSeqIdSet, size_t dpRank) {
     std::vector<std::vector<std::unordered_set<SequenceId>>> allRankSeqIds;
     std::vector<std::unordered_set<SequenceId>> curCleanSeqIds;
     curCleanSeqIds.push_back(curCleanSeqIdSet);
@@ -77,16 +75,14 @@ std::unordered_set<SequenceId> PostScheduler::AllGatherCleanSeqIdsAcrossDPs(
     return allDPSeqIdSet;
 }
 
-void PostScheduler::AddPaddingData(std::vector<std::vector<int64_t>> &tokenNumList, size_t paddingSize)
-{
-    paddingSize = std::max(static_cast<size_t>(1), paddingSize); // 确保至少同步一个元素
-    tokenNumList.resize(1);                                      // 避免tokenNumList没有元素导致的coredump
+void PostScheduler::AddPaddingData(std::vector<std::vector<int64_t>> &tokenNumList, size_t paddingSize) {
+    paddingSize = std::max(static_cast<size_t>(1), paddingSize);  // 确保至少同步一个元素
+    tokenNumList.resize(1);                                       // 避免tokenNumList没有元素导致的coredump
     tokenNumList[0].resize(paddingSize, -1);
 }
 
 void PostScheduler::RemovePaddingData(std::vector<std::vector<int64_t>> &tokenNumList,
-                                      std::vector<int64_t> batchSizeList)
-{
+                                      std::vector<int64_t> batchSizeList) {
     if (tokenNumList.size() != batchSizeList.size()) {
         throw std::runtime_error("the size of tokenNumList and batchSizeList is mismatched.");
     }
@@ -98,8 +94,7 @@ void PostScheduler::RemovePaddingData(std::vector<std::vector<int64_t>> &tokenNu
     }
 }
 
-void PostScheduler::SyncBatchInfoAcrossDP(BatchInfo &batchInfo, size_t dpRank)
-{
+void PostScheduler::SyncBatchInfoAcrossDP(BatchInfo &batchInfo, size_t dpRank) {
     // 1. 集合通信获取各节点的batchInfo
     std::vector<std::vector<int64_t>> recvData;
     std::vector<int64_t> sendData = {batchInfo.maxBatchSize_, batchInfo.maxSeqLen_};
@@ -113,8 +108,7 @@ void PostScheduler::SyncBatchInfoAcrossDP(BatchInfo &batchInfo, size_t dpRank)
     }
 }
 
-void PostScheduler::SyncBatchInfoAcrossNodes(BatchInfo &batchInfo)
-{
+void PostScheduler::SyncBatchInfoAcrossNodes(BatchInfo &batchInfo) {
     // 1. 集合通信获取各节点的batchInfo
     std::vector<torch::Tensor> inputs;
     inputs.emplace_back(
@@ -131,13 +125,12 @@ void PostScheduler::SyncBatchInfoAcrossNodes(BatchInfo &batchInfo)
             batchInfo.maxBatchSize_ = std::max(batchInfo.maxBatchSize_, tensor[0].item<int64_t>());
             batchInfo.maxSeqLen_ = std::max(batchInfo.maxSeqLen_, tensor[1].item<int64_t>());
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         MINDIE_LLM_LOG_ERROR("SyncBatchInfoAcrossNodes failed: outputs is invalid.");
     }
 }
 
-void PostScheduler::SyncSeqLenListAcrossDP(std::vector<std::vector<int64_t>> &tokenNumList, size_t dpRank)
-{
+void PostScheduler::SyncSeqLenListAcrossDP(std::vector<std::vector<int64_t>> &tokenNumList, size_t dpRank) {
     if (tokenNumList.empty()) {
         throw std::invalid_argument("tokenNumList cannot be empty.");
     }
@@ -145,8 +138,7 @@ void PostScheduler::SyncSeqLenListAcrossDP(std::vector<std::vector<int64_t>> &to
     ThreadGroupCC::GetInstance().AllGather(sendData, tokenNumList, dpRank);
 }
 
-void PostScheduler::SyncSeqLenListAcrossNodes(std::vector<std::vector<int64_t>> &tokenNumList)
-{
+void PostScheduler::SyncSeqLenListAcrossNodes(std::vector<std::vector<int64_t>> &tokenNumList) {
     if (tokenNumList.size() == 0) {
         MINDIE_LLM_LOG_ERROR("SyncSeqLenList failed: tokenNumList is null");
         return;
@@ -166,8 +158,8 @@ void PostScheduler::SyncSeqLenListAcrossNodes(std::vector<std::vector<int64_t>> 
             int64_t *pTextNum = tensor.data_ptr<int64_t>();
             tokenNumList.emplace_back(std::vector<int64_t>(pTextNum, pTextNum + tensor.size(0)));
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         MINDIE_LLM_LOG_ERROR("SyncSeqLenListAcrossNodes failed: outputs is invalid.");
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

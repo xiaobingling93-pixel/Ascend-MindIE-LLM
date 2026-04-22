@@ -18,6 +18,7 @@
 #include <regex>
 
 #include "common_util.h"
+#include "file_system.h"
 #include "log.h"
 #include "log_utils.h"
 
@@ -26,12 +27,8 @@ namespace mindie_llm {
 using namespace std;
 
 LogLevelDynamicHandler::LogLevelDynamicHandler() {
-    const char *miesInstallPath = std::getenv("MINDIE_LLM_HOME_PATH");
-    if (miesInstallPath != nullptr) {
-        miesInstallPath_ = miesInstallPath;
-    } else {
-        miesInstallPath_ = "";
-    }
+    miesInstallPath_ = LogLevelDynamicHandler::GetMindieLlmHomePath();
+
     string homePath;
     if (!GetHomePath(homePath)) {
         cout << "Failed to get home path." << endl;
@@ -42,18 +39,18 @@ LogLevelDynamicHandler::LogLevelDynamicHandler() {
 
 LogLevelDynamicHandler::~LogLevelDynamicHandler() { Stop(); }
 
-LogLevelDynamicHandler &LogLevelDynamicHandler::GetInstance() {
+LogLevelDynamicHandler& LogLevelDynamicHandler::GetInstance() {
     static LogLevelDynamicHandler instance;
     return instance;
 }
 
 void LogLevelDynamicHandler::Init(size_t intervalMs, bool needWriteToFile) {
     cout << "LogLevelDynamicHandler start" << endl;
-    LogLevelDynamicHandler &instance = LogLevelDynamicHandler::GetInstance();
+    LogLevelDynamicHandler& instance = LogLevelDynamicHandler::GetInstance();
     if (instance.isRunning_) {
         return;
     }
-    const char *logLevelEnv = std::getenv("MINDIE_LOG_LEVEL");
+    const char* logLevelEnv = std::getenv("MINDIE_LOG_LEVEL");
     if (logLevelEnv != nullptr) {
         instance.defaultLogLevel_ = logLevelEnv;
     } else {
@@ -68,7 +65,7 @@ void LogLevelDynamicHandler::Init(size_t intervalMs, bool needWriteToFile) {
             try {
                 // 检查动态日志参数是否需要刷新
                 instance.GetAndSetLogConfig();
-            } catch (const std::exception &e) {
+            } catch (const std::exception& e) {
                 cout << "LogLevelDynamicHandler callback exception:" << e.what() << endl;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(instance.intervalMs_));
@@ -77,7 +74,7 @@ void LogLevelDynamicHandler::Init(size_t intervalMs, bool needWriteToFile) {
 }
 
 void LogLevelDynamicHandler::Stop() {
-    LogLevelDynamicHandler &instance = LogLevelDynamicHandler::GetInstance();
+    LogLevelDynamicHandler& instance = LogLevelDynamicHandler::GetInstance();
     if (!instance.isRunning_) {
         return;
     }
@@ -87,7 +84,24 @@ void LogLevelDynamicHandler::Stop() {
     }
 }
 
-bool LogLevelDynamicHandler::CanonicalPath(std::string &path) const {
+const std::string LogLevelDynamicHandler::GetMindieLlmHomePath() {
+    const char* mindieLlmHomePath = std::getenv("MINDIE_LLM_HOME_PATH");
+    if (mindieLlmHomePath != nullptr) {
+        std::string initPyPath = std::string(mindieLlmHomePath) + "/__init__.py";
+        if (FileSystem::Exists(initPyPath)) {
+            return std::string(mindieLlmHomePath);
+        }
+    }
+
+    const char* miesInstallPath = std::getenv("MIES_INSTALL_PATH");
+    if (miesInstallPath != nullptr) {
+        return std::string(miesInstallPath);
+    }
+
+    return std::string{};
+}
+
+bool LogLevelDynamicHandler::CanonicalPath(std::string& path) const {
     if (path.empty() || path.size() > 4096L) {
         return false;
     }
@@ -101,13 +115,13 @@ bool LogLevelDynamicHandler::CanonicalPath(std::string &path) const {
     return true;
 }
 
-bool LogLevelDynamicHandler::GetBinaryPath(std::string &outPath) {
+bool LogLevelDynamicHandler::GetBinaryPath(std::string& outPath) {
     if (miesInstallPath_.empty()) {
         std::string linkedPath = "/proc/" + std::to_string(getpid()) + "/exe";
         std::string realPath{};
         try {
             realPath.resize(PATH_MAX);
-        } catch (const std::bad_alloc &e) {
+        } catch (const std::bad_alloc& e) {
             std::cout << "Failed to alloc mem" << std::endl;
             return false;
         } catch (...) {
@@ -127,7 +141,7 @@ bool LogLevelDynamicHandler::GetBinaryPath(std::string &outPath) {
     return true;
 }
 
-bool LogLevelDynamicHandler::GetHomePath(std::string &outHomePath) {
+bool LogLevelDynamicHandler::GetHomePath(std::string& outHomePath) {
     if (miesInstallPath_.empty()) {
         /* get binary path */
         std::string binaryPath{};
@@ -147,7 +161,7 @@ bool LogLevelDynamicHandler::GetHomePath(std::string &outHomePath) {
     return true;
 }
 
-bool LogLevelDynamicHandler::CheckLogLevelRefreshConfig(const std::string &jsonPath, nlohmann::json &inputJsonData) {
+bool LogLevelDynamicHandler::CheckLogLevelRefreshConfig(const std::string& jsonPath, nlohmann::json& inputJsonData) {
     std::string homePath;
     if (!GetHomePath(homePath)) {
         std::cout << "Error: Get home path failed." << std::endl;
@@ -161,8 +175,8 @@ bool LogLevelDynamicHandler::CheckLogLevelRefreshConfig(const std::string &jsonP
     return ReadLogConfig(jsonPath, baseDir, inputJsonData);
 }
 
-bool LogLevelDynamicHandler::ReadLogConfig(const std::string &jsonPath, std::string &baseDir,
-                                           nlohmann::json &inputJsonData) const {
+bool LogLevelDynamicHandler::ReadLogConfig(const std::string& jsonPath, std::string& baseDir,
+                                           nlohmann::json& inputJsonData) const {
     try {
         std::string errMsg;
         std::string regularPath;
@@ -183,11 +197,11 @@ bool LogLevelDynamicHandler::ReadLogConfig(const std::string &jsonPath, std::str
         file.close();
         try {
             inputJsonData = jsonData.at("LogConfig");
-        } catch (const nlohmann::json::exception &e) {
+        } catch (const nlohmann::json::exception& e) {
             std::cout << "exception: " << e.what() << std::endl;
             return false;
         }
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         std::cout << "Json file is invalid. Please check json format! " << std::endl;
         return false;
     }
@@ -204,7 +218,7 @@ void LogLevelDynamicHandler::GetAndSetLogConfig() {
     if (!CheckAndAutoCorrectInvalidParam(logConfigJson)) {
         return;
     }
-    const auto &dynamicLogLevel = logConfigJson["dynamicLogLevel"];
+    const auto& dynamicLogLevel = logConfigJson["dynamicLogLevel"];
     if (dynamicLogLevel.is_string() && dynamicLogLevel.get<std::string>().empty()) {
         // 动态日志级别修改为空，需要恢复参数为默认值
         if (!lastLogLevel_.empty()) {
@@ -217,17 +231,17 @@ void LogLevelDynamicHandler::GetAndSetLogConfig() {
     if (CheckDynamicLogLevelChanged(dynamicLogLevel)) {
         sameDynamicLogLevel = false;
     }
-    const auto &dynamicLogLevelValidHours = logConfigJson["dynamicLogLevelValidHours"];
+    const auto& dynamicLogLevelValidHours = logConfigJson["dynamicLogLevelValidHours"];
     if (CheckValidHoursChanged(dynamicLogLevelValidHours)) {
         sameValidHours = false;
     }
-    const auto &dynamicLogLevelValidTime = logConfigJson["dynamicLogLevelValidTime"];
+    const auto& dynamicLogLevelValidTime = logConfigJson["dynamicLogLevelValidTime"];
     currentValidTime_ = dynamicLogLevelValidTime.get<std::string>();
     UpdateDynamicLogParam(sameDynamicLogLevel, sameValidHours);
     hasSetDynamicLog_ = true;
 }
 
-bool isValidTimeFormat(const std::string &timeStr) {
+bool isValidTimeFormat(const std::string& timeStr) {
     if (timeStr.empty()) {
         return true;
     }
@@ -240,7 +254,7 @@ bool isValidTimeFormat(const std::string &timeStr) {
     return !iss.fail();
 }
 
-bool LogLevelDynamicHandler::IsGreaterThanNow(const std::string &other) {
+bool LogLevelDynamicHandler::IsGreaterThanNow(const std::string& other) {
     std::tm targetTm = {};
     targetTm.tm_isdst = -1;
     strptime(other.c_str(), "%Y-%m-%d %H:%M:%S", &targetTm);
@@ -248,7 +262,7 @@ bool LogLevelDynamicHandler::IsGreaterThanNow(const std::string &other) {
     return (targetTime > std::time(nullptr));
 }
 
-bool LogLevelDynamicHandler::CheckAndAutoCorrectInvalidParam(const nlohmann::json &logConfigJson) {
+bool LogLevelDynamicHandler::CheckAndAutoCorrectInvalidParam(const nlohmann::json& logConfigJson) {
     bool ret = true;
     if (!logConfigJson["dynamicLogLevel"].is_string()) {
         ModifyLogConfigByKey("dynamicLogLevel", lastLogLevel_, false);
@@ -282,7 +296,7 @@ bool LogLevelDynamicHandler::CheckAndAutoCorrectInvalidParam(const nlohmann::jso
     return ret;
 }
 
-bool LogLevelDynamicHandler::CheckDynamicLogLevelChanged(const nlohmann::json &dynamicLogLevel) {
+bool LogLevelDynamicHandler::CheckDynamicLogLevelChanged(const nlohmann::json& dynamicLogLevel) {
     currentLevel_ = dynamicLogLevel.get<std::string>();
     if (currentLevel_ != lastLogLevel_) {
         return true;
@@ -290,7 +304,7 @@ bool LogLevelDynamicHandler::CheckDynamicLogLevelChanged(const nlohmann::json &d
     return false;
 }
 
-bool LogLevelDynamicHandler::CheckValidHoursChanged(const nlohmann::json &dynamicLogLevelValidHours) {
+bool LogLevelDynamicHandler::CheckValidHoursChanged(const nlohmann::json& dynamicLogLevelValidHours) {
     currentValidHours_ = dynamicLogLevelValidHours.get<int>();
     if (currentValidHours_ != lastValidHours_) {
         return true;
@@ -316,7 +330,7 @@ void LogLevelDynamicHandler::UpdateDynamicLogParam(const bool sameDynamicLogLeve
     UpdateDynamicLogParamToFile();
 }
 
-bool ParseTimeString(const std::string &timeStr, std::time_t &outTime) {
+bool ParseTimeString(const std::string& timeStr, std::time_t& outTime) {
     std::tm tm = {};
     std::istringstream iss(timeStr);
     iss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
@@ -328,7 +342,7 @@ bool ParseTimeString(const std::string &timeStr, std::time_t &outTime) {
 }
 
 // 判断当前时间是否在有效范围内
-bool LogLevelDynamicHandler::IsCurrentTimeWithinValidRange(const std::string &validTimeStr, int validHours) const {
+bool LogLevelDynamicHandler::IsCurrentTimeWithinValidRange(const std::string& validTimeStr, int validHours) const {
     std::time_t startTime;
     if (!ParseTimeString(validTimeStr, startTime)) {
         return false;
@@ -395,14 +409,14 @@ void LogLevelDynamicHandler::InsertLogConfigToFile() {
         out << config.dump(4);
         out.close();
         cerr << "Dynamic Log Level config undetected, insert config into the file." << endl;
-    } catch (nlohmann::json::parse_error &e) {
+    } catch (nlohmann::json::parse_error& e) {
         cerr << "Failed to parse log level dynamic config file." << endl;
-    } catch (std::exception &e) {
+    } catch (std::exception& e) {
         cerr << "Failed to write back to log level dynamic config file." << endl;
     }
 }
 
-void LogLevelDynamicHandler::ModifyLogConfigByKey(const string &key, const string &value, bool isNumber) {
+void LogLevelDynamicHandler::ModifyLogConfigByKey(const string& key, const string& value, bool isNumber) {
     // 保证仅一个进程可以写配置文件
     if (!needWriteToFile_) {
         return;
@@ -445,7 +459,7 @@ void LogLevelDynamicHandler::ModifyLogConfigByKey(const string &key, const strin
         return;
     }
 
-    for (const string &l : fileContent) {
+    for (const string& l : fileContent) {
         ofs << l << endl;
     }
     ofs.close();

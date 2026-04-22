@@ -16,11 +16,11 @@ from mindie_llm.utils.log.logging import logger
 
 class InputBuffer(Singleton):
     """Singleton buffer for storing input tensors.
-    
+
     This class provides a centralized storage for input tensors used during
     model forward passes, particularly for graph mode execution.
     """
-    
+
     def __init__(self) -> None:
         """Initialize the input buffer."""
         if hasattr(self, "_initialized"):
@@ -28,16 +28,16 @@ class InputBuffer(Singleton):
 
         self._buffers: Dict[str, torch.Tensor] = {}
         self._initialized = True
-    
+
     def get(self, key: str) -> torch.Tensor:
         """Get a tensor from the buffer.
-        
+
         Args:
             key: Key identifying the tensor.
-            
+
         Returns:
             The tensor associated with the key.
-            
+
         Raises:
             KeyError: If the key is not found.
         """
@@ -45,11 +45,11 @@ class InputBuffer(Singleton):
 
     def register(self, key: str, tensor: torch.Tensor) -> None:
         """Register a tensor in the buffer.
-        
+
         Args:
             key: Key to identify the tensor.
             tensor: Tensor to register.
-            
+
         Raises:
             KeyError: If the key is already registered.
         """
@@ -63,7 +63,7 @@ class InputBuffer(Singleton):
 
     def _record_input_buffer_addresses(self) -> List[int]:
         """Record memory addresses of all tensors in the buffer.
-        
+
         Returns:
             List of memory addresses (data pointers) of tensors.
         """

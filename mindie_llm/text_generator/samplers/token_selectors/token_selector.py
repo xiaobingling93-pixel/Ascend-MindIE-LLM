@@ -19,9 +19,5 @@ class TokenSelector(ABC):
         self.params = selector_params
 
     @abstractmethod
-    def __call__(
-        self,
-        logits: Any,
-        metadata: SamplingMetadata
-    ) -> SamplingOutput:
+    def __call__(self, logits: Any, metadata: SamplingMetadata) -> SamplingOutput:
         pass

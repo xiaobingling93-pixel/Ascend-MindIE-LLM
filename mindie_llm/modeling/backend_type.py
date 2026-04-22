@@ -11,8 +11,8 @@ from enum import Enum
 
 
 class BackendType(str, Enum):
-    ATB = 'atb'
-    TORCH = 'torch'
+    ATB = "atb"
+    TORCH = "torch"
 
     @classmethod
     def from_string(cls, value: str, default: "BackendType" = None) -> "BackendType":

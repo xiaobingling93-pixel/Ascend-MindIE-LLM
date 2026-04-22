@@ -21,33 +21,33 @@ class Qwen3MoeInputBuilder(Qwen3InputBuilder):
     def _apply_chat_template(self, conversation, tools_msg=None, **kwargs):
         """Processes tool call arguments in conversation assistant messages, then applies the base chat template.
 
-           This method extends the parent class implementation by:
-           - Iterating through assistant role messages to standardize tool call arguments format.
-           - Safely parsing JSON string-formatted tool call arguments into native Python dictionaries.
-           - Gracefully skipping malformed or non-JSON tool call arguments without breaking execution.
-           - Retaining all original functionality of the parent class `_apply_chat_template` method.
+        This method extends the parent class implementation by:
+        - Iterating through assistant role messages to standardize tool call arguments format.
+        - Safely parsing JSON string-formatted tool call arguments into native Python dictionaries.
+        - Gracefully skipping malformed or non-JSON tool call arguments without breaking execution.
+        - Retaining all original functionality of the parent class `_apply_chat_template` method.
 
-           Args:
-               conversation: List of message dictionaries with 'role' and 'content' keys.
-               tools_msg: Optional dictionary containing a 'tools' key with tool definitions.
-               **kwargs: Additional arguments passed to the tokenizer's apply_chat_template,
-                   including 'chat_template_kwargs' which may contain 'enable_thinking'.
+        Args:
+            conversation: List of message dictionaries with 'role' and 'content' keys.
+            tools_msg: Optional dictionary containing a 'tools' key with tool definitions.
+            **kwargs: Additional arguments passed to the tokenizer's apply_chat_template,
+                including 'chat_template_kwargs' which may contain 'enable_thinking'.
 
-           Returns:
-               List[int]: Tokenized input IDs after applying the chat template.
+        Returns:
+            List[int]: Tokenized input IDs after applying the chat template.
         """
         for message in conversation:
-            if message.get('role', 'user') not in ['assistant']:
+            if message.get("role", "user") not in ["assistant"]:
                 continue
 
-            tool_calls = message.get('tool_calls', [])
+            tool_calls = message.get("tool_calls", [])
             if not isinstance(tool_calls, list):
                 continue
 
             for tool_call in tool_calls:
                 try:
-                    function = tool_call.get('function', {})
-                    function['arguments'] = json.loads(function.get('arguments', ''))
+                    function = tool_call.get("function", {})
+                    function["arguments"] = json.loads(function.get("arguments", ""))
 
                 except (TypeError, ValueError):
                     continue

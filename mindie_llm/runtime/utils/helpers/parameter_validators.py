@@ -18,11 +18,22 @@ from mindie_llm.utils.log.logging import logger
 
 
 class Field:
-    def __init__(self, ge: Optional[float] = None, gt: Optional[float] = None, le: Optional[float] = None,
-                lt: Optional[float] = None, min_length: Optional[int] = None, max_length: Optional[int] = None):
+    def __init__(
+        self,
+        ge: Optional[float] = None,
+        gt: Optional[float] = None,
+        le: Optional[float] = None,
+        lt: Optional[float] = None,
+        min_length: Optional[int] = None,
+        max_length: Optional[int] = None,
+    ):
         constraints: Dict[str, Optional[Any]] = {
-            'ge': ge, 'gt': gt, 'le': le, 'lt': lt,
-            'min_length': min_length, 'max_length': max_length
+            "ge": ge,
+            "gt": gt,
+            "le": le,
+            "lt": lt,
+            "min_length": min_length,
+            "max_length": max_length,
         }
         self._validate_not_all_none(constraints)
         self._validate_range_constraints(constraints)
@@ -38,7 +49,7 @@ class Field:
 
     @staticmethod
     def _validate_range_constraints(constraints: Dict[str, Optional[Any]]) -> None:
-        ge, gt, le, lt = constraints['ge'], constraints['gt'], constraints['le'], constraints['lt']
+        ge, gt, le, lt = constraints["ge"], constraints["gt"], constraints["le"], constraints["lt"]
         if ge is not None and gt is not None:
             raise ValueError("Cannot specify both 'ge' and 'gt'")
         if le is not None and lt is not None:
@@ -50,14 +61,15 @@ class Field:
 
     @staticmethod
     def _validate_length_constraints(constraints: Dict[str, Optional[Any]]) -> None:
-        min_length, max_length = constraints['min_length'], constraints['max_length']
+        min_length, max_length = constraints["min_length"], constraints["max_length"]
         if min_length is not None and max_length is not None and min_length > max_length:
             raise ValueError("'min_length' cannot be greater than 'max_length'")
 
     @staticmethod
     def _validate_combined_constraints(constraints: Dict[str, Optional[Any]]) -> None:
-        if any(constraints[key] is not None for key in ['ge', 'gt', 'le', 'lt']) and any(
-                constraints[key] is not None for key in ['min_length', 'max_length']):
+        if any(constraints[key] is not None for key in ["ge", "gt", "le", "lt"]) and any(
+            constraints[key] is not None for key in ["min_length", "max_length"]
+        ):
             raise ValueError("Cannot specify both range constraints and length constraints")
 
     def extract_constraint(self) -> str:
@@ -83,6 +95,7 @@ class ValidationPipelineStatus(Enum):
         CONTINUE: Indicates that the validation should continue to the next step in the pipeline.
         BREAK: Indicates that the validation should stop and no further steps should be executed.
     """
+
     CONTINUE = "continue"
     BREAK = "break"
 
@@ -110,8 +123,9 @@ class ValidationStrategies:
     @staticmethod
     def validate_type(value: Any, expected_types: Union[Type, Tuple[Type, ...]]) -> ValidationPipelineStatus:
         if not isinstance(value, expected_types):
-            expected_type_names = ', '.join(
-                t.__name__ for t in (expected_types if isinstance(expected_types, tuple) else (expected_types,)))
+            expected_type_names = ", ".join(
+                t.__name__ for t in (expected_types if isinstance(expected_types, tuple) else (expected_types,))
+            )
             raise ValueError(f"Value must be one of the following types: {expected_type_names}")
         return ValidationPipelineStatus.CONTINUE
 
@@ -200,8 +214,13 @@ class ValidationPipeline:
 class ParameterValidator:
     requires_fields: bool = True
 
-    def __init__(self, value_type: Union[Type, Tuple[Type, ...]] | None, *fields: Field, allow_none: bool = False,
-                special_values: List[Any] = None):
+    def __init__(
+        self,
+        value_type: Union[Type, Tuple[Type, ...]] | None,
+        *fields: Field,
+        allow_none: bool = False,
+        special_values: List[Any] = None,
+    ):
         if self.requires_fields and not fields:
             raise ValueError("At least one Field parameter must be provided.")
         self.allow_none = allow_none
@@ -291,11 +310,11 @@ class DictionaryParameterValidator(ParameterValidator):
     requires_fields: bool = False
 
     def __init__(
-            self,
-            element_validator_mapping: Dict[Any, ParameterValidator],
-            allow_none: bool = False,
-            allow_addition_key: bool = True
-        ):
+        self,
+        element_validator_mapping: Dict[Any, ParameterValidator],
+        allow_none: bool = False,
+        allow_addition_key: bool = True,
+    ):
         self.allow_addition_key = allow_addition_key
         super().__init__(dict, allow_none=allow_none)
         self.element_validator_mapping = element_validator_mapping
@@ -325,7 +344,7 @@ class FileParameterValidator(ParameterValidator):
 
     def __init__(self, allow_none: bool = False):
         super().__init__(str, allow_none=allow_none)
-    
+
     def create_validation_pipeline(self, value_type: Union[Type, Tuple[Type, ...]] | None):
         self.pipeline.refresh()
         self.pipeline.add(ValidationStrategies.validate_none, self.allow_none)
@@ -343,6 +362,7 @@ class CompositeParameterValidator(ParameterValidator):
     Attributes:
         validators (Dict[Type, ParameterValidator]): A dictionary mapping types to their respective validators.
     """
+
     requires_fields: bool = False
 
     def __init__(self, validators: Dict[Type, ParameterValidator], allow_none: bool = False):
@@ -369,12 +389,12 @@ class CompositeParameterValidator(ParameterValidator):
 
 
 class ArgumentAction(Enum):
-    STORE = 'store'
-    STORE_TRUE = 'store_true'
-    STORE_FALSE = 'store_false'
-    STORE_CONST = 'store_const'
-    APPEND = 'append'
-    COUNT = 'count'
+    STORE = "store"
+    STORE_TRUE = "store_true"
+    STORE_FALSE = "store_false"
+    STORE_CONST = "store_const"
+    APPEND = "append"
+    COUNT = "count"
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -382,8 +402,9 @@ class ArgumentParser(argparse.ArgumentParser):
         self.argument_validators: Dict[str, Union[ParameterValidator, Dict[Any, ParameterValidator]]] = {}
         super().__init__(*args, **kwargs)
 
-    def add_argument(self, *args: Any, validator: Union[ParameterValidator, Dict[Any, ParameterValidator]] = None,
-                    **kwargs: Any) -> argparse.Action:
+    def add_argument(
+        self, *args: Any, validator: Union[ParameterValidator, Dict[Any, ParameterValidator]] = None, **kwargs: Any
+    ) -> argparse.Action:
         arguments = super().add_argument(*args, **kwargs)
         if validator is not None:
             self.argument_validators.update({arguments.dest: validator})
@@ -395,8 +416,9 @@ class ArgumentParser(argparse.ArgumentParser):
         self._validate_arguments(args_all)
         return args_all
 
-    def update_argument(self, old_name: str, new_dest: str = None, new_option_strings: List[str] = None,
-                        **kwargs: Any) -> None:
+    def update_argument(
+        self, old_name: str, new_dest: str = None, new_option_strings: List[str] = None, **kwargs: Any
+    ) -> None:
         action = self._find_action(old_name)
         self._update_action(action, new_dest, new_option_strings, **kwargs)
 
@@ -406,8 +428,9 @@ class ArgumentParser(argparse.ArgumentParser):
                 return action
         raise ValueError(f"Action for argument '{name}' not found.")
 
-    def _update_action(self, action: argparse.Action, new_dest: str = None, new_option_strings: List[str] = None,
-                    **kwargs: Any) -> None:
+    def _update_action(
+        self, action: argparse.Action, new_dest: str = None, new_option_strings: List[str] = None, **kwargs: Any
+    ) -> None:
         if new_dest:
             action.dest = new_dest
         if new_option_strings:

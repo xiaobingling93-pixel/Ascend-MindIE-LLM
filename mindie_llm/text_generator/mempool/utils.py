@@ -25,7 +25,7 @@ def flatten_tensors(nested_list: List) -> List[torch.Tensor]:
             flat_list.extend(flatten_tensors(item))
     else:
         raise TypeError(f"Unsupported type in tensors list: {type(nested_list)}")
-    
+
     return flat_list
 
 
@@ -47,29 +47,27 @@ def parse_global_segment_size(value) -> int:
         try:
             return int(value)
         except (TypeError, ValueError) as e:
-            raise TypeError(
-                f"Unsupported type for global_segment_size: {type(value)}"
-            ) from e
+            raise TypeError(f"Unsupported type for global_segment_size: {type(value)}") from e
 
     cleaned_input = value.strip().lower()
     if not cleaned_input:
         raise ValueError("global segment size cannot be empty.")
 
     units = {
-        'tb': 1024**4,  # 1 TB = 1024^4 bytes
-        'gb': 1024**3,  # 1 GB = 1024^3 bytes
-        'mb': 1024**2,  # 1 MB = 1024^2 bytes
-        'kb': 1024,  # 1 KB = 1024 bytes
-        'b': 1  # 1 B = 1 byte
+        "tb": 1024**4,  # 1 TB = 1024^4 bytes
+        "gb": 1024**3,  # 1 GB = 1024^3 bytes
+        "mb": 1024**2,  # 1 MB = 1024^2 bytes
+        "kb": 1024,  # 1 KB = 1024 bytes
+        "b": 1,  # 1 B = 1 byte
     }
-    pattern = r'^([0-9]+(\.[0-9]+)?)\s*(tb|gb|mb|kb|b)?$'
+    pattern = r"^([0-9]+(\.[0-9]+)?)\s*(tb|gb|mb|kb|b)?$"
     match = re.match(pattern, cleaned_input)
 
     if not match:
         raise ValueError(f"Invalid format: '{value}'")
 
     number_str = float(match.group(1))
-    unit = match.group(3) or 'b'
+    unit = match.group(3) or "b"
 
-    multiplier = units.get(unit, units['b'])
+    multiplier = units.get(unit, units["b"])
     return int(number_str * multiplier)

@@ -22,7 +22,7 @@ const size_t LLM_SHARED_MEMORY_MAX_NAME_LEN = 255;
 const size_t DEFAULT_SHARED_MEMORY_SIZE = 1024 * 1024 * 32;
 // Error message shared memory only contains err string
 const size_t ERROR_SHARED_MEMORY_SIZE = 1024;
- // For prefixcache in long sequence generation, one batch's shared memory may exceed 8MB.
+// For prefixcache in long sequence generation, one batch's shared memory may exceed 8MB.
 const size_t SHARED_MEMORY_256MB = 1024 * 1024 * 256;
 
 const size_t RECOVER_SHARED_MEMORY_SIZE = 1024 * 1024 * 8;
@@ -46,7 +46,7 @@ struct SemaphoreConfig {
 using FileDesc = int;
 bool SharedMemorySizeCheck(const uint64_t &pendingMemoryAllocationSize);
 class SharedMemory {
-public:
+   public:
     SharedMemory() = default;
     ~SharedMemory();
     bool Create(const std::string &name, uint32_t size);
@@ -57,13 +57,13 @@ public:
     char *GetBufEnd() const;
     int GetFd() const;
 
-private:
+   private:
     FileDesc mFd_{0};
     std::string mName;
     uint32_t mCurSize{0};
     char *mMapBuf = nullptr;
     bool valid{false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

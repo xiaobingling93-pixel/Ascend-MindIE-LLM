@@ -9,18 +9,20 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <cstring>
-#include <cstdlib>
-#include <string>
-#include "log.h"
 #include "env_util.h"
 
-namespace mindie_llm {
-constexpr size_t MAX_ENV_LENGTH = 256; // 环境变量长度最大为256个字符
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
-EnvUtil::EnvUtil()
-{
+#include "log.h"
+
+namespace mindie_llm {
+constexpr size_t MAX_ENV_LENGTH = 256;  // 环境变量长度最大为256个字符
+
+EnvUtil::EnvUtil() {
     vars["MINDIE_LLM_HOME_PATH"] = GetEnvByName("MINDIE_LLM_HOME_PATH");
+    vars["MIES_INSTALL_PATH"] = GetEnvByName("MIES_INSTALL_PATH");
     vars["MIES_CONFIG_JSON_PATH"] = GetEnvByName("MIES_CONFIG_JSON_PATH");
     vars["MIES_MEMORY_DETECTOR_MODE"] = GetEnvByName("MIES_MEMORY_DETECTOR_MODE");
     vars["MIES_PROFILER_MODE"] = GetEnvByName("MIES_PROFILER_MODE");
@@ -44,8 +46,7 @@ EnvUtil::EnvUtil()
     vars["MINDIE_LLM_BENCHMARK_ENABLE"] = GetEnvByName("MINDIE_LLM_BENCHMARK_ENABLE");
 }
 
-const std::string& EnvUtil::Get(const std::string& name) const
-{
+const std::string& EnvUtil::Get(const std::string& name) const {
     auto it = vars.find(name);
     if (it != vars.end()) {
         return it->second;
@@ -54,8 +55,7 @@ const std::string& EnvUtil::Get(const std::string& name) const
     return empty;
 }
 
-std::string EnvUtil::GetEnvByName(const std::string& name) const
-{
+std::string EnvUtil::GetEnvByName(const std::string& name) const {
     char* item = std::getenv(name.c_str());
     if (item == nullptr) {
         return "";
@@ -63,15 +63,15 @@ std::string EnvUtil::GetEnvByName(const std::string& name) const
 
     size_t itemLength = strlen(item);
     if (itemLength > MAX_ENV_LENGTH) {
-        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_SERVER_REQUEST,
-            CHECK_WARNING), "Value length is too long");
+        ULOG_WARN(SUBMODLE_NAME_ENDPOINT,
+                  GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_SERVER_REQUEST, CHECK_WARNING),
+                  "Value length is too long");
         return "";
     }
     return item;
 }
 
-int32_t EnvUtil::GetInt(const std::string& name, int32_t defaultValue) const
-{
+int32_t EnvUtil::GetInt(const std::string& name, int32_t defaultValue) const {
     const std::string& value = Get(name);
     if (value.empty()) {
         return defaultValue;
@@ -81,19 +81,14 @@ int32_t EnvUtil::GetInt(const std::string& name, int32_t defaultValue) const
     try {
         return std::stoi(value);
     } catch (...) {
-        ULOG_WARN(SUBMODLE_NAME_ENDPOINT, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_SERVER_REQUEST,
-            CHECK_WARNING), "Failed to convert " << name << " to integer");
+        ULOG_WARN(SUBMODLE_NAME_ENDPOINT,
+                  GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_SERVER_REQUEST, CHECK_WARNING),
+                  "Failed to convert " << name << " to integer");
         return defaultValue;
     }
 }
 
-void EnvUtil::SetEnvVar(const std::string& name, const std::string& value)
-{
-    vars[name] = value;
-}
+void EnvUtil::SetEnvVar(const std::string& name, const std::string& value) { vars[name] = value; }
 
-void EnvUtil::ClearEnvVar(const std::string& name)
-{
-    vars.erase(name);
-}
-} // namespace mindie_llm
+void EnvUtil::ClearEnvVar(const std::string& name) { vars.erase(name); }
+}  // namespace mindie_llm

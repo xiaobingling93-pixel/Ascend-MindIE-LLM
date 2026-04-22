@@ -11,18 +11,17 @@
 from dataclasses import dataclass
 
 from mindie_llm.runtime.config.mindie_llm_config import MindIELLMConfig
-from mindie_llm.runtime.utils.helpers.parameter_validators import (
-    BooleanParameterValidator
-)
+from mindie_llm.runtime.utils.helpers.parameter_validators import BooleanParameterValidator
 
 
 @dataclass
 class ModelDescriptor:
     """Represents model configuration descriptor with validation capabilities.
-    
+
     Attributes:
         is_flashcomm_supported (bool): Indicates whether FlashComm acceleration is supported for this model.
     """
+
     is_flashcomm_supported: bool = False
 
     def __post_init__(self):
@@ -30,11 +29,9 @@ class ModelDescriptor:
         self.validate()
 
     @classmethod
-    def from_config(cls, mindie_llm_config: MindIELLMConfig) -> 'ModelDescriptor':
+    def from_config(cls, mindie_llm_config: MindIELLMConfig) -> "ModelDescriptor":
         """Creates ModelDescriptor instance from configuration dictionary."""
-        model_descriptor = cls(
-            is_flashcomm_supported=False
-        )
+        model_descriptor = cls(is_flashcomm_supported=False)
         return model_descriptor
 
     def validate(self) -> None:

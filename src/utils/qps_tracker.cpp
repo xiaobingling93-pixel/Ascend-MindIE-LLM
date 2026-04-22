@@ -9,24 +9,23 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include <chrono>
 #include "qps_tracker.h"
+
+#include <chrono>
 
 using namespace mindie_llm;
 using namespace std;
-inline int64_t NowInMilli()
-{
+inline int64_t NowInMilli() {
     const auto now = chrono::steady_clock::now();
     return chrono::time_point_cast<chrono::milliseconds>(now).time_since_epoch().count();
 }
 
 QPSTracker::QPSTracker(int timeWindowInterval, int bucketTimeInterval)
-    : bucketTimeInterval_(bucketTimeInterval), timeWindowInterval_(timeWindowInterval),
-      bucketsNum_(timeWindowInterval / bucketTimeInterval), buckets_(bucketsNum_)
-{
-}
-float QPSTracker::GetQPS()
-{
+    : bucketTimeInterval_(bucketTimeInterval),
+      timeWindowInterval_(timeWindowInterval),
+      bucketsNum_(timeWindowInterval / bucketTimeInterval),
+      buckets_(bucketsNum_) {}
+float QPSTracker::GetQPS() {
     int64_t nowInMs = NowInMilli();
     int64_t endBucketId = static_cast<int64_t>(nowInMs / bucketTimeInterval_);
     int64_t beginBucketId = endBucketId - static_cast<int64_t>(bucketsNum_) + 1;
@@ -41,14 +40,13 @@ float QPSTracker::GetQPS()
     return (static_cast<float>(requestNum)) / static_cast<float>(timeWindowInterval_) * msPerSecond;
 }
 
-void QPSTracker::Record()
-{
+void QPSTracker::Record() {
     int64_t nowInMs = NowInMilli();
     int64_t bucketId = nowInMs / bucketTimeInterval_;
     QCntBucket &bucket = buckets_[static_cast<size_t>(bucketId) % bucketsNum_];
     if (bucket.bucketId == bucketId) {
         bucket.counter.fetch_add(1, memory_order_relaxed);
-    } else { // not accurate when there is high concurrrency, some requests will not be calcuated
+    } else {  // not accurate when there is high concurrrency, some requests will not be calcuated
         bucket.counter.store(1, memory_order_relaxed);
         bucket.bucketId = bucketId;
     }

@@ -23,6 +23,7 @@ class CustomLayer(nn.Module):
     Args:
         None. This is a base class with no initialization arguments.
     """
+
     def __init__(self) -> None:
         super().__init__()
 

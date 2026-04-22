@@ -9,25 +9,25 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef PREFILL_REGRESSION
 #define PREFILL_REGRESSION
 
 namespace mindie_llm {
 class PrefillRegression {
-public:
+   public:
     PrefillRegression();
     ~PrefillRegression() = default;
     void AddDataPoint(float tokenNum, float execTime);
     float Predict(int tokenNum) const;
 
-private:
+   private:
     int count_;
     float sumX_, sumY_, sumXX_, sumXY_;
     float slope_ = 0.1317;
     float intercept_ = 25.797;
     void LinearRegression(float tokenNum, float execTime);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // PREFILL_REGRESSION
+#endif  // PREFILL_REGRESSION

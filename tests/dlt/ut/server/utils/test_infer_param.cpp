@@ -563,14 +563,14 @@ TEST_F(InferParamTest, testAssignResponseFormat) {
     jsonObj["response_format"] = {{"type", "invalid_type"}};
     EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
     EXPECT_FALSE(request->responseFormat.has_value());
-    EXPECT_EQ(error, "Parameter response_format.type must be 'json_object', or 'json_schema', got 'invalid_type'");
+    EXPECT_EQ(error,
+              "Parameter response_format.type must be 'json_object', 'json_schema' or 'text', got 'invalid_type'");
 
-    // invalid values - type "text" is not supported
+    // valid values - type "text" is treated as no response_format
     request = std::make_shared<Request>(RequestIdNew("mockRequest"));
     jsonObj["response_format"] = {{"type", "text"}};
-    EXPECT_FALSE(AssignResponseFormat(jsonObj, request, error));
+    EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
     EXPECT_FALSE(request->responseFormat.has_value());
-    EXPECT_EQ(error, "Parameter response_format.type must be 'json_object', or 'json_schema', got 'text'");
 
     // invalid values - json_schema type without json_schema field
     request = std::make_shared<Request>(RequestIdNew("mockRequest"));
@@ -659,6 +659,23 @@ TEST_F(InferParamTest, testAssignResponseFormat) {
                                   {"json_schema", {{"name", "invalid@name"}, {"schema", {{"type", "object"}}}}}};
     EXPECT_TRUE(AssignResponseFormat(jsonObj, request, error));
     EXPECT_TRUE(request->responseFormat.has_value());
+}
+
+TEST_F(InferParamTest, testValidateFeatureCompatibilityMtpWithStructuredOutput) {
+    InferParam::ValidationContext ctx;
+    ctx.mtpEnabled = true;
+
+    // type=text should be treated as plain text output, which is allowed with mtp.
+    ctx.reqStructuredOutput = false;
+    error.clear();
+    EXPECT_TRUE(inferParam->ValidateFeatureCompatibility(ctx, error));
+    EXPECT_TRUE(error.empty());
+
+    // Structured outputs should still be blocked when mtp is enabled.
+    ctx.reqStructuredOutput = true;
+    error.clear();
+    EXPECT_FALSE(inferParam->ValidateFeatureCompatibility(ctx, error));
+    EXPECT_EQ(error, "structured output (response_format) cannot be used with mtp");
 }
 
 }  // namespace mindie_llm

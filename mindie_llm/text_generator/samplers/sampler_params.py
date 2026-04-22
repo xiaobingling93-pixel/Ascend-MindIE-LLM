@@ -28,11 +28,12 @@ class HandlerParams:
         if self.output_token_counts is None:
             if self.backend_type == BackendType.ATB or self.backend_type == BackendType.TORCH:
                 import torch
-                output_token_counts = torch.zeros((self.batch_size, self.vocab_size + 1),
-                                                  dtype=output_token_ids.dtype,
-                                                  device=output_token_ids.device)
+
+                output_token_counts = torch.zeros(
+                    (self.batch_size, self.vocab_size + 1), dtype=output_token_ids.dtype, device=output_token_ids.device
+                )
                 output_token_counts.scatter_add_(1, output_token_ids, torch.ones_like(output_token_ids))
-                self.output_token_counts = output_token_counts[:, :self.vocab_size]
+                self.output_token_counts = output_token_counts[:, : self.vocab_size]
 
     def clear_token_counts(self):
         self.output_token_counts = None
@@ -46,6 +47,6 @@ class SelectorParams:
     filter_value: float = -math.inf
     npu_id: int = 0
     num_threads: int = 8
-    sampling_method: Literal['exponential', 'multinomial'] = 'multinomial'
+    sampling_method: Literal["exponential", "multinomial"] = "multinomial"
     splitfuse_enabled: bool = False
     layerwise_disaggregated: bool = False

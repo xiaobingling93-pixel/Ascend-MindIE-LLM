@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from threading import Event
 from typing import Any, Dict, List, Optional, Union
 
-import torch
 import numpy as np
 
 from mindie_llm.runtime.model_runner.forward_context_exp import ForwardContext

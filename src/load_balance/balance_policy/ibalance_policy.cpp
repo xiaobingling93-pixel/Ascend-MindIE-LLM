@@ -10,20 +10,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <memory>
-#include "round_robin_policy.h"
 #include "ibalance_policy.h"
+
+#include <memory>
+
+#include "round_robin_policy.h"
 
 namespace mindie_llm {
 
-BalancePolicyPtr MakeBalancePolicy(BalancePolicyType type)
-{
+BalancePolicyPtr MakeBalancePolicy(BalancePolicyType type) {
     switch (type) {
-        case BalancePolicyType::ROUND_ROBIN: return std::make_unique<RoundRobinPolicy>();
+        case BalancePolicyType::ROUND_ROBIN:
+            return std::make_unique<RoundRobinPolicy>();
 
-        default: break;
+        default:
+            break;
     }
     return nullptr;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

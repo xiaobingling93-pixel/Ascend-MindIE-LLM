@@ -13,9 +13,10 @@
 #ifndef MINDIE_LLM_ERROR_QUEUE_H
 #define MINDIE_LLM_ERROR_QUEUE_H
 
-#include <string>
 #include <chrono>
 #include <set>
+#include <string>
+
 #include "concurrent_deque.h"
 
 namespace mindie_llm {
@@ -26,22 +27,23 @@ struct ErrorItem {
     std::string createdBy;
     ErrorItem()
         : timestamp(
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count()),
-          errCode(""), createdBy("") {}
+              std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                  .count()),
+          errCode(""),
+          createdBy("") {}
     ErrorItem(const std::string &errCode, const std::string &createdBy,
-        const std::chrono::time_point<std::chrono::system_clock> &timestamp)
+              const std::chrono::time_point<std::chrono::system_clock> &timestamp)
         : timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count()),
-          errCode(errCode), createdBy(createdBy) {}
+          errCode(errCode),
+          createdBy(createdBy) {}
 };
 
 class ErrorQueue {
-public:
-    static ErrorQueue& GetInstance();
+   public:
+    static ErrorQueue &GetInstance();
 
     void EnqueueErrorMessage(
-        const std::string &errCode,
-        const std::string &createdBy,
+        const std::string &errCode, const std::string &createdBy,
         const std::chrono::time_point<std::chrono::system_clock> &timestamp = std::chrono::system_clock::now());
 
     bool PopError(ErrorItem &item);
@@ -53,12 +55,12 @@ public:
     ErrorQueue(ErrorQueue &&) = delete;
     ErrorQueue &operator=(ErrorQueue &&) = delete;
 
-private:
+   private:
     ErrorQueue() = default;
     mutable ConcurrentDeque<ErrorItem> errorList_;
     static constexpr int maxErrorListSize = 100;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_LLM_ERROR_QUEUE_H
+#endif  // MINDIE_LLM_ERROR_QUEUE_H

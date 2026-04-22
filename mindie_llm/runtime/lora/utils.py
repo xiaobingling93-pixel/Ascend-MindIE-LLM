@@ -10,15 +10,10 @@
 
 from mindie_llm.runtime.layers.custom_layer import CustomLayer
 from mindie_llm.runtime.config.mindie_llm_config import LoraModelConfig
-from .lora_layers import (
-    RowParallelLinearWithLoRA,
-    ColumnParallelLinearWithLoRA
-)
+from .lora_layers import RowParallelLinearWithLoRA, ColumnParallelLinearWithLoRA
 
 
-def replace_submodule(model,
-                      module_name: str,
-                      new_module: CustomLayer) -> CustomLayer:
+def replace_submodule(model, module_name: str, new_module: CustomLayer) -> CustomLayer:
     """Replace a submodule in a model with a new module."""
     target_name = module_name.split(".")[-1]
     parent_module = model.get_submodule(".".join(module_name.split(".")[:-1]))

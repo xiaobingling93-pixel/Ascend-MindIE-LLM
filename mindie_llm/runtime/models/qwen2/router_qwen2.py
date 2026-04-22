@@ -37,13 +37,10 @@ class Qwen2Router(BaseRouter):
             Tokenizer: A configured tokenizer for Qwen2 models
         """
         return safe_get_tokenizer_from_pretrained(
-            self.load_config.tokenizer_path,
-            padding_side="left",
-            trust_remote_code=self.load_config.trust_remote_code
+            self.load_config.tokenizer_path, padding_side="left", trust_remote_code=self.load_config.trust_remote_code
         )
 
     # NOTE InputBuilder for qwen2 will be implemented later
-    
+
     def _get_tool_calls_parser(self):
-        
         raise NotImplementedError("Subclass must implement _get_tool_calls_parser")

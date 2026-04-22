@@ -931,12 +931,16 @@ bool AssignResponseFormat(const OrderedJson &jsonObj, RequestSPtr tmpReq, std::s
         return false;
     }
     std::string formatType = responseFormat["type"];
-    if (formatType != "json_object" && formatType != "json_schema") {
+    if (formatType != "json_object" && formatType != "json_schema" && formatType != "text") {
         error =
-            "Parameter response_format.type must be 'json_object', or "
-            "'json_schema', got '" +
+            "Parameter response_format.type must be 'json_object', 'json_schema' or "
+            "'text', got '" +
             formatType + "'";
         return false;
+    }
+    if (formatType == "text") {
+        // text 等价于未启用结构化输出，按未传 response_format 处理。
+        return true;
     }
     // For json_schema type, validate json_schema field exists
     if (formatType == "json_schema") {

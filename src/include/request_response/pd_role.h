@@ -18,7 +18,7 @@ enum class PDRole {
     UNKNOWN = 0,
     PREFILL = 1,
     DECODE = 2,
-    Flex = 3, // 配比微调特性使用，在pd分离场景可以弹性执行prefill和decode请求
+    Flex = 3,  // 配比微调特性使用，在pd分离场景可以弹性执行prefill和decode请求
 };
 
 enum class PDRoleStatus {
@@ -26,6 +26,6 @@ enum class PDRoleStatus {
     READY = 1,
     SWITCHING = 2,
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // PD_ROLE_H
+#endif  // PD_ROLE_H

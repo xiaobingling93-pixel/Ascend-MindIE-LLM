@@ -11,17 +11,18 @@
  */
 
 #include "llm_manager/infer_tensor.h"
+
 #include <cstring>
-#include "memory_utils.h"
-#include "log.h"
+
 #include "check_utils.h"
+#include "log.h"
+#include "memory_utils.h"
 namespace mindie_llm {
 
 constexpr uint32_t MAX_INPUTS_NUM = 4 * 1024 * 1024;
 constexpr uint32_t MAX_BYTE_ALLOWED = MAX_INPUTS_NUM * sizeof(int64_t);
 constexpr uint32_t MAX_DIMCOUNT = 10000;
-InferTensor::InferTensor(std::string name, InferDataType dataType, std::vector<int64_t> dataShape)
-{
+InferTensor::InferTensor(std::string name, InferDataType dataType, std::vector<int64_t> dataShape) {
     if (!CheckStringInputLength(name, MAX_STRING_LENGTH)) {
         MINDIE_LLM_LOG_ERROR("The Input name of inferTensor: " << name << "is too long.");
         return;
@@ -35,37 +36,19 @@ InferTensor::InferTensor(std::string name, InferDataType dataType, std::vector<i
     this->dataShape = dataShape;
 }
 
-const std::vector<int64_t> &InferTensor::GetShape() const
-{
-    return dataShape;
-}
+const std::vector<int64_t> &InferTensor::GetShape() const { return dataShape; }
 
-size_t InferTensor::GetSize() const
-{
-    return byteSize;
-}
+size_t InferTensor::GetSize() const { return byteSize; }
 
-MemType InferTensor::GetMemType() const
-{
-    return MemType::HOST_MEM;
-}
+MemType InferTensor::GetMemType() const { return MemType::HOST_MEM; }
 
-InferDataType InferTensor::GetDataType() const
-{
-    return dataType;
-}
+InferDataType InferTensor::GetDataType() const { return dataType; }
 
-const std::string &InferTensor::GetName() const
-{
-    return name;
-}
+const std::string &InferTensor::GetName() const { return name; }
 
-void* InferTensor::GetData() const
-{
-    return data;
-}
+void *InferTensor::GetData() const { return data; }
 
-bool InferTensor::Truncate(const size_t truncLen) // for tensor of INPUT_IDS.
+bool InferTensor::Truncate(const size_t truncLen)  // for tensor of INPUT_IDS.
 {
     if (dataShape.size() == 0) {
         MINDIE_LLM_LOG_ERROR("Truncate: dataShape is empty.");
@@ -83,7 +66,7 @@ bool InferTensor::Truncate(const size_t truncLen) // for tensor of INPUT_IDS.
         return true;
     }
 
-    void* truncatedData = malloc(truncByteSize);
+    void *truncatedData = malloc(truncByteSize);
     if (truncatedData == nullptr) {
         return false;
     }
@@ -106,8 +89,7 @@ bool InferTensor::Truncate(const size_t truncLen) // for tensor of INPUT_IDS.
     return true;
 }
 
-bool InferTensor::Allocate(size_t size)
-{
+bool InferTensor::Allocate(size_t size) {
     if (size > 0 && size <= MAX_BYTE_ALLOWED) {
         data = malloc(size);
         if (data == nullptr) {
@@ -124,8 +106,7 @@ bool InferTensor::Allocate(size_t size)
     return false;
 }
 
-void InferTensor::SetBuffer(const void *buffer, size_t tensorbyteSize, bool tensorNeedRelease)
-{
+void InferTensor::SetBuffer(const void *buffer, size_t tensorbyteSize, bool tensorNeedRelease) {
     if (buffer == nullptr) {
         MINDIE_LLM_LOG_ERROR("SetBuffer fail: buffer is nullptr");
         return;
@@ -139,25 +120,17 @@ void InferTensor::SetBuffer(const void *buffer, size_t tensorbyteSize, bool tens
     this->needRelease = tensorNeedRelease;
 }
 
-void InferTensor::SetRelease(bool releaseFlag)
-{
-    this->needRelease = releaseFlag;
-}
-void InferTensor::Release()
-{
+void InferTensor::SetRelease(bool releaseFlag) { this->needRelease = releaseFlag; }
+void InferTensor::Release() {
     if (data != nullptr && needRelease) {
         free(data);
         data = nullptr;
     }
 }
 
-InferTensor::~InferTensor()
-{
-    Release();
-}
+InferTensor::~InferTensor() { Release(); }
 
-size_t InferTensor::GetTypeByteSize(InferDataType inferDataType)
-{
+size_t InferTensor::GetTypeByteSize(InferDataType inferDataType) {
     auto iter = BYTE_SIZE_MAP.find(inferDataType);
     if (iter == BYTE_SIZE_MAP.end()) {
         return 0;
@@ -165,4 +138,4 @@ size_t InferTensor::GetTypeByteSize(InferDataType inferDataType)
     return iter->second;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

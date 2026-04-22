@@ -9,23 +9,22 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "dummy_quota_manager.h"
+
 #include "log.h"
 
 using namespace mindie_llm;
 using namespace std;
 using namespace boost::concurrent;
 
-DummyQuotaManager::DummyQuotaManager(int rank, int quota) : initQuota_(quota), rank_(rank)
-{
+DummyQuotaManager::DummyQuotaManager(int rank, int quota) : initQuota_(quota), rank_(rank) {
     quotaLeft_.store(quota);
     acrossProcSyncThread_ = thread([this]() { this->AcrossProcSyncThreadEntry_(); });
     MINDIE_LLM_LOG_INFO("DummyQuotaManager init successfully. rank:" << rank_ << ", initQuota:" << initQuota_);
 }
 
-DummyQuotaManager::~DummyQuotaManager()
-{
+DummyQuotaManager::~DummyQuotaManager() {
     // cannot guarantee every process exit simultaneously, so cancel thread directly
     threadNeedStop_.store(true);
     if (acrossProcSyncThread_.joinable()) {
@@ -34,16 +33,15 @@ DummyQuotaManager::~DummyQuotaManager()
     MINDIE_LLM_LOG_INFO("DummyQuotaManager sync thread stopped.");
 }
 
-bool DummyQuotaManager::AcquireQuota(bool isDummy)
-{
+bool DummyQuotaManager::AcquireQuota(bool isDummy) {
     size_t reqWaitLoop = 0;
-    if (threadNeedStop_.load()) { // downgraded
+    if (threadNeedStop_.load()) {  // downgraded
         return true;
     }
     if (!isDummy) {
         while (quotaLeft_.load() == 0 && !threadNeedStop_.load()) {
             Wakeup();
-            this_thread::sleep_for(chrono::milliseconds(1)); // wait until wake up finish
+            this_thread::sleep_for(chrono::milliseconds(1));  // wait until wake up finish
             if (reqWaitLoop++ % REQ_WAIT_LOG_LOOP == 0) {
                 MINDIE_LLM_LOG_WARN(
                     "no quota available. wait wakup to restore quota. If you keep seeing this, there might "
@@ -65,16 +63,14 @@ bool DummyQuotaManager::AcquireQuota(bool isDummy)
 }
 
 // Wakeup must be called before AcquireQuota, otherwise no quota will be available to dispatch dummy batch
-void DummyQuotaManager::Wakeup()
-{
+void DummyQuotaManager::Wakeup() {
     bool isReqComming = true;
     if (reqCommingQueue_.empty()) {
         reqCommingQueue_.push(isReqComming);
     }
 }
 
-void DummyQuotaManager::AllGather_(bool iAmDummy, bool &allDummy, int &maxQuota, bool dummyBatchSync)
-{
+void DummyQuotaManager::AllGather_(bool iAmDummy, bool &allDummy, int &maxQuota, bool dummyBatchSync) {
     vector<torch::Tensor> batchInfo;
     batchInfo.emplace_back(torch::tensor({static_cast<int>(iAmDummy), quotaLeft_.load(),
                                           static_cast<int>(dummyBatchSync), static_cast<int>(dummyBatchQueue_.size())},
@@ -94,8 +90,9 @@ void DummyQuotaManager::AllGather_(bool iAmDummy, bool &allDummy, int &maxQuota,
         threadNeedStop_.store(true);
         return;
     } catch (...) {
-        MINDIE_LLM_LOG_WARN("allgather got unknown exception, DummyTokenManager cannot work, downgrade "
-                            "to dummy-always.");
+        MINDIE_LLM_LOG_WARN(
+            "allgather got unknown exception, DummyTokenManager cannot work, downgrade "
+            "to dummy-always.");
         quotaLeft_.store(initQuota_);
         threadNeedStop_.store(true);
         return;
@@ -111,8 +108,8 @@ void DummyQuotaManager::AllGather_(bool iAmDummy, bool &allDummy, int &maxQuota,
         if ((cnt++ > 0 && preGatherType != tensor[2].item<int>()) ||
             maxDummyBatchQueueSize > MAX_ALLOWED_DUMMY_QUEUE_PENDINGS) {
             MINDIE_LLM_LOG_WARN("All-gather message type is not same or dummy batch too many. rank"
-                                 << rank_ << ", is dummyBatchSync:" << tensor[2].item<int>() << ", err rank:" << cnt--
-                                 << ", maxDummyBatchQueueSize:" << maxDummyBatchQueueSize);
+                                << rank_ << ", is dummyBatchSync:" << tensor[2].item<int>() << ", err rank:" << cnt--
+                                << ", maxDummyBatchQueueSize:" << maxDummyBatchQueueSize);
             quotaLeft_.store(initQuota_);
             threadNeedStop_.store(true);
             return;
@@ -123,21 +120,20 @@ void DummyQuotaManager::AllGather_(bool iAmDummy, bool &allDummy, int &maxQuota,
     count++;
     if (cost > 200) {
         MINDIE_LLM_LOG_INFO_REQUEST("dummy all gather cost too long, dp:"
-                            << rank_ << ", time:" << cost << ", quotaLeft_:" << quotaLeft_.load() << ", iAmDummy:"
-                            << iAmDummy << ", dummyQueue size:" << dummyBatchQueue_.size() << ", allDummy:" << allDummy
-                            << ", maxQuota:" << maxQuota << ", average cost:" << (allCost / count));
+                                    << rank_ << ", time:" << cost << ", quotaLeft_:" << quotaLeft_.load()
+                                    << ", iAmDummy:" << iAmDummy << ", dummyQueue size:" << dummyBatchQueue_.size()
+                                    << ", allDummy:" << allDummy << ", maxQuota:" << maxQuota
+                                    << ", average cost:" << (allCost / count));
     }
 }
-void DummyQuotaManager::QuotaAllGather_(bool &iAmDummy, bool &allDummy, int &maxQuota)
-{
+void DummyQuotaManager::QuotaAllGather_(bool &iAmDummy, bool &allDummy, int &maxQuota) {
     iAmDummy = dummyBatchQueue_.pull();
     AllGather_(iAmDummy, allDummy, maxQuota, true);
 }
 
-void DummyQuotaManager::WakeupAllGather_(bool &iAmDummy, bool &allDummy, int &maxQuota)
-{
+void DummyQuotaManager::WakeupAllGather_(bool &iAmDummy, bool &allDummy, int &maxQuota) {
     iAmDummy = reqCommingQueue_.empty();
-    if (!iAmDummy) { // empty the queue
+    if (!iAmDummy) {  // empty the queue
         bool val = false;
         while (reqCommingQueue_.try_pull(val) == queue_op_status::success) {
         }
@@ -145,14 +141,13 @@ void DummyQuotaManager::WakeupAllGather_(bool &iAmDummy, bool &allDummy, int &ma
     AllGather_(iAmDummy, allDummy, maxQuota, false);
 }
 
-void DummyQuotaManager::AcrossProcSyncThreadEntry_()
-{
+void DummyQuotaManager::AcrossProcSyncThreadEntry_() {
     int cnt = 0;
     while (!threadNeedStop_.load()) {
         if (cnt % 1000 == 0) {
             MINDIE_LLM_LOG_INFO_REQUEST("DummyQuotaManager across process synchronization thread is live. dprank:"
-                                << rank_ << "; quotaLeft_:" << quotaLeft_.load()
-                                << "; dummyBatchQueue_ size:" << dummyBatchQueue_.size());
+                                        << rank_ << "; quotaLeft_:" << quotaLeft_.load()
+                                        << "; dummyBatchQueue_ size:" << dummyBatchQueue_.size());
         }
         cnt++;
         // when dummyBatchQueue_ has item, or will have item, we must do dummy sync
@@ -170,16 +165,16 @@ void DummyQuotaManager::AcrossProcSyncThreadEntry_()
             int maxQuota = 0;
             QuotaAllGather_(iAmDummy, allDummy, maxQuota);
             int quotaToFill = max(0, initQuota_ - maxQuota);
-            if (!allDummy) { // restore to defaultQuota quota
+            if (!allDummy) {  // restore to defaultQuota quota
                 quotaLeft_.fetch_add(quotaToFill, memory_order_seq_cst);
             }
-        } else { // wakeup (restore default quota) if there is request
+        } else {  // wakeup (restore default quota) if there is request
             bool allDummy = true;
             bool iAmDummy = true;
             int maxQuota = 0;
             WakeupAllGather_(iAmDummy, allDummy, maxQuota);
             int quotaToFill = max(0, initQuota_ - maxQuota);
-            if (!allDummy) { // restore to defaultQuota quota when request comming
+            if (!allDummy) {  // restore to defaultQuota quota when request comming
                 quotaLeft_.fetch_add(quotaToFill, memory_order_seq_cst);
             }
         }
@@ -188,8 +183,7 @@ void DummyQuotaManager::AcrossProcSyncThreadEntry_()
 }
 
 // replace sleep and poll when fully tested
-void DummyQuotaManager::WaitForQuota_()
-{
+void DummyQuotaManager::WaitForQuota_() {
     unique_lock<mutex> lock(notifyMutex_);
     notifyCv_.wait(lock, [this] { return quotaLeft_.load() != 0 || threadNeedStop_.load(); });
 }

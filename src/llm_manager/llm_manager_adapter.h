@@ -9,12 +9,12 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef LLM_MANAGER_ADAPTER_H_
 #define LLM_MANAGER_ADAPTER_H_
+#include "llm_manager/llm_manager.h"
 #include "llm_manager_v2/llm_manager_v2.h"
 #include "src/llm_manager_v2/include/impl/llm_manager_impl.h"
-#include "llm_manager/llm_manager.h"
 
 namespace mindie_llm {
 std::vector<std::shared_ptr<Request>> AdaptGetRequestV1ToV2(GetRequestsCallback getRequest);
@@ -27,5 +27,5 @@ std::vector<std::pair<RequestIdNew, OperationV2>> AdaptControlSignalCallbackV1To
 void AdaptStatusResponseCallbackV2ToV1(SendStatusResponseCallback statusResponseCallback, RequestIdNew requestId,
                                        Status status, StatusResponseTypeV2 statusType);
 
-} // namespace mindie_llm
-#endif // LLM_MANAGER_ADAPTER_H_
+}  // namespace mindie_llm
+#endif  // LLM_MANAGER_ADAPTER_H_

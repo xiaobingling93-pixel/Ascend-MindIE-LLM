@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
 #include <memory>
@@ -23,7 +23,7 @@ enum class BlockAllocatorType : int32_t {
 };
 
 class BlockAllocator {
-public:
+   public:
     BlockAllocator() = default;
 
     virtual ~BlockAllocator() = default;
@@ -56,8 +56,8 @@ public:
 
     virtual void MarkBlocksAsComputed() = 0;
 
-    virtual std::vector<BlockId>
-    GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &computedSeqBlockIds) = 0;
+    virtual std::vector<BlockId> GetCommonComputedBlockIds(
+        const std::vector<std::vector<BlockId>> &computedSeqBlockIds) = 0;
 
     virtual BlockId CowBlockIfNotAppendable(BlockObjSPtr &block) = 0;
 
@@ -97,4 +97,4 @@ struct BlockSharedAttr {
     BlockAllocatorSPtr allocator;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

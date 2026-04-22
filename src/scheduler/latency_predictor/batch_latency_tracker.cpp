@@ -9,12 +9,11 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "batch_latency_tracker.h"
 
 namespace mindie_llm {
-void BatchLatencyTracker::AddDataPoint(uint64_t value)
-{
+void BatchLatencyTracker::AddDataPoint(uint64_t value) {
     // delete oldest value
     if (queue_.size() == windowSize_) {
         queue_.pop_front();
@@ -23,8 +22,7 @@ void BatchLatencyTracker::AddDataPoint(uint64_t value)
     // add new value
     queue_.push_back(value);
 }
-double BatchLatencyTracker::GetRecentAvgLatency(size_t forwardNum)
-{
+double BatchLatencyTracker::GetRecentAvgLatency(size_t forwardNum) {
     // 最小样本比例，避免前期样本太少计算的结果不对
     float minScale = 0.1;
     if (queue_.size() < (forwardNum * minScale)) {
@@ -42,4 +40,4 @@ double BatchLatencyTracker::GetRecentAvgLatency(size_t forwardNum)
 
     return static_cast<double>(sumVal) / count;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

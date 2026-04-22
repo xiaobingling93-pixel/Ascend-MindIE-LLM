@@ -35,6 +35,7 @@ class RotaryEmbedding(nn.Module):
     Note:
         All caches are registered as non-persistent buffers to avoid saving them in checkpoints.
     """
+
     def __init__(
         self,
         head_size: int,
@@ -42,7 +43,7 @@ class RotaryEmbedding(nn.Module):
         max_position_embeddings: int,
         base: float,
         is_neox_style: bool = True,
-        dtype=None
+        dtype=None,
     ) -> None:
         """Initialize the RotaryEmbedding module.
 
@@ -71,9 +72,9 @@ class RotaryEmbedding(nn.Module):
     def get_cos_sin_for_positions(self, positions) -> tuple[torch.Tensor, torch.Tensor]:
         cos = torch.index_select(self.cos_cache, dim=0, index=positions)
         sin = torch.index_select(self.sin_cache, dim=0, index=positions)
-        
-        return cos, sin # [q_len, rotary_dim // 2]
-    
+
+        return cos, sin  # [q_len, rotary_dim // 2]
+
     def set_cos_sin_indexed_cache(self, positions) -> None:
         """Create position-indexed cosine/sine caches with dimension doubling.
 
@@ -81,13 +82,13 @@ class RotaryEmbedding(nn.Module):
         duplicates them across the last dimension to match attention head layout.
 
         Args:
-            postions: 1D tensor of position indices to index into the cache.
+            positions: 1D tensor of position indices to index into the cache.
         """
         cos = torch.index_select(self.cos_cache, dim=0, index=positions)
         sin = torch.index_select(self.sin_cache, dim=0, index=positions)
         cos_indexed_cache = cos.repeat(1, 2).view(1, -1, 1, self.head_size).contiguous()
         sin_indexed_cache = sin.repeat(1, 2).view(1, -1, 1, self.head_size).contiguous()
-        self.register_buffer("cos_indexed_cache", cos_indexed_cache, persistent=False) # [seq_len, 1, 1, rotary_dim]
+        self.register_buffer("cos_indexed_cache", cos_indexed_cache, persistent=False)  # [seq_len, 1, 1, rotary_dim]
         self.register_buffer("sin_indexed_cache", sin_indexed_cache, persistent=False)
 
     def forward(
@@ -115,22 +116,21 @@ class RotaryEmbedding(nn.Module):
         if self._npu_apply_rotary_pos_emb_support():
             # If cos and sin are generated outside, use npu_apply_rotary_pos_emb to avoid redundant calculation.
             # This method requires head_size and rotary_dim equal 128 and neox_style is True
-            query = query.contiguous().view(1, query_shape[0], -1,
-                                            self.head_size) # [1, B*S, N_head, D]
-            key = key.contiguous().view(1, key_shape[0], -1,
-                                            self.head_size) # [1, B*S, N_head, D]
+            query = query.contiguous().view(1, query_shape[0], -1, self.head_size)  # [1, B*S, N_head, D]
+            key = key.contiguous().view(1, key_shape[0], -1, self.head_size)  # [1, B*S, N_head, D]
             # Although this function modifies in-place, please retain the function's return value.
             # Otherwise, the graph fusion operation may fail.
-            
-            query, key = torch_npu.npu_apply_rotary_pos_emb(
-                query, key, cos, sin)
+
+            query, key = torch_npu.npu_apply_rotary_pos_emb(query, key, cos, sin)
             return query, key
         else:
-            _msg = ("This method requires head_size and rotary_dim equal 128 and neox_style is True. "
-                    f"{self.is_neox_style=}, "
-                    f"{self.head_size=}, "
-                    f"{self.cos_indexed_cache.shape[-1]=}, "
-                    f"{self.sin_indexed_cache.shape[-1]=}.")
+            _msg = (
+                "This method requires head_size and rotary_dim equal 128 and neox_style is True. "
+                f"{self.is_neox_style=}, "
+                f"{self.head_size=}, "
+                f"{self.cos_indexed_cache.shape[-1]=}, "
+                f"{self.sin_indexed_cache.shape[-1]=}."
+            )
             logger.error(_msg)
             raise ValueError(_msg)
 
@@ -148,13 +148,8 @@ class RotaryEmbedding(nn.Module):
         Returns:
             inv_freq: Tensor of shape `[rotary_dim // 2]` containing 1 / (base^(i / rotary_dim)).
         """
-        inv_freq = 1.0 / (
-            self.base
-            ** (
-                torch.arange(0, self.rotary_dim, 2).to(torch.float32) / self.rotary_dim
-            )
-        )
-        self.register_buffer("inv_freq", inv_freq, persistent=False) # [rotary_dim // 2, ]
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.rotary_dim, 2).to(torch.float32) / self.rotary_dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)  # [rotary_dim // 2, ]
 
     def _compute_cos_sin_cache(self) -> None:
         """Precompute cosine, sine, and concatenated caches for all positions.
@@ -166,9 +161,9 @@ class RotaryEmbedding(nn.Module):
             - cos: Cosine values, shape `[max_position_embeddings, rotary_dim // 2]`
             - sin: Sine values, shape `[max_position_embeddings, rotary_dim // 2]`
         """
-        t = torch.arange(self.max_position_embeddings).to(torch.float32) # [max_position_embeddings, ]
+        t = torch.arange(self.max_position_embeddings).to(torch.float32)  # [max_position_embeddings, ]
         freqs = torch.einsum("i,j -> ij", t, self.inv_freq)
         cos = freqs.cos().to(self.dtype)
         sin = freqs.sin().to(self.dtype)
-        self.register_buffer("cos_cache", cos, persistent=False) # [max_position_embeddings, rotary_dim // 2]
-        self.register_buffer("sin_cache", sin, persistent=False) # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("cos_cache", cos, persistent=False)  # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("sin_cache", sin, persistent=False)  # [max_position_embeddings, rotary_dim // 2]

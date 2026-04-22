@@ -10,20 +10,20 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "llm_manager_v2/llm_manager_v2.h"
-#include "src/llm_manager_v2/include/impl/llm_manager_impl.h"
-#include "llm_manager_adapter.h"
+#include "llm_manager/llm_manager.h"
+
 #include "config_manager.h"
 #include "config_manager_impl.h"
-#include "llm_manager/llm_manager.h"
+#include "llm_manager_adapter.h"
+#include "llm_manager_v2/llm_manager_v2.h"
+#include "src/llm_manager_v2/include/impl/llm_manager_impl.h"
 
 namespace mindie_llm {
 constexpr uint32_t MAX_MODEL_INSTANCE_ID = 10;
 LlmManager::LlmManager(const std::string &llmConfigPath, GetRequestsCallback getRequest,
                        SendResponsesCallback sendResponse, ControlSignalCallback controlCallback,
                        LlmManagerStatsCallback statusCallback, SendStatusResponseCallback statusResponseCallback,
-                       std::map<std::string, std::string> ipInfo)
-{
+                       std::map<std::string, std::string> ipInfo) {
     ConfigManager::CreateInstance(llmConfigPath);
     auto getRequestV2 = std::bind(AdaptGetRequestV1ToV2, getRequest);
     auto sendResponseV1 = std::bind(AdaptSendResponseV2ToV1, sendResponse, std::placeholders::_1);
@@ -34,29 +34,23 @@ LlmManager::LlmManager(const std::string &llmConfigPath, GetRequestsCallback get
                                              statusCallback, statusResponseCallback2to1, ipInfo);
 }
 
-void LlmManager::Shutdown()
-{
+void LlmManager::Shutdown() {
     if (impl_ == nullptr) {
         return;
     }
     impl_->Shutdown();
 }
 
-uint32_t LlmManager::GetMaxPositionEmbeddings() const
-{
+uint32_t LlmManager::GetMaxPositionEmbeddings() const {
     if (impl_ == nullptr) {
         throw std::runtime_error("LlmManager impl_ is a nullptr!");
     }
     return impl_->GetMaxPositionEmbeddings();
 }
 
-std::map<std::string, std::string> LlmManager::GetModelParams() const
-{
-    return LlmManagerImpl::GetModelParams();
-}
+std::map<std::string, std::string> LlmManager::GetModelParams() const { return LlmManagerImpl::GetModelParams(); }
 
-bool LlmManager::UpdateEngineInfo(std::shared_ptr<mindie_llm::InferRequest> &runtimeRequest, bool isForceRelease)
-{
+bool LlmManager::UpdateEngineInfo(std::shared_ptr<mindie_llm::InferRequest> &runtimeRequest, bool isForceRelease) {
     if (impl_ == nullptr) {
         return false;
     }
@@ -70,8 +64,7 @@ bool LlmManager::UpdateEngineInfo(std::shared_ptr<mindie_llm::InferRequest> &run
     return true;
 }
 
-Status LlmManager::Init(uint32_t modelInstanceId, std::set<size_t> npuDeviceIds)
-{
+Status LlmManager::Init(uint32_t modelInstanceId, std::set<size_t> npuDeviceIds) {
     if (impl_ == nullptr) {
         return Status(Error::Code::INVALID_ARG, "llmImpl is null ptr");
     }
@@ -92,8 +85,7 @@ Status LlmManager::Init(uint32_t modelInstanceId, std::set<size_t> npuDeviceIds)
 }
 
 Status LlmManager::Init(uint32_t modelInstanceId, std::set<size_t> npuDeviceIds,
-                        std::map<std::string, std::string> extendInfo)
-{
+                        std::map<std::string, std::string> extendInfo) {
     if (impl_ == nullptr) {
         return Status(Error::Code::INVALID_ARG, "llmImpl is null ptr");
     }
@@ -113,8 +105,7 @@ Status LlmManager::Init(uint32_t modelInstanceId, std::set<size_t> npuDeviceIds,
     return Status(Error::Code::OK, "Success");
 }
 
-Status LlmManager::InitModelForMultiPd(std::map<std::string, std::string> pdInfo, uint32_t modelInstanceId)
-{
+Status LlmManager::InitModelForMultiPd(std::map<std::string, std::string> pdInfo, uint32_t modelInstanceId) {
     if (impl_ == nullptr) {
         return Status(Error::Code::INVALID_ARG, "llmImpl is null ptr");
     }
@@ -126,8 +117,7 @@ Status LlmManager::InitModelForMultiPd(std::map<std::string, std::string> pdInfo
     return Status(Error::Code::OK, "Success");
 }
 
-bool LlmManager::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
-{
+bool LlmManager::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo) {
     if (impl_ == nullptr) {
         return false;
     }
@@ -135,4 +125,4 @@ bool LlmManager::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
 }
 
 LlmManager::~LlmManager() = default;
-} // namespace mindie_llm
+}  // namespace mindie_llm

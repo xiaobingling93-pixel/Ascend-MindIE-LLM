@@ -13,8 +13,8 @@
 #ifndef SCHEDULER_PRE_SCHEDULER_H
 #define SCHEDULER_PRE_SCHEDULER_H
 
-#include "policy/seq_group_collection.h"
 #include "dataclass/metric.h"
+#include "policy/seq_group_collection.h"
 
 namespace mindie_llm {
 
@@ -30,25 +30,24 @@ struct SchedInfo {
     SchedInfo() = default;
 
     SchedInfo(PDPriorityType pdPriority, const SchedulerMetric &metric)
-        : pdPriority_(pdPriority), waitingSeqGroupNum_(static_cast<int64_t>(metric.reqsInfo.waitingRequestNum_)),
+        : pdPriority_(pdPriority),
+          waitingSeqGroupNum_(static_cast<int64_t>(metric.reqsInfo.waitingRequestNum_)),
           runningSeqGroupNum_(static_cast<int64_t>(metric.reqsInfo.runningRequestNum_)),
-          swapSeqGroupNum_(static_cast<int64_t>(metric.reqsInfo.swappedRequestNum_))
-    {
-    }
+          swapSeqGroupNum_(static_cast<int64_t>(metric.reqsInfo.swappedRequestNum_)) {}
 };
 
 class PreScheduler {
-public:
+   public:
     static std::vector<SchedInfo> ShareSchedInfo(const SchedInfo &schedInfo, size_t dpRank, bool enableDistributed);
 
     static PDPriorityType DecidePDPriority(const std::vector<SchedInfo> &schedInfos);
 
-private:
+   private:
     static std::vector<SchedInfo> ShareSchedInfoCrossNode(const SchedInfo &schedInfo);
 
     static std::vector<SchedInfo> ShareSchedInfoCrossDP(const SchedInfo &schedInfo, size_t dpRank);
-}; // class PreScheduler
+};  // class PreScheduler
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

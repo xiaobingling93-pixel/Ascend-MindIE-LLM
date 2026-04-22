@@ -26,33 +26,34 @@
  */
 
 #pragma once
-#include <shared_mutex>
-#include <queue>
 #include <condition_variable>
-#include "log.h"
-#include "llm_manager_v2.h"
-#include "status.h"
-#include "pd_role.h"
-#include "config_manager.h"
+#include <queue>
+#include <shared_mutex>
+
 #include "concurrent_deque.h"
 #include "concurrent_map.h"
-#include "global_ip_info.h"
-#include "request_response/response.h"
-#include "request_response/request.h"
+#include "config_manager.h"
 #include "data_type.h"
+#include "global_ip_info.h"
+#include "llm_manager_v2.h"
+#include "log.h"
+#include "pd_role.h"
+#include "request_response/request.h"
+#include "request_response/response.h"
+#include "status.h"
 
 namespace mindie_llm {
-#define CHECK_INITIALIZATION()                                                                                         \
-    do {                                                                                                               \
-        if (!started_.load()) {                                                                                        \
-            return Status(Error::Code::ERROR, "Model instance has been finalized or not initialized.");                \
-        }                                                                                                              \
-        if (llmManagers_.empty()) {                                                                                    \
-            return Status(Error::Code::ERROR, "llmInferEngine is not initialized!");                                   \
-        }                                                                                                              \
+#define CHECK_INITIALIZATION()                                                                          \
+    do {                                                                                                \
+        if (!started_.load()) {                                                                         \
+            return Status(Error::Code::ERROR, "Model instance has been finalized or not initialized."); \
+        }                                                                                               \
+        if (llmManagers_.empty()) {                                                                     \
+            return Status(Error::Code::ERROR, "llmInferEngine is not initialized!");                    \
+        }                                                                                               \
     } while (0)
 class InferInstance {
-public:
+   public:
     InferInstance() = default;
 
     static std::shared_ptr<InferInstance> GetInstance();
@@ -113,18 +114,18 @@ public:
     PDRoleStatus GetPDRoleStatus() const;
 
     bool IsLlmEngineReady() const;
-    
+
     void SetPDRoleStatus(PDRoleStatus status);
 
     void UpdatePDRole(const std::string &role);
 
-    static ConcurrentMap<mindie_llm::RequestIdNew, SendResponsesCallbackV2>& GetCallbackMap() { return callbackMap; }
+    static ConcurrentMap<mindie_llm::RequestIdNew, SendResponsesCallbackV2> &GetCallbackMap() { return callbackMap; }
 
-    Status HandleLora(const LoraOperation& loraOperation, std::vector<LoraParamSPtr>& loraInfo);
+    Status HandleLora(const LoraOperation &loraOperation, std::vector<LoraParamSPtr> &loraInfo);
 
     static bool IsPaused() { return isPaused_.load(); }
 
-private:
+   private:
     Status InitPDNode(GlobalIpInfo &globalIpInfo);
 
     PDRole pdRole_ = PDRole::UNKNOWN;
@@ -135,7 +136,7 @@ private:
     std::vector<std::shared_ptr<mindie_llm::LlmManagerV2>> llmManagers_;
 
     std::map<uint32_t, uint64_t> dpRemainBlocks_;
-    
+
     std::map<std::string, NodeHealthStatus> slavesStatus_{};
 
     std::atomic<bool> started_{false};
@@ -147,4 +148,4 @@ private:
     static ConcurrentMap<mindie_llm::RequestIdNew, SendResponsesCallbackV2> callbackMap;
 };
 std::shared_ptr<InferInstance> GetInferInstance();
-} // namespace mindie_llm
+}  // namespace mindie_llm

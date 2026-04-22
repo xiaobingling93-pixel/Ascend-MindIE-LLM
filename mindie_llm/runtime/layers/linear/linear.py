@@ -25,8 +25,8 @@ from mindie_llm.utils.log.logging import logger
 
 
 class LinearBase(CustomLayer):
-    """Base class for linear layers with support for weight initialization, quantization and tensor parallelism.
-    """
+    """Base class for linear layers with support for weight initialization, quantization and tensor parallelism."""
+
     def __init__(
         self,
         input_size: int,
@@ -39,7 +39,7 @@ class LinearBase(CustomLayer):
         bias_dtype: torch.dtype | None = None,
         quant_config: QuantizationConfigBase | None = None,
         prefix: str | list[str] = "",
-        parallel_info: ParallelInfo | None = None
+        parallel_info: ParallelInfo | None = None,
     ):
         """Initialize the LinearBase layer.
 
@@ -60,12 +60,10 @@ class LinearBase(CustomLayer):
         super().__init__()
 
         if (not bias) and skip_bias_add:
-            raise ValueError(
-                f"Cannot set `bias` to False and `skip_bias_add` to True simultaneously for Linear layers.")
+            raise ValueError("Cannot set `bias` to False and `skip_bias_add` to True simultaneously for Linear layers.")
 
         if (not bias) and return_bias:
-            raise ValueError(
-                f"Cannot set `bias` to False and `return_bias` to True simultaneously for Linear layers.")
+            raise ValueError("Cannot set `bias` to False and `return_bias` to True simultaneously for Linear layers.")
 
         self.input_size = input_size
         self.input_size_per_partition = input_size
@@ -105,7 +103,7 @@ class LinearBase(CustomLayer):
         if custom_op is not None:
             custom_op.update_attrs()
             return custom_op(*args, **kwargs)
-        
+
         return super().__call__(*args, **kwargs)
 
     def weight_loader(self, param: BaseParameter, loaded_weight: torch.Tensor, **kwargs) -> None:
@@ -131,6 +129,7 @@ class ReplicatedLinear(LinearBase):
     """
     Standard Linear layer where weights are replicated across all devices.
     """
+
     def __init__(
         self,
         input_size: int,
@@ -194,6 +193,7 @@ class RowParallelLinear(LinearBase):
     Linear layer where the weight matrix is split along the row dimension (input dimension).
     An all-reduce operation is performed on the output to aggregate results.
     """
+
     def __init__(
         self,
         input_size: int,
@@ -253,7 +253,7 @@ class RowParallelLinear(LinearBase):
             bias_dtype=bias_dtype,
             quant_config=quant_config,
             prefix=prefix,
-            parallel_info=parallel_info
+            parallel_info=parallel_info,
         )
 
     def weight_loader(self, param: BaseParameter, loaded_weight: torch.Tensor) -> None:
@@ -268,8 +268,9 @@ class RowParallelLinear(LinearBase):
             # Use non-uniform sharding when multiple_of alignment is required
             # (e.g., num_heads not divisible by tp_size)
             if self.multiple_of != 1:
-                loaded_weight_shard_offset, loaded_weight_shard_size = \
-                    _get_shard_offset_and_size(self.input_size, self.tp_rank, self.tp_size, self.multiple_of)
+                loaded_weight_shard_offset, loaded_weight_shard_size = _get_shard_offset_and_size(
+                    self.input_size, self.tp_rank, self.tp_size, self.multiple_of
+                )
 
             param.load_row_parallel_weight(
                 loaded_weight,
@@ -298,7 +299,7 @@ class RowParallelLinear(LinearBase):
         output_parallel = self.quant_method.apply(self, input_parallel)
         if self.reduce_results:
             dist.all_reduce(output_parallel, group=self.parallel_info.process_group)
-            
+
         output = output_parallel
         output_bias = self.bias if self.skip_bias_add else None
         if not self.return_bias:
@@ -331,6 +332,7 @@ class ColumnParallelLinear(LinearBase):
     Linear layer where the weight matrix is split along the column dimension (output dimension).
     Outputs are partial results corresponding to the split.
     """
+
     def __init__(
         self,
         input_size: int,
@@ -354,7 +356,7 @@ class ColumnParallelLinear(LinearBase):
         """
         if gather_output:
             raise NotImplementedError("`ColumnParallelLinear` doesn't support setting `gather_output` to True.")
-        
+
         if skip_bias_add:
             logger.warning("Set `skip_bias_add` to True is not tested in `ColumnParallelLinear`.")
         self.parallel_info = parallel_info
@@ -369,7 +371,7 @@ class ColumnParallelLinear(LinearBase):
             bias_dtype=bias_dtype,
             quant_config=quant_config,
             prefix=prefix,
-            parallel_info=parallel_info
+            parallel_info=parallel_info,
         )
 
     def weight_loader(self, param: BaseParameter, loaded_weight: torch.Tensor) -> None:
@@ -464,7 +466,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         """
         if gather_output:
             raise NotImplementedError("`MergedColumnParallelLinear` doesn't support setting `gather_output` to True.")
-        
+
         if skip_bias_add:
             logger.warning("Set `skip_bias_add` to True is not tested in `MergedColumnParallelLinear`.")
 
@@ -494,7 +496,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                         quant_config=quant_config,
                         prefix=p,
                         parallel_info=parallel_info,
-                        gather_output=gather_output
+                        gather_output=gather_output,
                     )
                 )
             # Call nn.Module.__init__ directly instead of super().__init__ to avoid ColumnParallelLinear init,
@@ -515,7 +517,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
                 quant_config=quant_config,
                 prefix=prefix,
                 parallel_info=parallel_info,
-                gather_output=gather_output
+                gather_output=gather_output,
             )
 
     def weight_loader(
@@ -526,7 +528,7 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
     ) -> None:
         """
         Loads weights for a specific shard of the merged linear layer.
-        
+
         Args:
             param: The parameter to load weights into.
             loaded_weight: The weight tensor to load.
@@ -537,7 +539,8 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
         if loaded_shard_id >= len(self.output_sizes):
             raise ValueError(
                 f"The parameter `loaded_shard_id` {loaded_shard_id} exceeds the valid range of "
-                f"indices for the `output_sizes` array {self.output_sizes} defined in `MergedColumnParallelLinear`.")
+                f"indices for the `output_sizes` array {self.output_sizes} defined in `MergedColumnParallelLinear`."
+            )
 
         # Obtain a tensor slice of size `shard_size` starting from `shard_offset` in self.output_sizes
         shard_offset = sum(self.output_sizes[:loaded_shard_id]) // self.tp_size
@@ -591,8 +594,10 @@ class MergedColumnParallelLinear(ColumnParallelLinear):
     def _post_init(self) -> None:
         for output_size in self.output_sizes:
             if output_size % self.tp_size != 0:
-                raise ValueError(f"All `output_sizes` {self.output_sizes} in `MergedColumnParallelLinear` "
-                                 f"must be multiples of the tensor parallel size {self.tp_size}.")
+                raise ValueError(
+                    f"All `output_sizes` {self.output_sizes} in `MergedColumnParallelLinear` "
+                    f"must be multiples of the tensor parallel size {self.tp_size}."
+                )
 
         if self.output_sizes is not None:
             self.output_partition_sizes = [even_divide(output_size, self.tp_size) for output_size in self.output_sizes]
@@ -603,6 +608,7 @@ class QKVParallelLinear(ColumnParallelLinear):
     Fused Query-Key-Value projection layer for Attention mechanisms.
     Handles splitting of Q, K, and V heads across devices.
     """
+
     def __init__(
         self,
         hidden_size: int,
@@ -650,9 +656,7 @@ class QKVParallelLinear(ColumnParallelLinear):
             self.num_kv_head_replicas = 1
 
         # 2: K and V each need their own heads (K has self.num_kv_heads, V has self.num_kv_heads)
-        output_size = (
-            (self.num_heads + 2 * self.num_kv_heads) * tp_size * self.head_size
-        )
+        output_size = (self.num_heads + 2 * self.num_kv_heads) * tp_size * self.head_size
 
         super().__init__(
             self.hidden_size,
@@ -676,15 +680,17 @@ class QKVParallelLinear(ColumnParallelLinear):
     ) -> None:
         """
         Loads weights for Q, K, or V projections.
-        
+
         Args:
             param: The parameter to load weights into.
             loaded_weight: The weight tensor to load.
             loaded_shard_id: Identifier for the projection type: 0 for Q, 1 for K, 2 for V.
         """
         if loaded_shard_id not in [0, 1, 2]:
-            raise ValueError(f"Invalid `loaded_shard_id` passing to the `QKVParallelLinear` module. "
-                             f"Expected an integer in the range of [0, 2], but got {loaded_shard_id}.")
+            raise ValueError(
+                f"Invalid `loaded_shard_id` passing to the `QKVParallelLinear` module. "
+                f"Expected an integer in the range of [0, 2], but got {loaded_shard_id}."
+            )
 
         shard_offset = self._get_shard_offset_mapping(loaded_shard_id)
         shard_size = self._get_shard_size_mapping(loaded_shard_id)
@@ -694,9 +700,9 @@ class QKVParallelLinear(ColumnParallelLinear):
         loaded_weight_shard_size = shard_size
         # Non-uniform Q sharding when total_num_heads is not divisible by tp_size
         if self.total_num_heads % self.tp_size != 0 and loaded_shard_id == 0:
-            loaded_weight_shard_offset, loaded_weight_shard_size = \
-                _get_shard_offset_and_size(
-                    self.total_num_heads * self.head_size, self.tp_rank, self.tp_size, self.head_size)
+            loaded_weight_shard_offset, loaded_weight_shard_size = _get_shard_offset_and_size(
+                self.total_num_heads * self.head_size, self.tp_rank, self.tp_size, self.head_size
+            )
 
         if isinstance(param, ColumnParameter):
             param.load_qkv_weight(

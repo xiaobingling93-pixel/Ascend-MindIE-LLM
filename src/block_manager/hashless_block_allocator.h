@@ -9,19 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
-#include "block_table.h"
-#include "hashless_block_obj.h"
 #include "block_allocator.h"
-#include "obj_pool.h"
+#include "block_table.h"
 #include "copy_on_write_tracker.h"
+#include "hashless_block_obj.h"
+#include "obj_pool.h"
 #include "ref_counter_protocol.h"
 
 namespace mindie_llm {
 class HashLessBlockAllocator : public BlockAllocator, public std::enable_shared_from_this<HashLessBlockAllocator> {
-public:
+   public:
     HashLessBlockAllocator(BlockId beginBlockId, size_t numBlocks, size_t blockSize, BlockObjPoolSPtr blockObjPool);
 
     ~HashLessBlockAllocator() override = default;
@@ -59,8 +59,7 @@ public:
 
     void MarkBlocksAsComputed() override;
 
-    std::vector<BlockId>
-    GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &id) override;
+    std::vector<BlockId> GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &id) override;
 
     size_t GetNumFullBlocksTouched(const std::vector<BlockObjSPtr> &blocks) override;
 
@@ -79,10 +78,10 @@ public:
     void AppendTokenIds(BlockObjSPtr blockObj, const std::vector<TokenId> &tokenIds) override;
 
     void ReplaceToken(BlockObjSPtr blockObj, size_t startIndex, TokenId newToken) override;
-    
+
     size_t GetCachedBlockNum(std::vector<HashValue> &hashValues) override;
 
-private:
+   private:
     size_t blockSize_;
 
     std::vector<BlockId> allBlockIndices_;
@@ -95,4 +94,4 @@ private:
 
     BlockObjPoolSPtr blockObjPool_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm

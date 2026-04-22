@@ -13,19 +13,19 @@
 #ifndef MINDIE_LLM_LLMMANGER_IMPL_H
 #define MINDIE_LLM_LLMMANGER_IMPL_H
 
-#include <string>
-#include <thread>
 #include <atomic>
 #include <mutex>
 #include <shared_mutex>
+#include <string>
+#include <thread>
 
+#include "basic_types.h"
+#include "config_info.h"
+#include "engine/illm_engine.h"
+#include "llm_manager_v2.h"
+#include "metric.h"
 #include "request_response/callback.h"
 #include "request_response/response.h"
-#include "llm_manager_v2.h"
-#include "basic_types.h"
-#include "engine/illm_engine.h"
-#include "metric.h"
-#include "config_info.h"
 
 namespace mindie_llm {
 struct BlockNum {
@@ -34,12 +34,12 @@ struct BlockNum {
 };
 
 enum class FlexInstanceUpdateType {
-    ONLY_UPDATE_P_PERCENTAGE = 0, // P_Percentage变更
-    UPDATE_ALL = 1 // P_Percentage及其他信息变更
+    ONLY_UPDATE_P_PERCENTAGE = 0,  // P_Percentage变更
+    UPDATE_ALL = 1                 // P_Percentage及其他信息变更
 };
 
 class LlmManagerImpl {
-public:
+   public:
     LlmManagerImpl(const std::string &llmConfigPath, GetRequestsCallbackV2 getRequests,
                    SendResponsesCallbackV2 handleResponse, ControlSignalCallbackV2 controlCallback,
                    LlmManagerStatsCallback statusCallback, SendStatusResponseCallbackV2 statusResponseCallback,
@@ -52,7 +52,7 @@ public:
     bool UpdateEngineInfo(RequestSPtr &runtimeRequest, bool isForceRelease);
 
     bool QueryPDLinkStatus(model_execute_data::PDLinkStatusResponse &response);
-    
+
     static std::map<std::string, std::string> GetModelParams();
 
     void Step();
@@ -71,7 +71,7 @@ public:
     bool GetDmiInferEnabled() const;
 
     bool IsLlmEngineReady() const { return llmEngineReady_.load(std::memory_order_acquire); }
-    
+
     Status ProcessRequests(RequestSPtr request);
 
     Status ProcessRequests();
@@ -85,7 +85,8 @@ public:
     Status HandleLoraImpl(const LoraOperation loraOperation, std::vector<LoraParamSPtr> &loraInfo);
 
     bool UpdateFlexSwitchInfo(const std::shared_ptr<FlexSwitchInfo> flexSwitchInfo);
-private:
+
+   private:
     void ProcessStep();
 
     void ControlStep();
@@ -111,7 +112,7 @@ private:
 
     Status FinalizeLlmEngine() const;
 
-private:
+   private:
     Status ProcessReqInputIds(RequestSPtr &request) const;
 
     Role GetRoleFromString(std::string &pdRole) const;
@@ -166,6 +167,6 @@ private:
     std::vector<IExecutorSPtr> iExecutorSPtrs_;
     bool isFlexInitialized_{false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

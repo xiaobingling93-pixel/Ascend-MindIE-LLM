@@ -11,13 +11,14 @@
  */
 #include "grpc_communicator.h"
 
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/server.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/create_channel.h>
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
-#include <experimental/filesystem>
+
 #include <algorithm>
+#include <experimental/filesystem>
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -30,8 +31,7 @@ static constexpr uint64_t SLAVE_NPU_REPORT_STALE_MS = 7000;
 static constexpr uint64_t SLAVE_NPU_TIMEOUT_LOG_INTERVAL_MS = 60000;
 static constexpr uint64_t NPU_REPORT_DIAG_LOG_INTERVAL_MS = 30000;
 
-bool ReadFileToString(const fs::path &filePath, std::string &outContent)
-{
+bool ReadFileToString(const fs::path &filePath, std::string &outContent) {
     std::string path = filePath.string();
     if (!CanonicalPath(path)) {
         MINDIE_LLM_LOG_ERROR("Invalid Path: " + path);
@@ -50,16 +50,14 @@ bool ReadFileToString(const fs::path &filePath, std::string &outContent)
 
 // SERVER上允许最大链接线程数
 constexpr auto MAX_CONTACT_THREAD_NUM = 100;
-std::shared_ptr<GRPCCommunicator>
-GRPCCommunicator::GetInstance(const std::unordered_map<std::string, std::string> &modelConfig)
-{
+std::shared_ptr<GRPCCommunicator> GRPCCommunicator::GetInstance(
+    const std::unordered_map<std::string, std::string> &modelConfig) {
     static std::shared_ptr<GRPCCommunicator> instance = std::make_shared<GRPCCommunicator>(modelConfig);
     GRPCCommunicator::grpcCommunicatorSingleton = instance;
     return instance;
 }
 
-GRPCCommunicator::GRPCCommunicator(const std::unordered_map<std::string, std::string> &modelConfig)
-{
+GRPCCommunicator::GRPCCommunicator(const std::unordered_map<std::string, std::string> &modelConfig) {
     isMaster_ = modelConfig.at("isMaster") == "1";
     std::vector<std::string> slaveIPs;
     mindie_llm::Split(modelConfig.at("slaveIPs"), ",", slaveIPs);
@@ -87,8 +85,7 @@ GRPCCommunicator::GRPCCommunicator(const std::unordered_map<std::string, std::st
     }
 }
 
-void GRPCCommunicator::StopServer()
-{
+void GRPCCommunicator::StopServer() {
     if (server_) {
         server_->Shutdown();
     }
@@ -98,8 +95,7 @@ void GRPCCommunicator::StopServer()
     MINDIE_LLM_LOG_INFO("gRPC server shutdown complete");
 }
 
-void GRPCCommunicator::StopClient()
-{
+void GRPCCommunicator::StopClient() {
     // 1. 关闭流式连接
     if (slaveStream_) {
         slaveStream_->WritesDone();
@@ -122,8 +118,7 @@ void GRPCCommunicator::StopClient()
     MINDIE_LLM_LOG_INFO("gRPC connection shutdown complete");
 }
 
-GRPCCommunicator::~GRPCCommunicator()
-{
+GRPCCommunicator::~GRPCCommunicator() {
     MINDIE_LLM_LOG_INFO("GRPCCommunicator Starting destruction");
     if (isMaster_) {
         StopServer();
@@ -134,8 +129,7 @@ GRPCCommunicator::~GRPCCommunicator()
     MINDIE_LLM_LOG_INFO("GRPCCommunicator destruction completed");
 }
 
-bool GRPCCommunicator::Init(int initCount)
-{
+bool GRPCCommunicator::Init(int initCount) {
     // 确保仅在最后一次调用Init()时初始化，此时所有NPU节点启动信息已收集，Slave可向Master注册。
     int oldCallInitCount = callInitCount_.fetch_add(1, std::memory_order_acq_rel);
     if (oldCallInitCount == initCount - 1) {
@@ -147,16 +141,15 @@ bool GRPCCommunicator::Init(int initCount)
             return InitSlave();
         }
     } else {
-        if (isMaster_) { // Master节点需要等待所有Slave节点连接成功后才返回
+        if (isMaster_) {  // Master节点需要等待所有Slave节点连接成功后才返回
             WaitForAllSlavesConnected();
         }
     }
-    return true; // 如果不是最后一次调用，直接返回true
+    return true;  // 如果不是最后一次调用，直接返回true
 }
 
 // 需要保证master节点收到所有slave节点的注册信息后才初始化完成
-bool GRPCCommunicator::InitMaster(int respHandlerThreadCount)
-{
+bool GRPCCommunicator::InitMaster(int respHandlerThreadCount) {
     MINDIE_LLM_LOG_INFO("GRPCCommunicator: Start to init as Master");
     service_ = std::make_shared<MasterServiceImpl>(this, respHandlerThreadCount);
     masterWorkerThread_ = std::thread([this]() {
@@ -178,7 +171,7 @@ bool GRPCCommunicator::InitMaster(int respHandlerThreadCount)
 
             if (!interNodeTlsCrlPath_.empty() && !interNodeTlsCrlFiles_.empty()) {
                 std::vector<std::string> crlContentVec;
-                for (const auto& crlFile : interNodeTlsCrlFiles_) {
+                for (const auto &crlFile : interNodeTlsCrlFiles_) {
                     fs::path crlPath = fs::path(interNodeTlsCrlPath_) / crlFile;
                     std::string crlContent;
                     ReadFileToString(crlPath, crlContent);
@@ -228,16 +221,16 @@ bool GRPCCommunicator::InitMaster(int respHandlerThreadCount)
     return true;
 }
 
-bool GRPCCommunicator::InitSlave()
-{
+bool GRPCCommunicator::InitSlave() {
     MINDIE_LLM_LOG_INFO("GRPCCommunicator: Start to init as Slave (IP=" + slaveIp_ + ")");
     int retryCount = 0;
     int sleepInterval = 1;
-    int maxRetries = 120; // 重试120次,持续2分钟,等待master端口启动成功（假设每次重试间隔1秒）
+    int maxRetries = 120;  // 重试120次,持续2分钟,等待master端口启动成功（假设每次重试间隔1秒）
     bool connected = false;
     while (retryCount++ < maxRetries) {
         try {
-            MINDIE_LLM_LOG_INFO("GRPCCommunicator: attempting connection to server at IP = " + masterIP_ + ", port = " + multiNodesInferPort_);
+            MINDIE_LLM_LOG_INFO("GRPCCommunicator: attempting connection to server at IP = " + masterIP_ +
+                                ", port = " + multiNodesInferPort_);
             grpc::ChannelArguments channelArgs;
             channelArgs.SetInt(GRPC_ARG_MAX_CONCURRENT_STREAMS, maxConcurrentStreams);
             channelArgs.SetInt(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH, grpcSendReceiveBufSize);
@@ -247,14 +240,15 @@ bool GRPCCommunicator::InitSlave()
                 std::vector<grpc::experimental::IdentityKeyCertPair> identityKeyCertPairList = {
                     {tlsCertPrivateKey_, tlsCert_}};
                 std::shared_ptr<grpc::experimental::CertificateProviderInterface> certificateProvider =
-                    std::make_shared<grpc::experimental::StaticDataCertificateProvider>(caCert_, identityKeyCertPairList);
+                    std::make_shared<grpc::experimental::StaticDataCertificateProvider>(caCert_,
+                                                                                        identityKeyCertPairList);
                 auto tlsChannelOpts = std::make_unique<grpc::experimental::TlsChannelCredentialsOptions>();
                 tlsChannelOpts->set_certificate_provider(certificateProvider);
 
                 // --- CRL 证书吊销列表 ---
                 if (!interNodeTlsCrlPath_.empty() && !interNodeTlsCrlFiles_.empty()) {
                     std::vector<std::string> crlContentVec;
-                    for (const auto& crlFile : interNodeTlsCrlFiles_) {
+                    for (const auto &crlFile : interNodeTlsCrlFiles_) {
                         fs::path crlPath = fs::path(interNodeTlsCrlPath_) / crlFile;
                         std::string crlContent;
                         ReadFileToString(crlPath, crlContent);
@@ -316,15 +310,13 @@ bool GRPCCommunicator::InitSlave()
     return true;
 }
 
-void GRPCCommunicator::WaitForAllSlavesConnected()
-{
+void GRPCCommunicator::WaitForAllSlavesConnected() {
     std::mutex mtx;
     std::unique_lock<std::mutex> lock(mtx);
     cv_.wait(lock, [this] { return AllSlavesConnected(); });
 }
 
-bool GRPCCommunicator::SendRegistration()
-{
+bool GRPCCommunicator::SendRegistration() {
     SlaveToMasterMsg msg;
     auto *reg = msg.mutable_register_request();
     reg->set_slave_ip(slaveIp_);
@@ -336,8 +328,7 @@ bool GRPCCommunicator::SendRegistration()
     }
 }
 
-void GRPCCommunicator::StartWorkerThread()
-{
+void GRPCCommunicator::StartWorkerThread() {
     slaveWorkerThread_ = std::thread([this] {
         pthread_setname_np(pthread_self(), "GRPCSlave");
         MasterToSlaveMsg task;
@@ -357,13 +348,12 @@ void GRPCCommunicator::StartWorkerThread()
 }
 
 template <typename StreamType, typename MsgType>
-bool GRPCCommunicator::SafeWriteMsgToStream(StreamType stream, const MsgType &msg)
-{
+bool GRPCCommunicator::SafeWriteMsgToStream(StreamType stream, const MsgType &msg) {
     if (!stream) {
         MINDIE_LLM_LOG_ERROR("SafeWriteMsgToStream: stream is null (cannot write message)");
         return false;
     }
-    std::lock_guard<std::mutex> lock(streamWriteMutex_); // 确保线程安全
+    std::lock_guard<std::mutex> lock(streamWriteMutex_);  // 确保线程安全
     if (!stream->Write(msg)) {
         MINDIE_LLM_LOG_ERROR("SafeWriteMsgToStream: failed to write message to stream");
         return false;
@@ -372,8 +362,7 @@ bool GRPCCommunicator::SafeWriteMsgToStream(StreamType stream, const MsgType &ms
 }
 
 bool GRPCCommunicator::SendRequest(ExecuteRequest &request, int sourceDPRank, int targetDPRank,
-                                   const std::string &slaveIp)
-{
+                                   const std::string &slaveIp) {
     if (sourceDPRank < 0 || targetDPRank < 0) {
         MINDIE_LLM_LOG_ERROR("SendRequest: sourceDPRank and targetDPRank must be non-negative integers.");
         return false;
@@ -383,13 +372,13 @@ bool GRPCCommunicator::SendRequest(ExecuteRequest &request, int sourceDPRank, in
     msg.set_target_dp_rank(targetDPRank);
     *msg.mutable_execute_request() = request;
 
-    if (slaveIp.empty()) { // 广播
+    if (slaveIp.empty()) {  // 广播
         for (std::optional<SlaveStreamPtr> stream : slaveIpToStream_.Values()) {
             if (!SafeWriteMsgToStream(stream.value_or(nullptr), msg)) {
                 return false;
             }
         }
-    } else { // 单播
+    } else {  // 单播
         std::optional<SlaveStreamPtr> stream = slaveIpToStream_.Get(slaveIp);
         if (!SafeWriteMsgToStream(stream.value_or(nullptr), msg)) {
             return false;
@@ -398,14 +387,12 @@ bool GRPCCommunicator::SendRequest(ExecuteRequest &request, int sourceDPRank, in
     return true;
 }
 
-bool GRPCCommunicator::GetSyncResponse(ExecuteResponse &response, int sourceDPRank)
-{
+bool GRPCCommunicator::GetSyncResponse(ExecuteResponse &response, int sourceDPRank) {
     std::shared_ptr<MasterServiceImpl> masterService = std::static_pointer_cast<MasterServiceImpl>(service_);
     return masterService->Take(sourceDPRank, response);
 }
 
-bool GRPCCommunicator::SendResponse(ExecuteResponse &response, int sourceDPRank, int targetDPRank)
-{
+bool GRPCCommunicator::SendResponse(ExecuteResponse &response, int sourceDPRank, int targetDPRank) {
     if (sourceDPRank < 0 || targetDPRank < 0) {
         MINDIE_LLM_LOG_ERROR("SendResponse: sourceDPRank and targetDPRank must be non-negative integers.");
         return false;
@@ -422,8 +409,7 @@ bool GRPCCommunicator::SendResponse(ExecuteResponse &response, int sourceDPRank,
     return true;
 }
 
-bool GRPCCommunicator::SendNpuUtilizationReport(uint32_t maxAicoreUtilizationPercent)
-{
+bool GRPCCommunicator::SendNpuUtilizationReport(uint32_t maxAicoreUtilizationPercent) {
     if (isMaster_) {
         return false;
     }
@@ -438,15 +424,13 @@ bool GRPCCommunicator::SendNpuUtilizationReport(uint32_t maxAicoreUtilizationPer
     return slaveStream_->Write(msg);
 }
 
-void GRPCCommunicator::RecordSlaveNpuUtil(const std::string &slaveIp, uint32_t maxAicoreUtilizationPercent)
-{
+void GRPCCommunicator::RecordSlaveNpuUtil(const std::string &slaveIp, uint32_t maxAicoreUtilizationPercent) {
     std::lock_guard<std::mutex> lock(slaveNpuMutex_);
     slaveIpToMaxNpuUtil_[slaveIp] = {maxAicoreUtilizationPercent, std::chrono::steady_clock::now()};
     ++slaveNpuReportRxCount_;
 }
 
-uint32_t GRPCCommunicator::GetSlaveMaxNpuUtilizationPercent() const
-{
+uint32_t GRPCCommunicator::GetSlaveMaxNpuUtilizationPercent() const {
     std::lock_guard<std::mutex> lock(slaveNpuMutex_);
     const auto now = std::chrono::steady_clock::now();
     const auto expireDuration = std::chrono::milliseconds(SLAVE_NPU_REPORT_STALE_MS);
@@ -470,10 +454,9 @@ uint32_t GRPCCommunicator::GetSlaveMaxNpuUtilizationPercent() const
             (now - lastSlaveNpuTimeoutLogTime_) >= std::chrono::milliseconds(SLAVE_NPU_TIMEOUT_LOG_INTERVAL_MS);
         if (enteringTimeout || intervalElapsed) {
             lastSlaveNpuTimeoutLogTime_ = now;
-            MINDIE_LLM_LOG_WARN("Slave NPU reports stale/missing on master. stale=" << staleSamples
-                                << ", fresh_reported=" << freshSamples
-                                << ", cached_samples=" << slaveIpToMaxNpuUtil_.size()
-                                << ", expected=" << slaveCount_
+            MINDIE_LLM_LOG_WARN("Slave NPU reports stale/missing on master. stale="
+                                << staleSamples << ", fresh_reported=" << freshSamples
+                                << ", cached_samples=" << slaveIpToMaxNpuUtil_.size() << ", expected=" << slaveCount_
                                 << ", registered_streams=" << slaveIpToStream_.Size());
         }
         slaveNpuTimeoutActive_ = true;
@@ -483,18 +466,16 @@ uint32_t GRPCCommunicator::GetSlaveMaxNpuUtilizationPercent() const
     return maxVal;
 }
 
-bool GRPCCommunicator::ConsumeSlaveNpuReportTimeoutFlag() const
-{
+bool GRPCCommunicator::ConsumeSlaveNpuReportTimeoutFlag() const {
     std::lock_guard<std::mutex> lock(slaveNpuMutex_);
     const auto now = std::chrono::steady_clock::now();
     if ((now - lastMasterNpuDiagLogTime_) >= std::chrono::milliseconds(NPU_REPORT_DIAG_LOG_INTERVAL_MS)) {
         lastMasterNpuDiagLogTime_ = now;
         const uint64_t rxDelta = slaveNpuReportRxCount_ - lastSlaveNpuReportRxCountLog_;
         lastSlaveNpuReportRxCountLog_ = slaveNpuReportRxCount_;
-        MINDIE_LLM_LOG_INFO("Master NPU report diagnostics: registered_streams=" << slaveIpToStream_.Size()
-                            << ", expected_slaves=" << slaveCount_
-                            << ", total_rx=" << slaveNpuReportRxCount_
-                            << ", rx_delta_since_last=" << rxDelta);
+        MINDIE_LLM_LOG_INFO("Master NPU report diagnostics: registered_streams="
+                            << slaveIpToStream_.Size() << ", expected_slaves=" << slaveCount_
+                            << ", total_rx=" << slaveNpuReportRxCount_ << ", rx_delta_since_last=" << rxDelta);
     }
     const bool ret = slaveNpuReportTimeout_;
     slaveNpuReportTimeout_ = false;
@@ -502,8 +483,7 @@ bool GRPCCommunicator::ConsumeSlaveNpuReportTimeoutFlag() const
 }
 
 template <typename HandlerType>
-bool RegisterHandler(ConcurrentMap<int, HandlerType> &handlers, int dpRankIdx, HandlerType handler)
-{
+bool RegisterHandler(ConcurrentMap<int, HandlerType> &handlers, int dpRankIdx, HandlerType handler) {
     if (handler == nullptr) {
         MINDIE_LLM_LOG_ERROR("GRPC RegisterHandler: handler is null.");
         return false;
@@ -516,24 +496,20 @@ bool RegisterHandler(ConcurrentMap<int, HandlerType> &handlers, int dpRankIdx, H
     return true;
 }
 
-bool GRPCCommunicator::RegisterRequestHandler(RequestHandler handler, int dpRankIdx)
-{
+bool GRPCCommunicator::RegisterRequestHandler(RequestHandler handler, int dpRankIdx) {
     return RegisterHandler(requestHandlers_, dpRankIdx, handler);
 }
 
-bool GRPCCommunicator::RegisterRecoverRequestHandler(RequestHandler handler, int dpRankIdx)
-{
+bool GRPCCommunicator::RegisterRecoverRequestHandler(RequestHandler handler, int dpRankIdx) {
     return RegisterHandler(recoverRequestHandlers_, dpRankIdx, handler);
 }
 
-bool GRPCCommunicator::RegisterResponseHandler(ResponseHandler handler, int dpRankIdx)
-{
+bool GRPCCommunicator::RegisterResponseHandler(ResponseHandler handler, int dpRankIdx) {
     return RegisterHandler(responseHandlers_, dpRankIdx, handler);
 }
 
 // 以下函数会并发调用，需要保证线程安全
-bool GRPCCommunicator::HandleResponseFromSlave(ExecuteResponse &response, int targetDPRank)
-{
+bool GRPCCommunicator::HandleResponseFromSlave(ExecuteResponse &response, int targetDPRank) {
     // ResponseHandler 对应于 ModelExecOutputHandler::Entry4Executor() 函数指针，并且是线程安全的
     std::optional<ResponseHandler> optHandler = responseHandlers_.Get(targetDPRank);
     if (!optHandler.has_value()) {
@@ -555,8 +531,7 @@ bool GRPCCommunicator::HandleResponseFromSlave(ExecuteResponse &response, int ta
     return true;
 }
 
-void GRPCCommunicator::HandleRequestFromMaster(ExecuteRequest &request, int targetDPRank)
-{
+void GRPCCommunicator::HandleRequestFromMaster(ExecuteRequest &request, int targetDPRank) {
     if (request.execute_type() == MODEL_INFER) {
         // MODEL_INFER request will be handled by all DP ranks in the slave node
         std::vector<RequestHandler> handlers = requestHandlers_.Values();
@@ -576,7 +551,7 @@ void GRPCCommunicator::HandleRequestFromMaster(ExecuteRequest &request, int targ
                                  << targetDPRank << " is not set or does not exist.");
             return;
         }
-        optHandler.value()(request); // 调用对应的处理函数
+        optHandler.value()(request);  // 调用对应的处理函数
     }
 }
 
@@ -585,8 +560,7 @@ void GRPCCommunicator::NotifyAll() { cv_.notify_all(); }
 
 ConcurrentMap<std::string, SlaveStreamPtr> &GRPCCommunicator::SlaveIpToStream() { return slaveIpToStream_; }
 
-MasterServiceImpl::MasterServiceImpl(GRPCCommunicator *comm, int respHandlerThreadCount) : gRPCCommunicator_(comm)
-{
+MasterServiceImpl::MasterServiceImpl(GRPCCommunicator *comm, int respHandlerThreadCount) : gRPCCommunicator_(comm) {
     respHandlerThreads_.reserve(respHandlerThreadCount);
     for (int i = 0; i < respHandlerThreadCount; ++i) {
         respHandlerThreads_.emplace_back([this] { RespHandlerLoop(); });
@@ -596,8 +570,7 @@ MasterServiceImpl::MasterServiceImpl(GRPCCommunicator *comm, int respHandlerThre
 
 MasterServiceImpl::~MasterServiceImpl() { StopRespHandlerThreads(); }
 
-void MasterServiceImpl::RespHandlerLoop()
-{
+void MasterServiceImpl::RespHandlerLoop() {
     while (respHandlerThreadActive_.load(std::memory_order_relaxed)) {
         // 从阻塞队列中获取响应任务并处理，处理函数需保证线程安全
         std::shared_ptr<SlaveResponseTask> task = pendingRespFromSlaveQueue_.pull();
@@ -605,8 +578,7 @@ void MasterServiceImpl::RespHandlerLoop()
     }
 }
 
-void MasterServiceImpl::StopRespHandlerThreads()
-{
+void MasterServiceImpl::StopRespHandlerThreads() {
     respHandlerThreadActive_.store(false, std::memory_order_relaxed);
     pendingRespFromSlaveQueue_.close();
     for (auto &thread : respHandlerThreads_) {
@@ -617,8 +589,7 @@ void MasterServiceImpl::StopRespHandlerThreads()
     respHandlerThreads_.clear();
 }
 
-grpc::Status MasterServiceImpl::RegisterAndCommunicate(ServerContext *context, SlaveStreamPtr stream)
-{
+grpc::Status MasterServiceImpl::RegisterAndCommunicate(ServerContext *context, SlaveStreamPtr stream) {
     SlaveToMasterMsg client_msg;
     std::string slaveIpFromStream;
     while (stream->Read(&client_msg)) {
@@ -635,10 +606,8 @@ grpc::Status MasterServiceImpl::RegisterAndCommunicate(ServerContext *context, S
             ExecuteResponse executeResponse = client_msg.execute_response();
             // If the response type is REMOTE_MODEL_INIT, PD_LINK, LORA_OPERATION, RECOVER_COMMAND_EXEC, push to queue
             if (executeResponse.msg_type() == REMOTE_MODEL_INIT || executeResponse.msg_type() == PD_LINK_STATUS_QUERY ||
-                executeResponse.msg_type() == LORA_OPERATION ||
-                executeResponse.msg_type() == RECOVER_COMMAND_EXEC ||
-                executeResponse.msg_type() == START_COMMAND_EXEC ||
-                executeResponse.msg_type() == PAUSE_COMMAND_EXEC ||
+                executeResponse.msg_type() == LORA_OPERATION || executeResponse.msg_type() == RECOVER_COMMAND_EXEC ||
+                executeResponse.msg_type() == START_COMMAND_EXEC || executeResponse.msg_type() == PAUSE_COMMAND_EXEC ||
                 executeResponse.msg_type() == CLEAR_COMMAND_EXEC) {
                 dpRankIdxToSyncResp_.Get(targetDPRank)
                     .value()
@@ -662,8 +631,7 @@ grpc::Status MasterServiceImpl::RegisterAndCommunicate(ServerContext *context, S
     return grpc::Status::OK;
 }
 
-bool MasterServiceImpl::Take(int targetDPRank, ExecuteResponse &response)
-{
+bool MasterServiceImpl::Take(int targetDPRank, ExecuteResponse &response) {
     auto blockingQueueOpt = dpRankIdxToSyncResp_.Get(targetDPRank);
     if (!blockingQueueOpt.has_value()) {
         MINDIE_LLM_LOG_ERROR("No blocking queue found for targetDPRank " << targetDPRank);
@@ -674,13 +642,11 @@ bool MasterServiceImpl::Take(int targetDPRank, ExecuteResponse &response)
     return true;
 }
 
-ConcurrentMap<int, std::shared_ptr<ExecRespBlockingQueue>> &MasterServiceImpl::DPRankIdxToSyncResp()
-{
+ConcurrentMap<int, std::shared_ptr<ExecRespBlockingQueue>> &MasterServiceImpl::DPRankIdxToSyncResp() {
     return dpRankIdxToSyncResp_;
 }
 
-bool GRPCCommunicator::LoadCertificates()
-{
+bool GRPCCommunicator::LoadCertificates() {
     MINDIE_LLM_LOG_INFO("Loading TLS certificates for mutual authentication...");
     std::string homePath;
     GetHomePath(homePath);
@@ -697,15 +663,15 @@ bool GRPCCommunicator::LoadCertificates()
     fs::path certPath = interNodeTlsCert_;
     ReadFileToString(certPath, tlsCert_);
     MINDIE_LLM_LOG_INFO("Loaded server/client certificate: " + certPath.string());
-  
+
     // 2. 读取本端证书的私钥
     fs::path keyPath = fs::path(interNodeTlsPk_);
     std::string keyContent;
     ReadFileToString(keyPath, keyContent);
- 
+
     tlsCertPrivateKey_.assign(keyContent.data(), keyContent.size());
 
     return true;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

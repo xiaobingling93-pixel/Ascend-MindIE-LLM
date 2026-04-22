@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "thread_group_cc.h"
 
 #include <algorithm>
@@ -17,8 +17,7 @@
 using namespace std;
 using namespace mindie_llm;
 
-ThreadGroupCC &ThreadGroupCC::GetInstance(size_t numThreads)
-{
+ThreadGroupCC &ThreadGroupCC::GetInstance(size_t numThreads) {
     if (numThreads <= 1) {
         throw std::runtime_error("the numThreads must be greated than 1.");
     }
@@ -28,12 +27,15 @@ ThreadGroupCC &ThreadGroupCC::GetInstance(size_t numThreads)
 }
 
 ThreadGroupCC::ThreadGroupCC(size_t numThreads)
-    : numThreads_(numThreads), broadcastReadyVec_(numThreads, false), gatherReadyVec_(numThreads, false),
-      gatherReaderDoneVec_(numThreads, false), scatterReadyVec_(numThreads, false),
+    : numThreads_(numThreads),
+      broadcastReadyVec_(numThreads, false),
+      gatherReadyVec_(numThreads, false),
+      gatherReaderDoneVec_(numThreads, false),
+      scatterReadyVec_(numThreads, false),
       allGatherReadyVec_(numThreads, std::vector<bool>(numThreads, false)),
-      allGatherReaderDoneVec_(numThreads, std::vector<bool>(numThreads, false)), reduceReadyVec_(numThreads, false),
-      reduceReaderDoneVec_(numThreads, false)
-{
+      allGatherReaderDoneVec_(numThreads, std::vector<bool>(numThreads, false)),
+      reduceReadyVec_(numThreads, false),
+      reduceReaderDoneVec_(numThreads, false) {
     gatherBuf_.resize(numThreads);
     scatterBuf_.resize(numThreads);
     allGatherBuf_.resize(numThreads);

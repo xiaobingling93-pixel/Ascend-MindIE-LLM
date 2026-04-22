@@ -8,14 +8,12 @@
 # MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 # See the Mulan PSL v2 for more details.
 import torch
-import torch_npu
-import torch.distributed as dist
 from torch import nn
 from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
 from mindie_llm.runtime.layers.normalization import RMSNorm
 from mindie_llm.runtime.layers.linear.linear import ReplicatedLinear
 from mindie_llm.runtime.layers.embedding.embedding import VocabParallelEmbedding, ParallelLMHead, maybe_slice_cross_tp
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.weight_prefetcher import weight_prefetcher
 from .deepseek_v3 import DeepseekV3Layer
@@ -26,6 +24,7 @@ class SharedHead(nn.Module):
     A shared head module used deepseek mtp model
     This module includes a normalization layer (`RMSNorm`) with a parallel language model head (`ParallelLMHead`).
     """
+
     def __init__(
         self,
         config,
@@ -43,10 +42,7 @@ class SharedHead(nn.Module):
         super().__init__()
         self.prefix = prefix
         self.norm = RMSNorm(
-            config.hidden_size,
-            eps=config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{self.prefix}.norm"
+            config.hidden_size, eps=config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.prefix}.norm"
         )
         self.head = ParallelLMHead(
             config.vocab_size,
@@ -71,9 +67,10 @@ class SharedHead(nn.Module):
 
 class DeepseekV3MtpLayer(DeepseekV3Layer):
     """
-    Deepseek Multi-Token Prediction Layer, extending the base DeepseekV3Layer with 
+    Deepseek Multi-Token Prediction Layer, extending the base DeepseekV3Layer with
     additional normalization, projection, embed and sharedhead modules
     """
+
     def __init__(self, config, prefix: str, layer_idx: int, quant_config) -> None:
         """
         Initialize the MTP layer.
@@ -93,24 +90,18 @@ class DeepseekV3MtpLayer(DeepseekV3Layer):
             prefix=f"{self.prefix}.embed_tokens",
         )
         self.enorm = RMSNorm(
-            config.hidden_size,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{self.mtp_prefix}.enorm"
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.mtp_prefix}.enorm"
         )
         self.hnorm = RMSNorm(
-            config.hidden_size,
-            config.rms_norm_eps,
-            quant_config=quant_config,
-            prefix=f"{self.mtp_prefix}.hnorm"
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.mtp_prefix}.hnorm"
         )
         self.shared_head = SharedHead(config, prefix=f"{self.mtp_prefix}.shared_head", quant_config=quant_config)
         self.eh_proj = ReplicatedLinear(
-            2 * config.hidden_size, 
+            2 * config.hidden_size,
             config.hidden_size,
             bias=False,
             quant_config=quant_config,
-            prefix=f"{self.mtp_prefix}.eh_proj"
+            prefix=f"{self.mtp_prefix}.eh_proj",
         )
 
 
@@ -118,6 +109,7 @@ class DeepseekV3MtpModel(nn.Module):
     """
     Deepseek Multi-Token Prediction Model
     """
+
     def __init__(self, config, prefix, quant_config) -> None:
         """
         Initialize the Deepseek MTP model.
@@ -128,14 +120,11 @@ class DeepseekV3MtpModel(nn.Module):
             quant_config: Quantization configuration (optional)
         """
         super().__init__()
-        self.config = config       
+        self.config = config
         self.parallel_info = get_parallel_info_manager()
-        self.layer_idx = 61 # current ds model has fixed 61 layers
+        self.layer_idx = 61  # current ds model has fixed 61 layers
         self.layers = nn.ModuleDict(
-            {
-                str(self.layer_idx):
-                    DeepseekV3MtpLayer(config, prefix, self.layer_idx, quant_config)
-            }
+            {str(self.layer_idx): DeepseekV3MtpLayer(config, prefix, self.layer_idx, quant_config)}
         )
 
     def forward(self, input_ids, positions) -> torch.Tensor:
@@ -172,9 +161,10 @@ class DeepseekV3MtpModel(nn.Module):
 
 class DeepseekV3MTP(BaseModelForCausalLM):
     """
-    A Deepseek V3 MTP causal language model class, extending BaseModelForCausalLM. 
-    This module includs the draft model and the language model head (LM head), 
+    A Deepseek V3 MTP causal language model class, extending BaseModelForCausalLM.
+    This module includs the draft model and the language model head (LM head),
     """
+
     def __init__(self, mindie_llm_config) -> None:
         """
         Initializes the DeepseekV3MTP model with the provided configuration.
@@ -189,16 +179,14 @@ class DeepseekV3MTP(BaseModelForCausalLM):
         self.quant_config = mindie_llm_config.quant_config
         weight_prefetcher.enable_weight_prefetch()  # initialize weight prefetcher
         self.model = DeepseekV3MtpModel(
-            config=mindie_llm_config.hf_config,
-            prefix="model",
-            quant_config=self.quant_config
-        )     
+            config=mindie_llm_config.hf_config, prefix="model", quant_config=self.quant_config
+        )
         self.lm_head = ParallelLMHead(
             self.config.vocab_size,
             self.config.hidden_size,
             bias=False,
             quant_config=None,
-            prefix=f"lm_head",
+            prefix="lm_head",
         )
 
     def forward(self, input_ids, positions) -> torch.Tensor:

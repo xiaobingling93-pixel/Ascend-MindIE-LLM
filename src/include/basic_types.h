@@ -14,8 +14,8 @@
 #define BASIC_TYPES_H
 
 #include <cstdint>
-#include <string>
 #include <queue>
+#include <string>
 #include <vector>
 namespace mindie_llm {
 
@@ -25,7 +25,7 @@ using RespBodyQueue = std::queue<std::string>;
 using TokenId = long;
 using Probability = float;
 using InstanceId = uint32_t;
-using BlockId = int64_t; // global block id. Like npu block id is from 0~99, cpu block id is from 100~199.
+using BlockId = int64_t;  // global block id. Like npu block id is from 0~99, cpu block id is from 100~199.
 using BlockIds = std::vector<BlockId>;
 // SequenceId type need to disscuss
 using SequenceId = long;
@@ -37,12 +37,12 @@ using HashValue = uint64_t;
 
 using TimeStamp = float;
 using RefCount = long;
-// pysical block id is used to determine block physical address. If cpu block id is started from 100, physical block id
+// physical block id is used to determine block physical address. If cpu block id is started from 100, physical block id
 // of global block id is 1
 using PhysicalBlockId = BlockId;
 
 enum class Role : uint8_t {
-    PnD = 0, // this instance can schedule both P and D
+    PnD = 0,  // this instance can schedule both P and D
     P,
     D,
     /*
@@ -78,7 +78,7 @@ constexpr TimeStamp DEFAULT_LAST_ACCESSED_TIME = -1;
 constexpr TokenId PLACEHOLDER_TOKEN = -1;
 constexpr SequenceId EOS_SEQUENCE_ID = -1;
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #ifdef DEBUG
 inline void Assert(bool condition) { assert(condition); }

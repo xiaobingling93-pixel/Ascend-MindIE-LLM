@@ -14,10 +14,10 @@
 #define SAMPLING_H
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-#include <memory>
 
 #include "basic_types.h"
 
@@ -55,7 +55,7 @@ struct SamplingParams {
 
     std::optional<uint32_t> topLogprobs;
 
-    std::optional<std::string> responseFormat; // JSON structured output format
+    std::optional<std::string> responseFormat;  // JSON structured output format
 
     uint32_t n = 1;
 
@@ -66,6 +66,6 @@ struct SamplingParams {
     bool enableParallelSampling{false};
 };
 using SamplingParamsSPtr = std::shared_ptr<SamplingParams>;
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

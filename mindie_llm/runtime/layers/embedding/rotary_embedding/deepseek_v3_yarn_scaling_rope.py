@@ -12,11 +12,10 @@
 # See the Mulan PSL v2 for more details.
 
 import torch
-import torch_npu
 
 from mindie_llm.runtime.layers.embedding.rotary_embedding.yarn_scaling_rope import (
     YarnScalingRotaryEmbedding,
-    yarn_get_mscale
+    yarn_get_mscale,
 )
 
 
@@ -26,6 +25,7 @@ class DeepseekV3YarnRotaryEmbedding(YarnScalingRotaryEmbedding):
     Extends standard YaRN scaling with DeepSeek-V3's additional magnitude scaling
     parameter (mscale_all_dim) for fine-grained attention magnitude control.
     """
+
     def __init__(
         self,
         dim,
@@ -54,29 +54,37 @@ class DeepseekV3YarnRotaryEmbedding(YarnScalingRotaryEmbedding):
             mscale_all_dim: DeepSeek-V3 specific scaling factor applied across all dimensions.
         """
         self.mscale_all_dim = mscale_all_dim
-        super().__init__(dim, dim, original_max_position_embeddings, base,
-        dtype=dtype,
+        super().__init__(
+            dim,
+            dim,
+            original_max_position_embeddings,
+            base,
+            dtype=dtype,
             is_neox_style=is_neox_style,
             factor=factor,
             beta_fast=beta_fast,
             beta_slow=beta_slow,
-            mscale=mscale
+            mscale=mscale,
         )
-    
-    def set_cos_sin_indexed_cache(self, postions) -> None:
+
+    def set_cos_sin_indexed_cache(self, positions) -> None:
         """Create position-indexed cosine/sine caches with dimension doubling.
 
         Extracts position-specific rotary values from precomputed caches and
         duplicates them across the last dimension to match attention head layout.
 
         Args:
-            postions: 1D tensor of position indices to index into the cache.
+            positions: 1D tensor of position indices to index into the cache.
         """
-        cos_indexed_cache = torch.index_select(self.cos_cache, dim=0, index=postions.view(-1)).unsqueeze(1).unsqueeze(1)
-        sin_indexed_cache = torch.index_select(self.sin_cache, dim=0, index=postions.view(-1)).unsqueeze(1).unsqueeze(1) 
+        cos_indexed_cache = (
+            torch.index_select(self.cos_cache, dim=0, index=positions.view(-1)).unsqueeze(1).unsqueeze(1)
+        )
+        sin_indexed_cache = (
+            torch.index_select(self.sin_cache, dim=0, index=positions.view(-1)).unsqueeze(1).unsqueeze(1)
+        )
         cos_indexed_cache = torch.cat((cos_indexed_cache, cos_indexed_cache), dim=-1)
         sin_indexed_cache = torch.cat((sin_indexed_cache, sin_indexed_cache), dim=-1)
-        self.register_buffer("cos_indexed_cache", cos_indexed_cache, persistent=False) # [seq_len, 1, 1, rotary_dim]
+        self.register_buffer("cos_indexed_cache", cos_indexed_cache, persistent=False)  # [seq_len, 1, 1, rotary_dim]
         self.register_buffer("sin_indexed_cache", sin_indexed_cache, persistent=False)
 
     def _compute_cos_sin_cache(self) -> None:
@@ -85,9 +93,7 @@ class DeepseekV3YarnRotaryEmbedding(YarnScalingRotaryEmbedding):
         Applies dual scaling factors (mscale and mscale_all_dim) to preserve attention
         magnitude during context extrapolation. The effective scale is mscale/mscale_all_dim.
         """
-        t = torch.arange(
-            self.max_position_embeddings
-        ).to(torch.float32)
+        t = torch.arange(self.max_position_embeddings).to(torch.float32)
         freqs = torch.einsum("i,j -> ij", t, self.inv_freq)
         _mscale = float(
             yarn_get_mscale(self.scaling_factor, self.mscale)
@@ -95,5 +101,5 @@ class DeepseekV3YarnRotaryEmbedding(YarnScalingRotaryEmbedding):
         )
         cos = freqs.cos().to(self.dtype) * _mscale
         sin = freqs.sin().to(self.dtype) * _mscale
-        self.register_buffer("cos_cache", cos, persistent=False) # [max_position_embeddings, rotary_dim // 2]
-        self.register_buffer("sin_cache", sin, persistent=False) # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("cos_cache", cos, persistent=False)  # [max_position_embeddings, rotary_dim // 2]
+        self.register_buffer("sin_cache", sin, persistent=False)  # [max_position_embeddings, rotary_dim // 2]

@@ -34,6 +34,7 @@ class LoraConfig:
             For example, `{'q_proj', 'k_proj', 'v_proj'}`.
             Note: Some modules (e.g., `embed_tokens`, `lm_head`) are not supported with LoRA.
     """
+
     r: int = field(default=8, metadata={"help": "Lora attention dimension"})
     lora_alpha: int = field(default=8)
     use_rslora: bool = field(default=False)
@@ -65,20 +66,20 @@ class LoraConfig:
 
     def _check_r(self):
         if self.r <= 0 or self.r > 1024:
-            raise ValueError('The parameter `r` must be larger than 0 and less than or equal to 1024')
+            raise ValueError("The parameter `r` must be larger than 0 and less than or equal to 1024")
 
     def _check_lora_alpha(self):
         if self.lora_alpha <= 0 or self.lora_alpha > 1024:
-            raise ValueError('The parameter `lora_alpha` must be larger than 0 and less than or equal to 1024')
+            raise ValueError("The parameter `lora_alpha` must be larger than 0 and less than or equal to 1024")
 
     def _check_rank_pattern(self):
         if self.rank_pattern is None:
             return
         if not isinstance(self.rank_pattern, dict):
-            raise ValueError('The parameter `rank_pattern` must be a dictionary')
+            raise ValueError("The parameter `rank_pattern` must be a dictionary")
         for rank_key, rank_value in self.rank_pattern.items():
             if rank_value <= 0 or rank_value > 1024:
-                error_msg = f'The parameter `{rank_key}` must be larger than 0 and less than or equal to 1024'
+                error_msg = f"The parameter `{rank_key}` must be larger than 0 and less than or equal to 1024"
                 error_msg = message_filter(error_msg)
                 raise ValueError(error_msg)
 
@@ -86,17 +87,19 @@ class LoraConfig:
         if self.alpha_pattern is None:
             return
         if not isinstance(self.alpha_pattern, dict):
-            raise ValueError('The parameter `alpha_pattern` must be a dictionary')
+            raise ValueError("The parameter `alpha_pattern` must be a dictionary")
         for alpha_key, alpha_value in self.alpha_pattern.items():
             if alpha_value <= 0 or alpha_value > 1024:
-                error_msg = f'The parameter `{alpha_key}` must be larger than 0 and less than or equal to 1024'
+                error_msg = f"The parameter `{alpha_key}` must be larger than 0 and less than or equal to 1024"
                 error_msg = message_filter(error_msg)
                 raise ValueError(error_msg)
-            
+
     def _check_target_modules(self):
         unsupported_modules = {"embed_tokens", "lm_head"}
         if self.target_modules:
             target_modules = set(self.target_modules)
             if target_modules & unsupported_modules:
-                raise ValueError(f"[INVALID LORA WEIGHT] Layers {target_modules & unsupported_modules} with LoRA "
-                                 + "are unsupported.")
+                raise ValueError(
+                    f"[INVALID LORA WEIGHT] Layers {target_modules & unsupported_modules} with LoRA "
+                    + "are unsupported."
+                )

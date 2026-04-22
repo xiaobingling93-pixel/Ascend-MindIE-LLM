@@ -9,28 +9,28 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef CONSTRUCT_EXECUTE_REQUEST_H
 #define CONSTRUCT_EXECUTE_REQUEST_H
 
+#include "executor/executor_interface.h"
 #include "sequence_group.h"
 #include "sequence_group_meta_data.h"
-#include "executor/executor_interface.h"
 
 namespace mindie_llm {
 class ConstructExecuteRequest {
-public:
+   public:
     static void ConstructExecuteModelRequest(ExecuteModelRequestPtr &modelRequest, SequenceGroupMetaDatas &metadatas,
                                              SchedulerOutputs &scOut, size_t dpRankId);
 
     static PullKVRequestPtr ConstructPullKVRequest(SequenceGroupMetaDatas &seqGroupMetadata);
 
-private:
+   private:
     static model_execute_data::SequenceData MakeSequenceData(SequenceData &metaData);
     static void ConstructProtoMeta(const SequenceGroupMetaData &metaData,
                                    model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill);
     static void LwdConstructCloudProtoMeta(const SequenceGroupMetaData &metaData,
-                                   model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill);
+                                           model_execute_data::SequenceGroupMetadata &protoMeta, bool isPrefill);
     static model_execute_data::ForwardType ConvertToProtoForwardType(ForwardMode fMode);
     static void ConstructSampleParam(model_execute_data::SamplingParams &sampleParams,
                                      const SequenceGroupMetaData &metaData);
@@ -42,6 +42,6 @@ private:
                                               model_execute_data::SequenceGroupMetadata &protoMeta);
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -13,28 +13,29 @@
 #ifndef __SCHEDULER_H__
 #define __SCHEDULER_H__
 
+#include <pthread.h>
+
 #include <chrono>
 #include <deque>
-#include <unordered_set>
 #include <unordered_map>
-#include <pthread.h>
+#include <unordered_set>
 #include <utility>
 
 #include "basic_types.h"
-#include "sequence_group.h"
-#include "config_info.h"
-#include "sequence_group_meta_data.h"
 #include "concurrent_deque.h"
-#include "policy/stage_policy/stage_policy.h"
-#include "metric.h"
+#include "config_info.h"
 #include "latency_predictor/latency_predictor.h"
+#include "metric.h"
+#include "policy/stage_policy/stage_policy.h"
+#include "sequence_group.h"
+#include "sequence_group_meta_data.h"
 
 namespace mindie_llm {
 /* 异步调度最多调度batch数 */
 constexpr int MAX_ASYNC_SCHEDULE_TIMES = 1;
 
 class IScheduler {
-public:
+   public:
     virtual ~IScheduler() = default;
 
     virtual void AddSeqGroup(SequenceGroupSPtr &seqGroup) = 0;
@@ -70,6 +71,6 @@ using SchedulerPtr = std::unique_ptr<IScheduler>;
 SchedulerPtr MakeScheduler(SchedulerConfigSPtr schedulerConfig, std::shared_ptr<LatencyPredictor> latencypredictor,
                            Role pdRole, size_t localDPRank = 0);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

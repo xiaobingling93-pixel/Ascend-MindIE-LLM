@@ -15,43 +15,42 @@
 
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
-#include <chrono>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
-#include <cstdint>
-#include <unordered_map>
-#include <openssl/pem.h>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
+
 #include <boost/thread/sync_queue.hpp>
-#include "executor/executor_interface.h"
-#include "model_execute_data.pb.h"
-#include "model_execute_data.grpc.pb.h"
-#include "concurrent_map.h"
-#include "log.h"
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
+
 #include "common_util.h"
+#include "concurrent_map.h"
+#include "executor/executor_interface.h"
+#include "log.h"
+#include "model_execute_data.grpc.pb.h"
+#include "model_execute_data.pb.h"
 #include "string_utils.h"
 
 namespace mindie_llm {
 
-using grpc::ServerReaderWriter;
 using grpc::ServerContext;
+using grpc::ServerReaderWriter;
+using model_execute_data::MasterService;
 using model_execute_data::MasterToSlaveMsg;
 using model_execute_data::SlaveToMasterMsg;
-using model_execute_data::MasterService;
 using SlaveStreamPtr = ServerReaderWriter<MasterToSlaveMsg, SlaveToMasterMsg> *;
 using ExecRespBlockingQueue = boost::sync_queue<std::shared_ptr<ExecuteResponse>>;
 
 class GRPCCommunicator {
-public:
-    static std::shared_ptr<GRPCCommunicator>
-    GetInstance(const std::unordered_map<std::string, std::string> &modelConfig);
+   public:
+    static std::shared_ptr<GRPCCommunicator> GetInstance(
+        const std::unordered_map<std::string, std::string> &modelConfig);
 
-    static std::shared_ptr<GRPCCommunicator> TryGetInstance()
-    {
-        return grpcCommunicatorSingleton;
-    }
+    static std::shared_ptr<GRPCCommunicator> TryGetInstance() { return grpcCommunicatorSingleton; }
 
     [[nodiscard]] bool IsMaster() const noexcept { return isMaster_; }
 
@@ -74,22 +73,22 @@ public:
     bool Init(int initCount);
 
     bool SendRequest(ExecuteRequest &request, int sourceDPRank, int targetDPRank,
-                     const std::string &slaveIp = ""); // Only for master node
+                     const std::string &slaveIp = "");  // Only for master node
 
     // Blocks until a synchronous response is received (master node only)
     bool GetSyncResponse(ExecuteResponse &response, int sourceDPRank);
 
-    bool SendResponse(ExecuteResponse &response, int sourceDPRank, int targetDPRank); // Only for slave node
+    bool SendResponse(ExecuteResponse &response, int sourceDPRank, int targetDPRank);  // Only for slave node
 
-    bool RegisterRequestHandler(RequestHandler handler, int dpRankIdx); // Only for slave node
+    bool RegisterRequestHandler(RequestHandler handler, int dpRankIdx);  // Only for slave node
 
-    bool RegisterRecoverRequestHandler(RequestHandler handler, int dpRankIdx); // Only for slave node
+    bool RegisterRecoverRequestHandler(RequestHandler handler, int dpRankIdx);  // Only for slave node
 
-    bool RegisterResponseHandler(ResponseHandler handler, int dpRankIdx); // Only for master node
+    bool RegisterResponseHandler(ResponseHandler handler, int dpRankIdx);  // Only for master node
 
-    void HandleRequestFromMaster(ExecuteRequest &request, int targetDPRank); // Only for slave node
+    void HandleRequestFromMaster(ExecuteRequest &request, int targetDPRank);  // Only for slave node
 
-    bool HandleResponseFromSlave(ExecuteResponse &response, int targetDPRank); // Only for master node
+    bool HandleResponseFromSlave(ExecuteResponse &response, int targetDPRank);  // Only for master node
 
     bool AllSlavesConnected();
 
@@ -101,12 +100,11 @@ public:
 
     ConcurrentMap<std::string, SlaveStreamPtr> &SlaveIpToStream();
 
-private:
-
+   private:
     static std::shared_ptr<GRPCCommunicator> grpcCommunicatorSingleton;
 
-    static constexpr int grpcSendReceiveBufSize = 256 * 1024 * 1024; // 256MB, 和共享内存大小对齐
-    static constexpr int maxConcurrentStreams = 128;                   // 最大并发流数
+    static constexpr int grpcSendReceiveBufSize = 256 * 1024 * 1024;  // 256MB, 和共享内存大小对齐
+    static constexpr int maxConcurrentStreams = 128;                  // 最大并发流数
 
     bool InitMaster(int respHandlerThreadCount);
 
@@ -120,7 +118,8 @@ private:
 
     bool LoadCertificates();
 
-    template <typename StreamType, typename MsgType> bool SafeWriteMsgToStream(StreamType stream, const MsgType &msg);
+    template <typename StreamType, typename MsgType>
+    bool SafeWriteMsgToStream(StreamType stream, const MsgType &msg);
 
     bool interNodeTLSEnabled_;
     std::string interNodeTlsCaPath_;
@@ -181,16 +180,16 @@ private:
 };
 
 class MasterServiceImpl final : public MasterService::Service {
-public:
+   public:
     explicit MasterServiceImpl(GRPCCommunicator *comm, int respHandlerThreadCount);
     ~MasterServiceImpl() override;
     grpc::Status RegisterAndCommunicate(ServerContext *context, SlaveStreamPtr stream) override;
-    bool Take(int targetDPRank, ExecuteResponse &response); // Get response from the blocking queue, master node only
+    bool Take(int targetDPRank, ExecuteResponse &response);  // Get response from the blocking queue, master node only
     ConcurrentMap<int, std::shared_ptr<ExecRespBlockingQueue>> &DPRankIdxToSyncResp();
 
-private:
+   private:
     GRPCCommunicator *gRPCCommunicator_;
-    ConcurrentMap<int, std::shared_ptr<ExecRespBlockingQueue>> dpRankIdxToSyncResp_; // Only for master node
+    ConcurrentMap<int, std::shared_ptr<ExecRespBlockingQueue>> dpRankIdxToSyncResp_;  // Only for master node
 
     struct SlaveResponseTask {
         int targetDPRank;
@@ -204,5 +203,5 @@ private:
     void StopRespHandlerThreads();
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

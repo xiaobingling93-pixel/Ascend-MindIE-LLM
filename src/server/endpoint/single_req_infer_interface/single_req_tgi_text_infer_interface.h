@@ -15,25 +15,27 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
 #include "parse_protocol.h"
+#include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 /**
  * @brief Triton token 格式的推理请求处理类
  */
 class SingleReqTgiTextInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqTgiTextInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                             bool isReCompute = false, bool stream = false,
                                             const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool BuildResponseJson(ResponseSPtr response, const std::vector<BestNTokens> &tempTokens, RespBodyQueue &jsonObjs,
-                            const uint64_t &timestamp = 0) override;
+                           const uint64_t &timestamp = 0) override;
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
     void SetDMIReComputeBuilder() override;
-protected:
+
+   protected:
     virtual bool EncodeTGIResponse(RespBodyQueue &jsonStrs);
     bool ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp) override;
     void SendStreamResponse(RespBodyQueue &jsonStrs) override;
@@ -42,27 +44,26 @@ protected:
     int32_t GenerateRspDetailJsonStr(nlohmann::ordered_json &jsonObj, std::string &jsonStr);
     int32_t EncodeTGIStreamResponse(RespBodyQueue &jsonStrs);
     bool AssignAdapterId(const nlohmann::ordered_json &body, RequestSPtr tmpReq, std::string &error) const;
-    std::string BuildTgiReComputeBody(const std::vector<BestNTokens>& tokens);
-    void ParseStopString(nlohmann::ordered_json& newReqJsonObj);
+    std::string BuildTgiReComputeBody(const std::vector<BestNTokens> &tokens);
+    void ParseStopString(nlohmann::ordered_json &newReqJsonObj);
     std::string ChangeUtf8Str(std::string &input) const;
 
-    bool decoderInputDetails{ false };
+    bool decoderInputDetails{false};
     uint32_t truncate = 0;
 };
 
 class SingleReqGeneralTgiTextInferInterface : public SingleReqTgiTextInferInterface {
-public:
+   public:
     explicit SingleReqGeneralTgiTextInferInterface(
         const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase, bool isReCompute = false,
         bool stream = false, const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept
-        : SingleReqTgiTextInferInterface(singleLLMReqHandlerBase, isReCompute, stream, loraConfigs)
-    {
+        : SingleReqTgiTextInferInterface(singleLLMReqHandlerBase, isReCompute, stream, loraConfigs) {
         inputParam->streamMode = stream;
     }
 
-protected:
+   protected:
     bool EncodeTGIResponse(RespBodyQueue &jsonStrs) override;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // ENDPOINT_TGI_TEXT_INFER_H

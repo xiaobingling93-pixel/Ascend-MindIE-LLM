@@ -10,18 +10,17 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include "llm_manager_v2/llm_manager_v2.h"
-#include "src/llm_manager_v2/include/impl/llm_manager_impl.h"
-#include "llm_manager/llm_manager.h"
-#include "src/server/endpoint/utils/parameters_checker.h"
 #include "check_utils.h"
-#include "memory_utils.h"
+#include "llm_manager/llm_manager.h"
+#include "llm_manager_v2/llm_manager_v2.h"
 #include "log.h"
+#include "memory_utils.h"
+#include "src/llm_manager_v2/include/impl/llm_manager_impl.h"
+#include "src/server/endpoint/utils/parameters_checker.h"
 
 namespace mindie_llm {
 
-void TransformInputId(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req)
-{
+void TransformInputId(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req) {
     TensorPtr inputIdTensorPtr = nullptr;
     req->GetTensorByName("INPUT_IDS", inputIdTensorPtr);
     if (inputIdTensorPtr == nullptr) {
@@ -39,8 +38,7 @@ void TransformInputId(std::shared_ptr<InferRequest>& req, std::shared_ptr<Reques
     }
 }
 
-void TransformStopTokenIds(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req)
-{
+void TransformStopTokenIds(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req) {
     TensorPtr stopTokenIdsTensorPtr = nullptr;
     req->GetTensorByName("STOP_TOKEN_IDS", stopTokenIdsTensorPtr);
     if (stopTokenIdsTensorPtr == nullptr) {
@@ -57,8 +55,7 @@ void TransformStopTokenIds(std::shared_ptr<InferRequest>& req, std::shared_ptr<R
     }
 }
 
-void TransformRequest(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req)
-{
+void TransformRequest(std::shared_ptr<InferRequest>& req, std::shared_ptr<Request>& v2Req) {
     auto transform = [&](const std::string& name, auto processor) {
         TensorPtr tensor = nullptr;
         req->GetTensorByName(name.c_str(), tensor);
@@ -81,9 +78,7 @@ void TransformRequest(std::shared_ptr<InferRequest>& req, std::shared_ptr<Reques
     };
 
     auto str = [](auto& field) {
-        return [&field](void* data, TensorPtr) {
-            field = std::string(static_cast<char*>(data));
-        };
+        return [&field](void* data, TensorPtr) { field = std::string(static_cast<char*>(data)); };
     };
 
     transform("LORA_ID", str(v2Req->loraId));
@@ -107,11 +102,10 @@ void TransformRequest(std::shared_ptr<InferRequest>& req, std::shared_ptr<Reques
     transform("USE_BEAM_SEARCH", scalar(v2Req->useBeamSearch));
 }
 
-std::vector<std::shared_ptr<Request>> AdaptGetRequestV1ToV2(GetRequestsCallback getRequest)
-{
+std::vector<std::shared_ptr<Request>> AdaptGetRequestV1ToV2(GetRequestsCallback getRequest) {
     auto v1Requests = getRequest();
     std::vector<std::shared_ptr<Request>> v2Requests;
-    for (auto &req : v1Requests) {
+    for (auto& req : v1Requests) {
         std::shared_ptr<Request> v2Req = std::make_shared<Request>();
         v2Req->requestId = req->GetRequestId().GetRequestIdString();
         TransformInputId(req, v2Req);
@@ -122,15 +116,14 @@ std::vector<std::shared_ptr<Request>> AdaptGetRequestV1ToV2(GetRequestsCallback 
     return v2Requests;
 }
 
-std::shared_ptr<InferTensor> TransformMetrics(std::shared_ptr<Response>& response)
-{
+std::shared_ptr<InferTensor> TransformMetrics(std::shared_ptr<Response>& response) {
     std::vector<uint64_t> metrics;
     metrics.emplace_back(response->metrics.batchSize);
     metrics.emplace_back(response->metrics.queueWaitTime);
     std::vector<int64_t> shape = {1, static_cast<int64_t>(metrics.size())};
     auto tensor = std::make_shared<InferTensor>("METRICS", InferDataType::TYPE_UINT64, shape);
     tensor->Allocate(metrics.size() * sizeof(uint64_t));
-    auto *buffer = reinterpret_cast<uint64_t *>(tensor->GetData());
+    auto* buffer = reinterpret_cast<uint64_t*>(tensor->GetData());
     tensor->SetRelease(false);
     for (std::size_t i = 0; i < metrics.size(); i++) {
         buffer[i] = metrics[i];
@@ -138,19 +131,17 @@ std::shared_ptr<InferTensor> TransformMetrics(std::shared_ptr<Response>& respons
     return tensor;
 }
 
-template<typename T, InferDataType DataType>
-std::shared_ptr<InferTensor> CreateVectorTensor(const std::string& name, std::vector<T> value)
-{
+template <typename T, InferDataType DataType>
+std::shared_ptr<InferTensor> CreateVectorTensor(const std::string& name, std::vector<T> value) {
     std::vector<int64_t> shape = {1, static_cast<int64_t>(value.size())};
     auto tensor = std::make_shared<InferTensor>(name, DataType, shape);
     tensor->Allocate(value.size() * sizeof(T));
-    std::copy(value.begin(), value.end(), static_cast<T *>(tensor->GetData()));
+    std::copy(value.begin(), value.end(), static_cast<T*>(tensor->GetData()));
     return tensor;
 }
 
-void CreateScalarTensor(const std::string &tensorName, std::vector<size_t> tensorShape, InferDataType tensorType,
-                        PVOID tensorData, TensorMap &tensors)
-{
+void CreateScalarTensor(const std::string& tensorName, std::vector<size_t> tensorShape, InferDataType tensorType,
+                        PVOID tensorData, TensorMap& tensors) {
     // 计算所需空间
     size_t tensorSize = InferTensor::GetTypeByteSize(tensorType);
     bool overflowFlag = false;
@@ -185,26 +176,25 @@ void CreateScalarTensor(const std::string &tensorName, std::vector<size_t> tenso
     if (copyRet != 0) {
         tensors.erase(responseTensor->GetName());
         throw std::runtime_error("Memory copy for tensor " + tensorName +
-                                     " failed!, tensor size=" + std::to_string(tensorSize));
+                                 " failed!, tensor size=" + std::to_string(tensorSize));
     }
 }
 
 struct TensorData {
-    std::vector<SequenceId> seqIds;              // (seq_num,)
-    std::vector<SequenceId> parentSeqIds;        // (seq_num,)
-    std::vector<TokenId> tokenIds;               // (seq_num, gen_token_num)
-    std::vector<Probability> logProbs;           // (seq_num, gen_token_num)
-    std::vector<int64_t> eosAttr;                // (seq_num, 2)
-    std::vector<int64_t> truncationIndex;        // (seq_num,)
-    std::vector<TokenId> topTokenIds;            // (seq_num, top_k, gen_token_num)
-    std::vector<Probability> topLogProbs;        // (seq_num, top_k, gen_token_num)
-    std::vector<Probability> cumulativeLogProbs; // (seq_num,)
+    std::vector<SequenceId> seqIds;               // (seq_num,)
+    std::vector<SequenceId> parentSeqIds;         // (seq_num,)
+    std::vector<TokenId> tokenIds;                // (seq_num, gen_token_num)
+    std::vector<Probability> logProbs;            // (seq_num, gen_token_num)
+    std::vector<int64_t> eosAttr;                 // (seq_num, 2)
+    std::vector<int64_t> truncationIndex;         // (seq_num,)
+    std::vector<TokenId> topTokenIds;             // (seq_num, top_k, gen_token_num)
+    std::vector<Probability> topLogProbs;         // (seq_num, top_k, gen_token_num)
+    std::vector<Probability> cumulativeLogProbs;  // (seq_num,)
 };
 
-void TransformOutPut(TensorMap& tensors, std::shared_ptr<Response>& response)
-{
+void TransformOutPut(TensorMap& tensors, std::shared_ptr<Response>& response) {
     TensorData tensorData;
-    for (ResponseContent content :response->responseContents) {
+    for (ResponseContent content : response->responseContents) {
         tensorData.seqIds.push_back(content.seqId);
         tensorData.parentSeqIds.push_back(content.parentSeqId);
         tensorData.eosAttr.push_back(static_cast<int64_t>(content.finishReason));
@@ -212,14 +202,12 @@ void TransformOutPut(TensorMap& tensors, std::shared_ptr<Response>& response)
         tensorData.truncationIndex.push_back(content.truncationIndex);
         tensorData.cumulativeLogProbs.push_back(content.cumLogProb);
 
-        std::copy(content.outTokenIds.begin(), content.outTokenIds.end(),
-                  std::back_inserter(tensorData.tokenIds));
+        std::copy(content.outTokenIds.begin(), content.outTokenIds.end(), std::back_inserter(tensorData.tokenIds));
         std::copy(content.outLogProbs.begin(), content.outLogProbs.end(), std::back_inserter(tensorData.logProbs));
 
         std::copy(content.topLogProbTokenIds.begin(), content.topLogProbTokenIds.end(),
                   std::back_inserter(tensorData.topTokenIds));
-        std::copy(content.topLogProbs.begin(), content.topLogProbs.end(),
-                  std::back_inserter(tensorData.topLogProbs));
+        std::copy(content.topLogProbs.begin(), content.topLogProbs.end(), std::back_inserter(tensorData.topLogProbs));
     }
     size_t seqNum = tensorData.seqIds.size();
     if (seqNum == 0) {
@@ -232,28 +220,24 @@ void TransformOutPut(TensorMap& tensors, std::shared_ptr<Response>& response)
     }
     size_t numTopTokens = tensorData.topTokenIds.size() / (seqNum * numParallelTokens);
 
-    CreateScalarTensor("IBIS_SEQS_ID", {seqNum}, InferDataType::TYPE_INT64,
-        tensorData.seqIds.data(), tensors);
-    CreateScalarTensor("PARENT_SEQS_ID", {seqNum}, InferDataType::TYPE_INT64,
-        tensorData.parentSeqIds.data(), tensors);
-    CreateScalarTensor("OUTPUT_IDS", {seqNum, tokenNum}, InferDataType::TYPE_INT64,
-        tensorData.tokenIds.data(), tensors);
-    CreateScalarTensor("OUTPUT_LOGPROBS", {seqNum, tokenNum}, InferDataType::TYPE_FP32,
-        tensorData.logProbs.data(), tensors);
-    CreateScalarTensor("IBIS_EOS_ATTR", {seqNum, 2}, InferDataType::TYPE_INT64,
-        tensorData.eosAttr.data(), tensors);
-    CreateScalarTensor("TRUNCATION_INDICES", {seqNum}, InferDataType::TYPE_INT64,
-        tensorData.truncationIndex.data(), tensors);
-    CreateScalarTensor("TOP_TOKEN_IDS", {seqNum, numParallelTokens, numTopTokens},
-        InferDataType::TYPE_INT64, tensorData.topTokenIds.data(), tensors);
-    CreateScalarTensor("TOP_LOGPROBS", {seqNum, numParallelTokens, numTopTokens},
-        InferDataType::TYPE_FP32, tensorData.topLogProbs.data(), tensors);
-    CreateScalarTensor("CUMULATIVE_LOGPROBS", {seqNum}, InferDataType::TYPE_FP32,
-        tensorData.cumulativeLogProbs.data(), tensors);
+    CreateScalarTensor("IBIS_SEQS_ID", {seqNum}, InferDataType::TYPE_INT64, tensorData.seqIds.data(), tensors);
+    CreateScalarTensor("PARENT_SEQS_ID", {seqNum}, InferDataType::TYPE_INT64, tensorData.parentSeqIds.data(), tensors);
+    CreateScalarTensor("OUTPUT_IDS", {seqNum, tokenNum}, InferDataType::TYPE_INT64, tensorData.tokenIds.data(),
+                       tensors);
+    CreateScalarTensor("OUTPUT_LOGPROBS", {seqNum, tokenNum}, InferDataType::TYPE_FP32, tensorData.logProbs.data(),
+                       tensors);
+    CreateScalarTensor("IBIS_EOS_ATTR", {seqNum, 2}, InferDataType::TYPE_INT64, tensorData.eosAttr.data(), tensors);
+    CreateScalarTensor("TRUNCATION_INDICES", {seqNum}, InferDataType::TYPE_INT64, tensorData.truncationIndex.data(),
+                       tensors);
+    CreateScalarTensor("TOP_TOKEN_IDS", {seqNum, numParallelTokens, numTopTokens}, InferDataType::TYPE_INT64,
+                       tensorData.topTokenIds.data(), tensors);
+    CreateScalarTensor("TOP_LOGPROBS", {seqNum, numParallelTokens, numTopTokens}, InferDataType::TYPE_FP32,
+                       tensorData.topLogProbs.data(), tensors);
+    CreateScalarTensor("CUMULATIVE_LOGPROBS", {seqNum}, InferDataType::TYPE_FP32, tensorData.cumulativeLogProbs.data(),
+                       tensors);
 }
 
-void AdaptSendResponseV2ToV1(SendResponsesCallback sendResponse, std::shared_ptr<Response> response)
-{
+void AdaptSendResponseV2ToV1(SendResponsesCallback sendResponse, std::shared_ptr<Response> response) {
     InferRequestId requestId(response->reqId);
     TensorMap tensors;
     bool isFinal = response->isEos;
@@ -267,11 +251,10 @@ void AdaptSendResponseV2ToV1(SendResponsesCallback sendResponse, std::shared_ptr
 }
 
 std::vector<std::pair<RequestIdNew, OperationV2>> AdaptControlSignalCallbackV1ToV2(
-    ControlSignalCallback controlCallback)
-{
+    ControlSignalCallback controlCallback) {
     std::vector<std::pair<RequestIdNew, OperationV2>> resultsV2;
     std::vector<std::pair<InferRequestId, Operation>> resultsV1 = controlCallback();
-    for (auto &item : resultsV1) {
+    for (auto& item : resultsV1) {
         InferRequestId requestId = item.first;
         Operation operation = item.second;
 
@@ -286,10 +269,9 @@ std::vector<std::pair<RequestIdNew, OperationV2>> AdaptControlSignalCallbackV1To
 }
 
 void AdaptStatusResponseCallbackV2ToV1(SendStatusResponseCallback statusResponseCallback, RequestIdNew requestId,
-                                       Status status, StatusResponseTypeV2 statusType)
-{
+                                       Status status, StatusResponseTypeV2 statusType) {
     InferRequestId requestIdV1(requestId);
     statusResponseCallback(requestIdV1, status, static_cast<StatusResponseType>(statusType));
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

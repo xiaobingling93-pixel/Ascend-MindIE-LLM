@@ -14,23 +14,22 @@
 #define PREFILL_FIRST_POLICY_H
 
 #include "concurrent_deque.h"
-#include "policy/stage_policy/stage_policy.h"
 #include "policy/seq_group_collection.h"
+#include "policy/stage_policy/stage_policy.h"
 
 namespace mindie_llm {
 class PrefillFirstPolicy final : public StagePolicy {
-public:
+   public:
     explicit PrefillFirstPolicy() {};
 
     PDPriorityType Apply([[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &waiting,
                          [[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &running,
-                         [[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &swapped) override
-    {
+                         [[maybe_unused]] ConcurrentDeque<SequenceGroupSPtr> &swapped) override {
         return PDPriorityType::PREFILL_FIRST;
     };
 
-private:
+   private:
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

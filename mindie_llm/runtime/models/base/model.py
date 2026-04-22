@@ -29,23 +29,23 @@ class BaseModelForCausalLM(nn.Module):
     Attributes:
         model_descriptor (ModelDescriptor): Indicates which features are enabled for this model.
     """
+
     def __init__(self, mindie_llm_config: MindIELLMConfig):
         super().__init__()
         self.mindie_llm_config = mindie_llm_config
         self.model_descriptor = self._get_model_descriptor_cls().from_config(mindie_llm_config)
 
-    @staticmethod 
-    def maybe_gather_and_unpad_for_flashcomm(hidden_states): 
-        forward_context = get_forward_context() 
-        if not forward_context.batch_descriptor.is_flash_comm_enabled: 
-            return hidden_states 
+    @staticmethod
+    def maybe_gather_and_unpad_for_flashcomm(hidden_states):
+        forward_context = get_forward_context()
+        if not forward_context.batch_descriptor.is_flash_comm_enabled:
+            return hidden_states
 
+        from mindie_llm.runtime.layers.linear.linear_op import maybe_all_gather_and_maybe_unpad
 
-        from mindie_llm.runtime.layers.linear.linear_op import maybe_all_gather_and_maybe_unpad 
-        hidden_states = maybe_all_gather_and_maybe_unpad( 
-            hidden_states, 
-            get_parallel_info_manager().get(ParallelType.ATTN_TP) 
-        ) 
+        hidden_states = maybe_all_gather_and_maybe_unpad(
+            hidden_states, get_parallel_info_manager().get(ParallelType.ATTN_TP)
+        )
         return hidden_states
 
     @staticmethod
@@ -56,8 +56,7 @@ class BaseModelForCausalLM(nn.Module):
 
         group_size = cp.group_size
         hidden_states_out = torch.zeros_like(hidden_states).repeat(group_size, *(1,) * (hidden_states.dim() - 1))
-        torch.distributed.all_gather_into_tensor(hidden_states_out, hidden_states,
-                                        group=cp.process_group)
+        torch.distributed.all_gather_into_tensor(hidden_states_out, hidden_states, group=cp.process_group)
         return hidden_states_out
 
     @staticmethod
@@ -65,13 +64,13 @@ class BaseModelForCausalLM(nn.Module):
         """The default method to get model_descriptor class."""
         return ModelDescriptor
 
-    @abstractmethod    
+    @abstractmethod
     def forward(
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         intermediate_tensors: torch.Tensor | None = None,
-        inputs_embeds: torch.Tensor | None = None
+        inputs_embeds: torch.Tensor | None = None,
     ):
         """Abstract method to compute hidden_states."""
         pass
@@ -89,7 +88,7 @@ class BaseModelForCausalLM(nn.Module):
         dp = get_parallel_info_manager().get(ParallelType.ATTN_DP)
         if not dp.is_enabled():
             return hidden_states
-        
+
         hidden_states = self._maybe_pad_cross_dp(hidden_states)
 
         # create output tensor
@@ -124,13 +123,14 @@ class BaseModelForCausalLM(nn.Module):
         result = torch.empty(
             (num_tokens_across_dp_cpu.sum(), *hidden_states.shape[1:]),
             device=hidden_states.device,
-            dtype=hidden_states.dtype)
+            dtype=hidden_states.dtype,
+        )
 
         hidden_states = hidden_states.view(dp.group_size, -1, *hidden_states.shape[1:])
         offset = 0
         for idx in range(dp_world_size):
             num_tokens_dp = num_tokens_across_dp_cpu[idx]
-            result[offset:offset + num_tokens_dp] = hidden_states[idx, :num_tokens_dp]
+            result[offset : offset + num_tokens_dp] = hidden_states[idx, :num_tokens_dp]
             offset += num_tokens_dp
         hidden_states = result
         return hidden_states

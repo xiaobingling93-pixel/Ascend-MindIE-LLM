@@ -10,25 +10,27 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#include <iostream>
-#include <atomic>
-#include <sys/wait.h>
-#include <thread>
-#include <vector>
-#include <unordered_map>
-#include <sstream>
-#include <csignal>
-#include <cstdio>
-#include <unistd.h>
 #include <dirent.h>
 #include <pybind11/embed.h>
-#include "file_utils.h"
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include <iostream>
+#include <sstream>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
 #include "common_util.h"
+#include "config_manager.h"
+#include "endpoint.h"
+#include "file_utils.h"
 #include "log.h"
 #include "log_config.h"
 #include "log_level_dynamic_handler.h"
-#include "config_manager.h"
-#include "endpoint.h"
 #include "msServiceProfiler/Tracer.h"
 
 using namespace mindie_llm;
@@ -51,8 +53,7 @@ const std::unordered_map<std::string, std::string> COMMAND_ARGS_MAP = {{"--confi
 
 namespace mindie_llm {
 
-pid_t GetPGid(pid_t pid)
-{
+pid_t GetPGid(pid_t pid) {
     // Helper: Get the PGID of a process
     std::ostringstream path;
     path << "/proc/" << pid << "/stat";
@@ -73,8 +74,7 @@ pid_t GetPGid(pid_t pid)
     return pgidField;
 }
 
-std::vector<pid_t> GetPidsInGroup(pid_t pgid)
-{
+std::vector<pid_t> GetPidsInGroup(pid_t pgid) {
     // Get all PIDs belonging to a process group
     std::vector<pid_t> pids;
 
@@ -103,13 +103,9 @@ std::vector<pid_t> GetPidsInGroup(pid_t pgid)
     return pids;
 }
 
-bool IsProcessAlive(pid_t pid)
-{
-    return (kill(pid, 0) == 0 || errno == EPERM);
-}
+bool IsProcessAlive(pid_t pid) { return (kill(pid, 0) == 0 || errno == EPERM); }
 
-void ReapZombies()
-{
+void ReapZombies() {
     int status;
     pid_t pid;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
@@ -117,8 +113,7 @@ void ReapZombies()
     }
 }
 
-void WaitForSubProcessExit(const std::vector<pid_t>& pids, int timeoutSec)
-{
+void WaitForSubProcessExit(const std::vector<pid_t>& pids, int timeoutSec) {
     auto start = std::chrono::steady_clock::now();
 
     while (true) {
@@ -138,30 +133,26 @@ void WaitForSubProcessExit(const std::vector<pid_t>& pids, int timeoutSec)
             return;
         }
 
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::steady_clock::now() - start
-        ).count();
+        auto elapsed =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start).count();
         if (elapsed >= timeoutSec) {
             std::cerr << "Timeout reached, some subprocesses still alive. Force to kill them." << std::endl;
             return;
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        std::cerr << "Waiting for subprocess exits for " << (elapsed + 1) << "/" <<
-            timeoutSec << " seconds." << std::endl;
+        std::cerr << "Waiting for subprocess exits for " << (elapsed + 1) << "/" << timeoutSec << " seconds."
+                  << std::endl;
     }
 }
 
-void KillProcessGroup()
-{
+void KillProcessGroup() {
     bool expected = false;
     if (!g_isKillingAll.compare_exchange_strong(expected, true)) {
         return;  // Is killing all processes
     }
-    
-    std::cerr << "Daemon is killing, please wait about "
-              << SUB_PROCESS_WAIT_TIME
-              << " seconds..." << std::endl;
+
+    std::cerr << "Daemon is killing, please wait about " << SUB_PROCESS_WAIT_TIME << " seconds..." << std::endl;
 
     ULOG_AUDIT("system", MINDIE_SERVER, "stop endpoint", "success");
     ULOG_AUDIT("system", MINDIE_SERVER, "stop mindie server", "success");
@@ -170,7 +161,7 @@ void KillProcessGroup()
     pid_t pgid = getpgrp();
     std::vector<pid_t> pids = GetPidsInGroup(pgid);
 
-    for (const auto& pid: pids) {
+    for (const auto& pid : pids) {
         if (pid != g_mainPid) {
             kill(pid, SIGTERM);
         }
@@ -183,7 +174,7 @@ void KillProcessGroup()
     WaitForSubProcessExit(pids, SUB_PROCESS_WAIT_TIME);
 
     // Force kill remaining
-    for (const auto& pid: pids) {
+    for (const auto& pid : pids) {
         if (pid != g_mainPid) {
             kill(pid, SIGKILL);
         }
@@ -193,8 +184,7 @@ void KillProcessGroup()
     abort();
 }
 
-void SignalInterruptHandler(int sig)
-{
+void SignalInterruptHandler(int sig) {
     if (g_isKillingAll) {
         return;
     }
@@ -215,15 +205,14 @@ void SignalInterruptHandler(int sig)
     HealthManager::UpdateHealth(false);
     g_exitCv.notify_all();
     ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, EXIT_SUBPROCESS_WARNING),
-        "Successfully handled one of SIGSEGV、SIGABRT、SIGINT、SIGTERM, now killing process group");
-    std::this_thread::sleep_for(std::chrono::milliseconds(EP_STOP_WAIT_TIME)); // wait for Endpoint.Stop
+              "Successfully handled one of SIGSEGV、SIGABRT、SIGINT、SIGTERM, now killing process group");
+    std::this_thread::sleep_for(std::chrono::milliseconds(EP_STOP_WAIT_TIME));  // wait for Endpoint.Stop
     KillProcessGroup();
 }
 
-void SignalChldHandler(int sig)
-{
+void SignalChldHandler(int sig) {
     ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, EXIT_SUBPROCESS_WARNING),
-        "Received exit signal[" << sig << "], Process " << getpid() << ", Thread " << std::this_thread::get_id());
+              "Received exit signal[" << sig << "], Process " << getpid() << ", Thread " << std::this_thread::get_id());
     int status = 0;
     pid_t pid = 0;
     bool exitFlag = false;
@@ -243,19 +232,21 @@ void SignalChldHandler(int sig)
             // Terminated by signal
             exitFlag = true;
             int signalNum = WTERMSIG(ustatus);
-            ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SYSTEM_INVOKING_ERROR),
+            ULOG_ERROR(
+                SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SYSTEM_INVOKING_ERROR),
                 "Process " << pid << " was terminated by signal " << signalNum << " (" << strsignal(signalNum) << ")");
         } else if (WIFSTOPPED(ustatus)) {
             // Stopped by signal
             exitFlag = true;
             int stopSignal = WSTOPSIG(ustatus);
-            ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SYSTEM_INVOKING_ERROR),
+            ULOG_ERROR(
+                SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SYSTEM_INVOKING_ERROR),
                 "Process " << pid << " was stopped by signal " << stopSignal << " (" << strsignal(stopSignal) << ")");
         } else {
             // Other unknown
             exitFlag = true;
             ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SYSTEM_INVOKING_ERROR),
-                "Process " << pid << " terminated with unknown status " << status);
+                       "Process " << pid << " terminated with unknown status " << status);
         }
     }
     if (exitFlag) {
@@ -267,57 +258,54 @@ void SignalChldHandler(int sig)
         g_exitCv.notify_all();
 
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, EXIT_SUBPROCESS_WARNING),
-            "Successfully handled SIGCHLD, now killing process group");
+                  "Successfully handled SIGCHLD, now killing process group");
         KillProcessGroup();
     }
 }
 
-void SignalPipeHandler(int sig)
-{
+void SignalPipeHandler(int sig) {
     ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, EXIT_SUBPROCESS_WARNING),
-        "Received exit signal[" << sig << "]");
+              "Received exit signal[" << sig << "]");
 }
 
-void RegisterSignal(void)
-{
-    sighandler_t oldSegvHandler = signal(SIGSEGV, SignalInterruptHandler); // segmentation fault
+void RegisterSignal(void) {
+    sighandler_t oldSegvHandler = signal(SIGSEGV, SignalInterruptHandler);  // segmentation fault
     if (oldSegvHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGSEGV handler failed");
+                  "Register SIGSEGV handler failed");
     }
-    sighandler_t oldAbrtHandler = signal(SIGABRT, SignalInterruptHandler); // abort()
+    sighandler_t oldAbrtHandler = signal(SIGABRT, SignalInterruptHandler);  // abort()
     if (oldAbrtHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGABRT handler failed");
+                  "Register SIGABRT handler failed");
     }
 
     sighandler_t oldIntHandler = signal(SIGINT, SignalInterruptHandler);
     if (oldIntHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGINT handler failed");
+                  "Register SIGINT handler failed");
     }
 
     sighandler_t oldTermHandler = signal(SIGTERM, SignalInterruptHandler);
     if (oldTermHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGTERM handler failed");
+                  "Register SIGTERM handler failed");
     }
 
     sighandler_t oldChildHandler = signal(SIGCHLD, SignalChldHandler);
     if (oldChildHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGCHLD handler failed");
+                  "Register SIGCHLD handler failed");
     }
 
     sighandler_t oldPipeHandler = signal(SIGPIPE, SignalPipeHandler);
     if (oldPipeHandler == SIG_ERR) {
         ULOG_WARN(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(WARNING, SUBMODLE_FEATURE_INIT, CHECK_WARNING),
-            "Register SIGPIPE handler failed");
+                  "Register SIGPIPE handler failed");
     }
 }
 
-void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap)
-{
+void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap) {
     PyEval_SaveThread();
     pthread_setname_np(pthread_self(), "RunEP");
     std::string fileNamePrefix = "mindie-server";
@@ -328,7 +316,7 @@ void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap)
         ULOG_AUDIT("system", MINDIE_SERVER, "start mindie server", "fail");
         mindie_llm::Log::Flush();
         ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-            "Failed to init endpoint! Please check the service log or console output.");
+                   "Failed to init endpoint! Please check the service log or console output.");
         killpg(getpgrp(), SIGKILL);
     } else {
         ULOG_AUDIT("system", MINDIE_SERVER, "start endpoint", "success");
@@ -339,8 +327,7 @@ void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap)
             std::unique_lock<std::mutex> lock(g_exitMtx);
             g_exitCv.wait(lock, []() { return g_processExit; });
             ep.GetHealthcheckerInstance().EnqueueErrorMessage(
-                GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SUBPROCESS_ERROR),
-                SUBMODLE_NAME_DAEMON);
+                GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, SUBPROCESS_ERROR), SUBMODLE_NAME_DAEMON);
             if (g_processExit && g_expertParallel) {
                 ULOG_INFO(SUBMODLE_NAME_DAEMON, "Update Status By ErrorItem");
                 g_processExit = false;
@@ -351,8 +338,7 @@ void RunEP(std::unordered_map<std::string, std::string> commandLineArgsMap)
     }
 }
 
-bool ParseCommandLineArgs(int &argc, char **argv, std::unordered_map<std::string, std::string> &commandLineArgsMap)
-{
+bool ParseCommandLineArgs(int& argc, char** argv, std::unordered_map<std::string, std::string>& commandLineArgsMap) {
     if (argv == nullptr || argc <= 0) {
         ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
                    "Invalid command-line arguments.");
@@ -363,7 +349,7 @@ bool ParseCommandLineArgs(int &argc, char **argv, std::unordered_map<std::string
                    "The number of command-line arguments exceeds the limit.");
         return false;
     }
-    size_t i = 1; // 从第一个参数开始解析
+    size_t i = 1;  // 从第一个参数开始解析
     size_t interval = 2;
     while (i < static_cast<size_t>(argc)) {
         const std::string configKey(argv[i]);
@@ -377,10 +363,11 @@ bool ParseCommandLineArgs(int &argc, char **argv, std::unordered_map<std::string
             commandLineArgsMap[it->second] = argv[i + 1];
             i += interval;
         } else {
-            std::string expectedKeys = std::accumulate(COMMAND_ARGS_MAP.begin(), COMMAND_ARGS_MAP.end(),
-                std::string{}, [](const std::string& totalKeys, const auto& pair) {
-                    return totalKeys + (totalKeys.empty() ? "" : ", ") + pair.first;
-                });
+            std::string expectedKeys =
+                std::accumulate(COMMAND_ARGS_MAP.begin(), COMMAND_ARGS_MAP.end(), std::string{},
+                                [](const std::string& totalKeys, const auto& pair) {
+                                    return totalKeys + (totalKeys.empty() ? "" : ", ") + pair.first;
+                                });
             ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
                        "Unrecognized command-line argument, expect [" << expectedKeys << "]");
             return false;
@@ -388,10 +375,9 @@ bool ParseCommandLineArgs(int &argc, char **argv, std::unordered_map<std::string
     }
     return true;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char* argv[]) {
     Py_Initialize();
     static_assert(std::atomic<bool>::is_always_lock_free, "Bool type should be lock-free.");
     g_mainPid = getpid();
@@ -399,7 +385,7 @@ int main(int argc, char *argv[])
     spdlog::init_thread_pool(LOGGER_QUEUE_SIZE, LOGGER_THREAD_NUM);
     mindie_llm::Log::CreateAllLoggers();
     constexpr int kDynamicLogCheckIntervalMs = 5000;
-    LogLevelDynamicHandler::Init(kDynamicLogCheckIntervalMs, true); // 每5秒检查动态日志配置
+    LogLevelDynamicHandler::Init(kDynamicLogCheckIntervalMs, true);  // 每5秒检查动态日志配置
     std::unordered_map<std::string, std::string> commandLineArgsMap;
     if (setpgrp() == -1) {
         ULOG_ERROR(SUBMODLE_NAME_DAEMON, GenerateDaemonErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
@@ -413,7 +399,7 @@ int main(int argc, char *argv[])
     if (it != commandLineArgsMap.end() && it->second == "true") {
         g_expertParallel = true;
     }
-    RegisterSignal(); // register signal
+    RegisterSignal();  // register signal
     PROF(msServiceProfiler::TraceContext::addResAttribute("service.name", "mindie.service"));
     std::thread businessThread(RunEP, commandLineArgsMap);
     businessThread.join();

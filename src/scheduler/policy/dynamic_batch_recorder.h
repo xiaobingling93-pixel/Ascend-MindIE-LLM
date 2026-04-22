@@ -31,7 +31,7 @@ class DecodeBatchSizeTracker;
  * batch size decisions in DP aggregation scenarios.
  */
 class DynamicBatchRecorder {
-public:
+   public:
     DynamicBatchRecorder(const DynamicBatchRecorder &) = delete;
     DynamicBatchRecorder &operator=(const DynamicBatchRecorder &) = delete;
 
@@ -92,15 +92,15 @@ public:
      * @param maxDecodeRequestNum Output: Maximum decode request count across all DPs
      * @return Number of valid DPs that contributed data
      */
-    static size_t AggregateAllFromAllDPs(size_t forwardNum, double &maxDecodeLatency,
-                                         uint64_t &maxBatchSize, size_t &maxDecodeRequestNum);
+    static size_t AggregateAllFromAllDPs(size_t forwardNum, double &maxDecodeLatency, uint64_t &maxBatchSize,
+                                         size_t &maxDecodeRequestNum);
 
     ~DynamicBatchRecorder() = default;
 
-private:
+   private:
     explicit DynamicBatchRecorder(size_t localDPRank);
 
-private:
+   private:
     size_t localDPRank_{0};
     size_t runningSize_{0};
     std::shared_ptr<LatencyPredictor> predictor_{nullptr};
@@ -110,6 +110,6 @@ private:
     static std::mutex mutex_;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // DYNAMIC_BATCH_RECORDER_H
+#endif  // DYNAMIC_BATCH_RECORDER_H

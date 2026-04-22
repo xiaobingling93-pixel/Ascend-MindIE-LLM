@@ -24,8 +24,10 @@ class CoreThread(threading.Thread):
         except Exception as e:
             error_code = convert_exception_to_error_code(str(e))
             if isinstance(e, RuntimeError) and error_code is not None:
-                message = (f'{error_code.name} fault happened and will be reported to Llm engine with'
-                            f'error code: {error_code.value}.')
+                message = (
+                    f"{error_code.name} fault happened and will be reported to Llm engine with"
+                    f"error code: {error_code.value}."
+                )
                 logger.error(message)
             else:
                 traceback.print_exc()

@@ -12,22 +12,23 @@
 
 #include "system_log.h"
 
-#include <iostream>
-#include <iomanip>
-#include <chrono>
-#include <ctime>
-#include <cstdlib>
-#include <unistd.h>
-#include <sys/syscall.h>
-#include <sys/uio.h>
-#include <sys/prctl.h>
-#include <algorithm>
-#include <execinfo.h>
+#include <Python.h>
 #include <cxxabi.h>
 #include <dlfcn.h>
+#include <execinfo.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <sys/uio.h>
+#include <unistd.h>
 
-#include <Python.h>
+#include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
+#include <iomanip>
+#include <iostream>
 
+#include "file_system.h"
 #include "safe_envvar.h"
 #include "safe_path.h"
 #include "string_utils.h"
@@ -41,17 +42,14 @@ static constexpr size_t BUFFER_SIZE_256 = 256;
 static constexpr size_t BUFFER_SIZE_512 = 512;
 static constexpr size_t BUFFER_SIZE_2048 = 2048;
 
-const std::array<std::string, static_cast<uint8_t>(LogSeverity::__COUNT__) - 1>& GetLogSeverityNameArray()
-{
+const std::array<std::string, static_cast<uint8_t>(LogSeverity::__COUNT__) - 1>& GetLogSeverityNameArray() {
     // Note: levelNames are in the same order as LogSeverity.
     static const std::array<std::string, static_cast<uint8_t>(LogSeverity::__COUNT__) - 1> levelNames = {
-        "debug", "info", "warn", "error", "critical"
-    };
+        "debug", "info", "warn", "error", "critical"};
     return levelNames;
 }
 
-const std::unordered_set<std::string>& GetAllLogSeverity()
-{
+const std::unordered_set<std::string>& GetAllLogSeverity() {
     static const std::unordered_set<std::string> values = [] {
         std::unordered_set<std::string> s;
         for (const auto& name : GetLogSeverityNameArray()) {
@@ -62,17 +60,14 @@ const std::unordered_set<std::string>& GetAllLogSeverity()
     return values;
 }
 
-const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)>& GetLogTypeNameArray()
-{
+const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)>& GetLogTypeNameArray() {
     // Note: typeNames are in the same order as LogType.
-    static const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)> typeNames = {
-        "general", "request", "token", "tokenizer"
-    };
+    static const std::array<std::string, static_cast<uint8_t>(LogType::__COUNT__)> typeNames = {"general", "request",
+                                                                                                "token", "tokenizer"};
     return typeNames;
 }
 
-bool String2LogType(const std::string& s, LogType& out)
-{
+bool String2LogType(const std::string& s, LogType& out) {
     const auto& typeNames = GetLogTypeNameArray();
     for (uint8_t i = 0; i < typeNames.size(); ++i) {
         if (typeNames[i] == s) {
@@ -83,30 +78,24 @@ bool String2LogType(const std::string& s, LogType& out)
     return false;
 }
 
-static const std::unordered_map<LogType, std::string> logType2StrMap = {
-    {LogType::GENERAL, "mindie-llm"},
-    {LogType::REQUEST, "mindie-llm-request"},
-    {LogType::TOKEN, "mindie-llm-token"},
-    {LogType::TOKENIZER, "mindie-llm-tokenizer"}
-};
+static const std::unordered_map<LogType, std::string> logType2StrMap = {{LogType::GENERAL, "mindie-llm"},
+                                                                        {LogType::REQUEST, "mindie-llm-request"},
+                                                                        {LogType::TOKEN, "mindie-llm-token"},
+                                                                        {LogType::TOKENIZER, "mindie-llm-tokenizer"}};
 
-const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)>& GetComponentNameArray()
-{
+const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)>& GetComponentNameArray() {
     // Note: compNames are in the same order as LogComponent.
-    static const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)> compNames = {
-        "llm", "llmmodels", "server"
-    };
+    static const std::array<std::string, static_cast<uint8_t>(LogComponent::__COUNT__)> compNames = {"llm", "llmmodels",
+                                                                                                     "server"};
     return compNames;
 }
 
-const std::string& Component2String(LogComponent c)
-{
+const std::string& Component2String(LogComponent c) {
     const auto& compNames = GetComponentNameArray();
     return compNames[static_cast<uint8_t>(c)];
 }
 
-bool String2Component(const std::string& s, LogComponent& out)
-{
+bool String2Component(const std::string& s, LogComponent& out) {
     const auto& compNames = GetComponentNameArray();
     for (uint8_t i = 0; i < compNames.size(); ++i) {
         if (compNames[i] == s) {
@@ -121,8 +110,7 @@ enum class TimestampFormat { READABLE, TIGHT };
 
 // ================= Log utils =================
 
-bool String2LogSeverity(const std::string& in, LogSeverity& out)
-{
+bool String2LogSeverity(const std::string& in, LogSeverity& out) {
     std::string key = in;
     ToLower(key);
     const auto& names = GetLogSeverityNameArray();
@@ -135,12 +123,11 @@ bool String2LogSeverity(const std::string& in, LogSeverity& out)
     return false;
 }
 
-void AppendCurTimestamp(std::string& out, TimestampFormat format)
-{
+void AppendCurTimestamp(std::string& out, TimestampFormat format) {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto sec = time_point_cast<seconds>(now);
-    auto ms  = duration_cast<milliseconds>(now - sec).count();
+    auto ms = duration_cast<milliseconds>(now - sec).count();
     std::time_t t = system_clock::to_time_t(sec);
     std::tm tbuf;
     localtime_r(&t, &tbuf);
@@ -163,24 +150,21 @@ void AppendCurTimestamp(std::string& out, TimestampFormat format)
     out.append(buf, length);
 }
 
-std::string GetTightTimestamp()
-{
-    static constexpr size_t tightTimestampLength = 17; // YYYYMMDDHHMMSSmmm
+std::string GetTightTimestamp() {
+    static constexpr size_t tightTimestampLength = 17;  // YYYYMMDDHHMMSSmmm
     std::string ts;
     ts.reserve(tightTimestampLength);
     AppendCurTimestamp(ts, TimestampFormat::TIGHT);
     return ts;
 }
 
-inline void AppendComponent(std::string& out, const std::string& comp)
-{
+inline void AppendComponent(std::string& out, const std::string& comp) {
     out.append(" [");
     out.append(comp);
     out.push_back(']');
 }
 
-inline void AppendInt(std::string& out, uint64_t v, int width = 0)
-{
+inline void AppendInt(std::string& out, uint64_t v, int width = 0) {
     char buf[BUFFER_SIZE_32];
     char* p = buf + sizeof(buf);
     do {
@@ -194,30 +178,22 @@ inline void AppendInt(std::string& out, uint64_t v, int width = 0)
     out.append(p, buf + sizeof(buf));
 }
 
-inline void AppendPid(std::string& out)
-{
+inline void AppendPid(std::string& out) {
     out.append(" [");
     AppendInt(out, ::getpid());
     out.push_back(']');
 }
 
-inline void AppendTid(std::string& out)
-{
+inline void AppendTid(std::string& out) {
     out.append(" [");
     AppendInt(out, static_cast<uint64_t>(::syscall(SYS_gettid)));
     out.push_back(']');
 }
 
-inline std::string LogSeverity2String(LogSeverity level)
-{
+inline std::string LogSeverity2String(LogSeverity level) {
     static const std::unordered_map<LogSeverity, std::string> logSeverity2StrMap = {
-        {LogSeverity::DEBUG, "DEBUG"},
-        {LogSeverity::INFO, "INFO"},
-        {LogSeverity::WARN, "WARN"},
-        {LogSeverity::ERROR, "ERROR"},
-        {LogSeverity::CRITICAL, "CRITICAL"},
-        {LogSeverity::AUDIT, "AUDIT"}
-    };
+        {LogSeverity::DEBUG, "DEBUG"}, {LogSeverity::INFO, "INFO"},         {LogSeverity::WARN, "WARN"},
+        {LogSeverity::ERROR, "ERROR"}, {LogSeverity::CRITICAL, "CRITICAL"}, {LogSeverity::AUDIT, "AUDIT"}};
     auto it = logSeverity2StrMap.find(level);
     if (it != logSeverity2StrMap.end()) {
         return it->second;
@@ -225,15 +201,13 @@ inline std::string LogSeverity2String(LogSeverity level)
     return "INFO";
 }
 
-inline void AppendLevel(std::string& out, LogSeverity level)
-{
+inline void AppendLevel(std::string& out, LogSeverity level) {
     out.append(" [");
     out.append(LogSeverity2String(level));
     out.push_back(']');
 }
 
-inline void FilterAndAppend(std::string& out, const char* input, size_t length)
-{
+inline void FilterAndAppend(std::string& out, const char* input, size_t length) {
     static constexpr unsigned char kAsciiControlMin = 0x00;
     static constexpr unsigned char kAsciiControlMax = 0x1F;
     static constexpr unsigned char kAsciiDelete = 0x7F;
@@ -253,8 +227,7 @@ inline void FilterAndAppend(std::string& out, const char* input, size_t length)
     }
 }
 
-void ParseRotateArgs(const std::string& argsStr, uint32_t& outLogFileSize, uint32_t& outLogFileNum)
-{
+void ParseRotateArgs(const std::string& argsStr, uint32_t& outLogFileSize, uint32_t& outLogFileNum) {
     std::unordered_map<std::string, std::string> rotateArgs = ParseArgs(argsStr);
     if (rotateArgs.find("-fs") != rotateArgs.end()) {
         Result r = Str2Int(rotateArgs["-fs"], "logFileSize", outLogFileSize);
@@ -263,9 +236,9 @@ void ParseRotateArgs(const std::string& argsStr, uint32_t& outLogFileSize, uint3
         }
         outLogFileSize *= SIZE_1MB;
         if (outLogFileSize < SIZE_1MB || outLogFileSize > SIZE_500MB) {
-            throw std::runtime_error("Log file size must be between 1 MB and 500 MB, got: " +
-                                     std::to_string(outLogFileSize) + " bytes (" +
-                                     std::to_string(outLogFileSize / SIZE_1MB) + " MB)");
+            throw std::runtime_error(
+                "Log file size must be between 1 MB and 500 MB, got: " + std::to_string(outLogFileSize) + " bytes (" +
+                std::to_string(outLogFileSize / SIZE_1MB) + " MB)");
         }
     }
     if (rotateArgs.find("-r") != rotateArgs.end()) {
@@ -282,8 +255,7 @@ void ParseRotateArgs(const std::string& argsStr, uint32_t& outLogFileSize, uint3
     }
 }
 
-inline void AppendFileLine(std::string& out, const char* file, int line)
-{
+inline void AppendFileLine(std::string& out, const char* file, int line) {
     out.append(" [");
     out.append(GetBasename(file));
     out.push_back(':');
@@ -291,16 +263,14 @@ inline void AppendFileLine(std::string& out, const char* file, int line)
     out.append("] ");
 }
 
-static std::string MakeRotateName(const std::string& base, int idx)
-{
+static std::string MakeRotateName(const std::string& base, int idx) {
     // idx = 1 → .01.log
     char buf[BUFFER_SIZE_32];
     std::snprintf(buf, sizeof(buf), ".%02d.log", idx);
     return base + buf;
 }
 
-static std::string GetStackTrace(size_t skip)
-{
+static std::string GetStackTrace(size_t skip) {
     void* buffer[BUFFER_SIZE_32];
     int nptrs = ::backtrace(buffer, BUFFER_SIZE_32) - 3;
     if (nptrs <= 0 || nptrs <= static_cast<int>(skip)) {
@@ -318,10 +288,8 @@ static std::string GetStackTrace(size_t skip)
         std::string function = "??";
         if (info.dli_sname) {
             int status = 0;
-            std::unique_ptr<char, void(*)(void*)> demangled(
-                abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status),
-                std::free
-            );
+            std::unique_ptr<char, void (*)(void*)> demangled(
+                abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status), std::free);
             if (status == 0 && demangled) {
                 function = demangled.get();
             } else {
@@ -333,8 +301,7 @@ static std::string GetStackTrace(size_t skip)
     return oss.str();
 }
 
-static std::string GetPythonStackTrace()
-{
+static std::string GetPythonStackTrace() {
     std::string result;
     PyGILState_STATE gil = PyGILState_Ensure();
 
@@ -384,24 +351,16 @@ static std::string GetPythonStackTrace()
 
 // ================= LogManager =================
 
-LogManager& LogManager::GetInstance()
-{
+LogManager& LogManager::GetInstance() {
     static LogManager inst;
     return inst;
 }
 
-LogManager::LogManager()
-{
-    Init();
-}
+LogManager::LogManager() { Init(); }
 
-LogManager::~LogManager()
-{
-    Stop();
-}
+LogManager::~LogManager() { Stop(); }
 
-void LogManager::Stop()
-{
+void LogManager::Stop() {
     if (!isRunning_) {
         return;
     }
@@ -411,8 +370,7 @@ void LogManager::Stop()
     }
 }
 
-void LogManager::Init()
-{
+void LogManager::Init() {
     LoadComponentConfigs();
     if (IsAnyComponentToFile()) {
         GetLogRotate();
@@ -424,9 +382,9 @@ void LogManager::Init()
     pthread_setname_np(flushThread_.native_handle(), "LogFlushThread");
 }
 
-void LogManager::LoadComponentConfigs()
-{
-    LoadByComponentByEnv<LogSeverity>(MINDIE_LOG_LEVEL, DEFAULT_MINDIE_LOG_LEVEL, GetAllLogSeverity(),
+void LogManager::LoadComponentConfigs() {
+    LoadByComponentByEnv<LogSeverity>(
+        MINDIE_LOG_LEVEL, DEFAULT_MINDIE_LOG_LEVEL, GetAllLogSeverity(),
         [](const std::string& s) {
             LogSeverity lvl;
             if (!String2LogSeverity(s, lvl)) {
@@ -434,38 +392,21 @@ void LogManager::LoadComponentConfigs()
             }
             return lvl;
         },
-        [](ComponentConfig& c, LogSeverity v) {
-            c.minLevel = v;
-        }
-    );
-    LoadByComponentByEnv<bool>(MINDIE_LOG_TO_STDOUT, DEFAULT_MINDIE_LOG_TO_STDOUT, {"true", "false", "1", "0"},
-        [](const std::string& s) {
-            return s == "1" || s == "true";
-        },
-        [](ComponentConfig& c, bool v) {
-            c.toStdout = v;
-        }
-    );
-    LoadByComponentByEnv<bool>(MINDIE_LOG_TO_FILE, DEFAULT_MINDIE_LOG_TO_FILE, {"true", "false", "1", "0"},
-        [](const std::string& s) {
-            return s == "1" || s == "true";
-        },
-        [](ComponentConfig& c, bool v) {
-            c.toFile = v;
-        }
-    );
-    LoadByComponentByEnv<bool>(MINDIE_LOG_VERBOSE, DEFAULT_MINDIE_LOG_VERBOSE, {"true", "false", "1", "0"},
-        [](const std::string& s) {
-            return s == "1" || s == "true";
-        },
-        [](ComponentConfig& c, bool v) {
-            c.verbose = v;
-        }
-    );
+        [](ComponentConfig& c, LogSeverity v) { c.minLevel = v; });
+    LoadByComponentByEnv<bool>(
+        MINDIE_LOG_TO_STDOUT, DEFAULT_MINDIE_LOG_TO_STDOUT, {"true", "false", "1", "0"},
+        [](const std::string& s) { return s == "1" || s == "true"; },
+        [](ComponentConfig& c, bool v) { c.toStdout = v; });
+    LoadByComponentByEnv<bool>(
+        MINDIE_LOG_TO_FILE, DEFAULT_MINDIE_LOG_TO_FILE, {"true", "false", "1", "0"},
+        [](const std::string& s) { return s == "1" || s == "true"; }, [](ComponentConfig& c, bool v) { c.toFile = v; });
+    LoadByComponentByEnv<bool>(
+        MINDIE_LOG_VERBOSE, DEFAULT_MINDIE_LOG_VERBOSE, {"true", "false", "1", "0"},
+        [](const std::string& s) { return s == "1" || s == "true"; },
+        [](ComponentConfig& c, bool v) { c.verbose = v; });
 }
 
-bool LogManager::IsAnyComponentToFile() const
-{
+bool LogManager::IsAnyComponentToFile() const {
     for (const auto& c : componentCfgs_) {
         if (c.toFile) {
             return true;
@@ -474,13 +415,9 @@ bool LogManager::IsAnyComponentToFile() const
     return false;
 }
 
-ComponentConfig& LogManager::GetComponentConfig(LogComponent comp)
-{
-    return componentCfgs_[static_cast<size_t>(comp)];
-}
+ComponentConfig& LogManager::GetComponentConfig(LogComponent comp) { return componentCfgs_[static_cast<size_t>(comp)]; }
 
-bool LogManager::IsPrintLog(LogComponent comp, LogSeverity level)
-{
+bool LogManager::IsPrintLog(LogComponent comp, LogSeverity level) {
     if (level != LogSeverity::AUDIT) {
         auto& cfg = GetComponentConfig(comp);
         return isRunning_ && level >= cfg.minLevel && (cfg.toStdout || cfg.toFile);
@@ -489,15 +426,14 @@ bool LogManager::IsPrintLog(LogComponent comp, LogSeverity level)
     }
 }
 
-void LogManager::GetLogRotate()
-{
+void LogManager::GetLogRotate() {
     std::string rotateVal;
     Result r = EnvVar::GetInstance().Get(MINDIE_LOG_ROTATE, DEFAULT_MINDIE_LOG_ROTATE, rotateVal);
     if (!r.IsOk()) {
         throw std::runtime_error(r.message());
     }
-    std::unordered_map<std::string, std::string> rotateValMap = ParseKeyValueString(
-        rotateVal, {}, ALL_COMPONENT, ';', ':');
+    std::unordered_map<std::string, std::string> rotateValMap =
+        ParseKeyValueString(rotateVal, {}, ALL_COMPONENT, ';', ':');
     if (rotateValMap.count(LLM)) {
         ParseRotateArgs(rotateValMap[LLM], logFileSize_, logFileNum_);
     }
@@ -506,8 +442,7 @@ void LogManager::GetLogRotate()
     }
 }
 
-void LogManager::GetLogDirs()
-{
+void LogManager::GetLogDirs() {
     Result r = EnvVar::GetInstance().Get(MINDIE_LOG_PATH, DEFAULT_MINDIE_LOG_PATH, logDir_);
     if (!r.IsOk()) {
         throw std::runtime_error(r.message());
@@ -527,8 +462,7 @@ void LogManager::GetLogDirs()
     }
 }
 
-void LogManager::OpenLogFiles()
-{
+void LogManager::OpenLogFiles() {
     for (size_t i = 0; i < static_cast<size_t>(LogType::__COUNT__); ++i) {
         LogType type = static_cast<LogType>(i);
         CreateLogFilePath(type);
@@ -542,12 +476,12 @@ void LogManager::OpenLogFiles()
     }
 }
 
-void LogManager::CreateLogFilePath(LogType type)
-{
+void LogManager::CreateLogFilePath(LogType type) {
     const size_t idx = static_cast<size_t>(type);
     auto& sink = sinks_[idx];
-    sink.basePath = logDir_ + Join(
-        std::vector<std::string>{logType2StrMap.at(type), std::to_string(getpid()), GetTightTimestamp()}, "_");
+    sink.basePath =
+        logDir_ +
+        Join(std::vector<std::string>{logType2StrMap.at(type), std::to_string(getpid()), GetTightTimestamp()}, "_");
     SafePath logBasePath(sink.basePath, PathType::FILE, "a+", PERM_440);
     Result r = logBasePath.Check(sink.basePath, false);
     if (!r.IsOk()) {
@@ -556,8 +490,7 @@ void LogManager::CreateLogFilePath(LogType type)
     sink.filePath = sink.basePath + ".log";
 }
 
-void LogManager::Push(LogComponent comp, LogType type, std::string&& msg)
-{
+void LogManager::Push(LogComponent comp, LogType type, std::string&& msg) {
     if (!isRunning_) {
         return;
     }
@@ -569,8 +502,7 @@ void LogManager::Push(LogComponent comp, LogType type, std::string&& msg)
     buffers_[idx].push_back(MsgPkg{comp, type, std::move(msg)});
 }
 
-void LogManager::FlushLoop()
-{
+void LogManager::FlushLoop() {
     while (isRunning_) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
         Writer();
@@ -578,8 +510,7 @@ void LogManager::FlushLoop()
     Writer();
 }
 
-void LogManager::Writer()
-{
+void LogManager::Writer() {
     BufferArray local;
     for (size_t i = 0; i < local.size(); ++i) {
         std::lock_guard<std::mutex> lock(bufferMutex_[i]);
@@ -594,10 +525,7 @@ void LogManager::Writer()
         for (auto& m : msgs) {
             const auto& cfg = componentCfgs_[static_cast<size_t>(m.component)];
             if (cfg.toStdout) {
-                struct iovec iov[2] = {
-                    { const_cast<char*>(m.msg.data()), m.msg.size() },
-                    { const_cast<char*>("\n"), 1 }
-                };
+                struct iovec iov[2] = {{const_cast<char*>(m.msg.data()), m.msg.size()}, {const_cast<char*>("\n"), 1}};
                 ssize_t ret = ::writev(STDOUT_FILENO, iov, 2);
                 if (ret == -1) {
                     perror("writev failed for system log.");
@@ -618,8 +546,7 @@ void LogManager::Writer()
     }
 }
 
-uint32_t LogManager::GetLogFileSizeCutOff(LogType type) const
-{
+uint32_t LogManager::GetLogFileSizeCutOff(LogType type) const {
     if (type != LogType::TOKEN) {
         return logFileSize_;
     } else {
@@ -627,8 +554,7 @@ uint32_t LogManager::GetLogFileSizeCutOff(LogType type) const
     }
 }
 
-uint32_t LogManager::GetLogFileNumCutOff(LogType type) const
-{
+uint32_t LogManager::GetLogFileNumCutOff(LogType type) const {
     if (type != LogType::TOKEN) {
         return logFileNum_;
     } else {
@@ -637,8 +563,7 @@ uint32_t LogManager::GetLogFileNumCutOff(LogType type) const
     }
 }
 
-void LogManager::RotateLogs(LogType type)
-{
+void LogManager::RotateLogs(LogType type) {
     // RotateLogs only called in flush thread. RotateLogs <- Writer <- FlushLoop
     const size_t idx = static_cast<size_t>(type);
     auto& sink = sinks_[idx];
@@ -665,16 +590,11 @@ void LogManager::RotateLogs(LogType type)
 
 // ================= Logger =================
 
-Logger::Logger(LogComponent comp, LogSeverity level)
-    : component_(comp), level_(level) {}
+Logger::Logger(LogComponent comp, LogSeverity level) : component_(comp), level_(level) {}
 
-bool Logger::ShouldLog() const
-{
-    return LogManager::GetInstance().IsPrintLog(component_, level_);
-}
+bool Logger::ShouldLog() const { return LogManager::GetInstance().IsPrintLog(component_, level_); }
 
-void Logger::AssembleAndPush(LogType type, const char* file, size_t line, std::string& stack)
-{
+void Logger::AssembleAndPush(LogType type, const char* file, size_t line, std::string& stack) {
     if (stream_.tellp() == std::streampos(0)) {
         return;
     }
@@ -698,8 +618,7 @@ void Logger::AssembleAndPush(LogType type, const char* file, size_t line, std::s
     LogManager::GetInstance().Push(component_, type, std::move(out));
 }
 
-void Logger::Reset()
-{
+void Logger::Reset() {
     stream_.str("");
     stream_.clear();
 }
@@ -707,8 +626,7 @@ void Logger::Reset()
 // ================= LogLine =================
 
 LogLine::LogLine(LogComponent comp, LogSeverity level, const char* file, size_t line)
-    : logger_(GetThreadLogger(comp, level)), enabled_(false), file_(file), line_(line)
-{
+    : logger_(GetThreadLogger(comp, level)), enabled_(false), file_(file), line_(line) {
     logger_.Reset();
     enabled_ = logger_.ShouldLog();
     if (enabled_ && (level == LogSeverity::ERROR || level == LogSeverity::CRITICAL)) {
@@ -716,8 +634,7 @@ LogLine::LogLine(LogComponent comp, LogSeverity level, const char* file, size_t 
     }
 }
 
-LogLine::~LogLine()
-{
+LogLine::~LogLine() {
     if (!enabled_) {
         return;
     }
@@ -725,8 +642,7 @@ LogLine::~LogLine()
     logger_.Reset();
 }
 
-std::string LogLine::BuildStackTrace()
-{
+std::string LogLine::BuildStackTrace() {
     static constexpr size_t kSkip = 3;
     std::string result;
 
@@ -745,53 +661,42 @@ std::string LogLine::BuildStackTrace()
 
 // ================= thread_local Logger =================
 
-Logger& GetThreadLogger(LogComponent comp, LogSeverity level)
-{
+Logger& GetThreadLogger(LogComponent comp, LogSeverity level) {
     static thread_local std::array<std::array<Logger, static_cast<uint8_t>(LogSeverity::__COUNT__)>,
-        static_cast<uint8_t>(LogComponent::__COUNT__)> loggers = [] {
-        std::array<std::array<Logger, static_cast<uint8_t>(LogSeverity::__COUNT__)>,
-            static_cast<uint8_t>(LogComponent::__COUNT__)
-        > arr{};
-        for (uint8_t c = 0; c < static_cast<uint8_t>(LogComponent::__COUNT__); ++c) {
-            for (uint8_t l = 0; l < static_cast<uint8_t>(LogSeverity::__COUNT__); ++l) {
-                arr[c][l] = Logger(
-                    static_cast<LogComponent>(c), static_cast<LogSeverity>(l)
-                );
+                                   static_cast<uint8_t>(LogComponent::__COUNT__)>
+        loggers = [] {
+            std::array<std::array<Logger, static_cast<uint8_t>(LogSeverity::__COUNT__)>,
+                       static_cast<uint8_t>(LogComponent::__COUNT__)>
+                arr{};
+            for (uint8_t c = 0; c < static_cast<uint8_t>(LogComponent::__COUNT__); ++c) {
+                for (uint8_t l = 0; l < static_cast<uint8_t>(LogSeverity::__COUNT__); ++l) {
+                    arr[c][l] = Logger(static_cast<LogComponent>(c), static_cast<LogSeverity>(l));
+                }
             }
-        }
-        return arr;
-    }();
+            return arr;
+        }();
     return loggers[static_cast<uint8_t>(comp)][static_cast<uint8_t>(level)];
 }
 
 // ================= DynamicLogManager =================
 
-DynamicLogManager &DynamicLogManager::GetInstance()
-{
+DynamicLogManager& DynamicLogManager::GetInstance() {
     static DynamicLogManager inst;
     return inst;
 }
 
-DynamicLogManager::DynamicLogManager()
-{
-    Init();
-}
+DynamicLogManager::DynamicLogManager() { Init(); }
 
-void DynamicLogManager::Init()
-{
+void DynamicLogManager::Init() {
     GetDefaultLogSeverity();
     isRunning_ = true;
     monitorThread_ = std::thread(&DynamicLogManager::Monitor, this);
     pthread_setname_np(monitorThread_.native_handle(), "DynamicLogMonitorThread");
 }
 
-DynamicLogManager::~DynamicLogManager()
-{
-    Stop();
-}
+DynamicLogManager::~DynamicLogManager() { Stop(); }
 
-void DynamicLogManager::Stop()
-{
+void DynamicLogManager::Stop() {
     if (!isRunning_) {
         return;
     }
@@ -801,13 +706,11 @@ void DynamicLogManager::Stop()
     }
 }
 
-void DynamicLogManager::GetDefaultLogSeverity()
-{
+void DynamicLogManager::GetDefaultLogSeverity() {
     EnvVar::GetInstance().Get(MINDIE_LOG_LEVEL, DEFAULT_MINDIE_LOG_LEVEL, defaultLogSeverity_);
 }
 
-void DynamicLogManager::Monitor()
-{
+void DynamicLogManager::Monitor() {
     while (isRunning_) {
         try {
             GetAndSetLogConfig();
@@ -818,8 +721,7 @@ void DynamicLogManager::Monitor()
     }
 }
 
-void DynamicLogManager::GetAndSetLogConfig()
-{
+void DynamicLogManager::GetAndSetLogConfig() {
     std::lock_guard<std::mutex> guard(mtx_);
     const std::string configPath = GetConfigPath();
     DynamicLogConfig newCfg = LoadLogConfig(configPath);
@@ -827,9 +729,9 @@ void DynamicLogManager::GetAndSetLogConfig()
         ResetToDefaultLogSeverity();
         return;
     }
-    DynamicLogConfig lastCfg { lastLogSeverity_, lastValidHours_, lastValidTimeStamp_ };
+    DynamicLogConfig lastCfg{lastLogSeverity_, lastValidHours_, lastValidTimeStamp_};
     auto diff = DiffConfig(newCfg, lastCfg);
-    
+
     UpdateValidTimeStamp(newCfg);
     if (!IsWithinValidRange(newCfg)) {
         ResetToDefaultLogSeverity();
@@ -840,24 +742,33 @@ void DynamicLogManager::GetAndSetLogConfig()
         return;
     }
     ApplyLogSeverity(newCfg.logSeverity);
-    lastLogSeverity_     = newCfg.logSeverity;
-    lastValidHours_      = newCfg.validHours;
-    lastValidTimeStamp_  = newCfg.validTimeStamp;
+    lastLogSeverity_ = newCfg.logSeverity;
+    lastValidHours_ = newCfg.validHours;
+    lastValidTimeStamp_ = newCfg.validTimeStamp;
 }
 
-std::string DynamicLogManager::GetConfigPath() const
-{
-    std::string configPath;
-    Result r = EnvVar::GetInstance().Get(MINDIE_LLM_HOME_PATH, GetDefaultMindIELLMHomePath(), configPath);
-    if (!r.IsOk()) {
-        throw std::runtime_error(r.message());
+std::string DynamicLogManager::GetConfigPath() const {
+    std::string mindieLlmHomePath;
+    Result r = EnvVar::GetInstance().Get(MINDIE_LLM_HOME_PATH, GetDefaultMindIELLMHomePath(), mindieLlmHomePath);
+    if (r.IsOk()) {
+        std::string initPyPath = mindieLlmHomePath + "/__init__.py";
+        if (FileSystem::Exists(initPyPath)) {
+            return mindieLlmHomePath + "/conf/config.json";
+        }
     }
-    configPath += "/conf/config.json";
-    return configPath;
+
+    std::string miesInstallPath;
+    r = EnvVar::GetInstance().Get(MIES_INSTALL_PATH, "", miesInstallPath);
+    if (r.IsOk() && !miesInstallPath.empty()) {
+        return miesInstallPath + "/conf/config.json";
+    }
+
+    throw std::runtime_error(
+        "Failed to determine config path: neither 'MINDIE_LLM_HOME_PATH' "
+        "(with __init__.py), nor 'MIES_INSTALL_PATH' is valid.");
 }
 
-DynamicLogConfig DynamicLogManager::LoadLogConfig(const std::string& configPath)
-{
+DynamicLogConfig DynamicLogManager::LoadLogConfig(const std::string& configPath) {
     Json configJsonData;
     Result r = LoadJson(configPath, configJsonData);
     if (!r.IsOk()) {
@@ -870,16 +781,14 @@ DynamicLogConfig DynamicLogManager::LoadLogConfig(const std::string& configPath)
     return {logSeverity, timeInterval, timeStamp};
 }
 
-std::string DynamicLogManager::GetLogSeverity(const Json& logConfig) const
-{
+std::string DynamicLogManager::GetLogSeverity(const Json& logConfig) const {
     if (!logConfig.contains(keyLogSeverity) || !logConfig[keyLogSeverity].is_string()) {
         return "";
     }
     return logConfig[keyLogSeverity].get<std::string>();
 }
 
-int DynamicLogManager::GetTimeInterval(const Json& logConfig, int lastHours) const
-{
+int DynamicLogManager::GetTimeInterval(const Json& logConfig, int lastHours) const {
     static constexpr int minValidHours = 1;
     static constexpr int maxValidHours = 168;  // A week (7 * 24)
     if (!logConfig.contains(keyTimeInterval) || !logConfig[keyTimeInterval].is_number_integer()) {
@@ -892,8 +801,7 @@ int DynamicLogManager::GetTimeInterval(const Json& logConfig, int lastHours) con
     return hours;
 }
 
-std::string DynamicLogManager::GetTimeStamp(const Json& logConfig, const std::string& lastTs) const
-{
+std::string DynamicLogManager::GetTimeStamp(const Json& logConfig, const std::string& lastTs) const {
     if (!logConfig.contains(keyTimeStamp) || !logConfig[keyTimeStamp].is_string()) {
         return lastTs;
     }
@@ -907,17 +815,12 @@ std::string DynamicLogManager::GetTimeStamp(const Json& logConfig, const std::st
     return ts;
 }
 
-DynamicLogDiff DynamicLogManager::DiffConfig(const DynamicLogConfig& current, const DynamicLogConfig& last)
-{
-    return {
-        current.logSeverity != last.logSeverity,
-        current.validHours != last.validHours,
-        current.validTimeStamp != last.validTimeStamp
-    };
+DynamicLogDiff DynamicLogManager::DiffConfig(const DynamicLogConfig& current, const DynamicLogConfig& last) {
+    return {current.logSeverity != last.logSeverity, current.validHours != last.validHours,
+            current.validTimeStamp != last.validTimeStamp};
 }
 
-bool DynamicLogManager::IsValidTimeFormat(const std::string& timeStr) const
-{
+bool DynamicLogManager::IsValidTimeFormat(const std::string& timeStr) const {
     static constexpr size_t strLen = 19;
     static constexpr int maxHour = 23;
     static constexpr int maxMinute = 59;
@@ -927,7 +830,7 @@ bool DynamicLogManager::IsValidTimeFormat(const std::string& timeStr) const
     if (timeStr.empty()) {
         return true;
     }
-    if (timeStr.length() != strLen) { // "YYYY-MM-DD HH:MM:SS"
+    if (timeStr.length() != strLen) {  // "YYYY-MM-DD HH:MM:SS"
         return false;
     }
     std::tm tm = {};
@@ -936,9 +839,8 @@ bool DynamicLogManager::IsValidTimeFormat(const std::string& timeStr) const
     if (iss.fail()) {
         return false;
     }
-    if (tm.tm_hour < 0 || tm.tm_hour > maxHour || tm.tm_min  < 0 || tm.tm_min  > maxMinute ||
-        tm.tm_sec  < 0 || tm.tm_sec  > maxSecond || tm.tm_mon  < 0 || tm.tm_mon  > maxMonth ||
-        tm.tm_mday < 1 || tm.tm_mday > maxDay) {
+    if (tm.tm_hour < 0 || tm.tm_hour > maxHour || tm.tm_min < 0 || tm.tm_min > maxMinute || tm.tm_sec < 0 ||
+        tm.tm_sec > maxSecond || tm.tm_mon < 0 || tm.tm_mon > maxMonth || tm.tm_mday < 1 || tm.tm_mday > maxDay) {
         return false;
     }
     std::tm tm_copy = tm;
@@ -946,13 +848,12 @@ bool DynamicLogManager::IsValidTimeFormat(const std::string& timeStr) const
     if (t == -1) {
         return false;
     }
-    return tm.tm_year == tm_copy.tm_year && tm.tm_mon  == tm_copy.tm_mon  && tm.tm_mday == tm_copy.tm_mday &&
-           tm.tm_hour == tm_copy.tm_hour && tm.tm_min  == tm_copy.tm_min  && tm.tm_sec  == tm_copy.tm_sec;
+    return tm.tm_year == tm_copy.tm_year && tm.tm_mon == tm_copy.tm_mon && tm.tm_mday == tm_copy.tm_mday &&
+           tm.tm_hour == tm_copy.tm_hour && tm.tm_min == tm_copy.tm_min && tm.tm_sec == tm_copy.tm_sec;
 }
 
-bool DynamicLogManager::ParseTime(const std::string& s, std::time_t& out) const
-{
-    std::tm tm {};
+bool DynamicLogManager::ParseTime(const std::string& s, std::time_t& out) const {
+    std::tm tm{};
     tm.tm_isdst = -1;
     std::istringstream iss(s);
     iss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
@@ -963,26 +864,24 @@ bool DynamicLogManager::ParseTime(const std::string& s, std::time_t& out) const
     return out != -1;
 }
 
-bool DynamicLogManager::IsGreaterThanNow(const std::string& timeStr) const
-{
-    std::time_t t {};
+bool DynamicLogManager::IsGreaterThanNow(const std::string& timeStr) const {
+    std::time_t t{};
     if (!ParseTime(timeStr, t)) {
         return false;
     }
     return t > std::time(nullptr);
 }
 
-void DynamicLogManager::ResetToDefaultLogSeverity()
-{
+void DynamicLogManager::ResetToDefaultLogSeverity() {
     lastLogSeverity_.clear();
     lastValidHours_ = defaultHours_;
     lastValidTimeStamp_.clear();
     ApplyLogSeverity(defaultLogSeverity_);
 }
 
-void DynamicLogManager::ApplyLogSeverity(const std::string& severity)
-{
-    LogManager::GetInstance().LoadByComponentByString<LogSeverity>(severity, GetAllLogSeverity(),
+void DynamicLogManager::ApplyLogSeverity(const std::string& severity) {
+    LogManager::GetInstance().LoadByComponentByString<LogSeverity>(
+        severity, GetAllLogSeverity(),
         [](const std::string& s) {
             LogSeverity lvl;
             if (!String2LogSeverity(s, lvl)) {
@@ -990,28 +889,23 @@ void DynamicLogManager::ApplyLogSeverity(const std::string& severity)
             }
             return lvl;
         },
-        [](ComponentConfig& c, LogSeverity v) {
-            c.minLevel = v;
-        }
-    );
+        [](ComponentConfig& c, LogSeverity v) { c.minLevel = v; });
 }
 
-void DynamicLogManager::UpdateValidTimeStamp(DynamicLogConfig& cfg)
-{
+void DynamicLogManager::UpdateValidTimeStamp(DynamicLogConfig& cfg) {
     if (cfg.logSeverity.empty() || !cfg.validTimeStamp.empty()) {
         return;
     }
     std::time_t now = std::time(nullptr);
-    std::tm tm {};
+    std::tm tm{};
     localtime_r(&now, &tm);
     char buf[BUFFER_SIZE_32] = {};
     std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
     cfg.validTimeStamp = buf;
 }
 
-bool DynamicLogManager::IsWithinValidRange(const DynamicLogConfig& cfg) const
-{
-    std::time_t start {};
+bool DynamicLogManager::IsWithinValidRange(const DynamicLogConfig& cfg) const {
+    std::time_t start{};
     if (!ParseTime(cfg.validTimeStamp, start)) {
         return false;
     }
@@ -1022,10 +916,9 @@ bool DynamicLogManager::IsWithinValidRange(const DynamicLogConfig& cfg) const
 
 // ================= InitSystemLog =================
 
-void InitSystemLog()
-{
+void InitSystemLog() {
     LogManager::GetInstance();
     DynamicLogManager::GetInstance();
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

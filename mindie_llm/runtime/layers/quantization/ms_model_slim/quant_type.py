@@ -15,6 +15,7 @@ class InferenceMode(str, Enum):
     """
     Enumeration for different inference stages.
     """
+
     PREFILL = "PREFILL"
     DECODE = "DECODE"
 
@@ -23,6 +24,7 @@ class QuantType(str, Enum):
     """
     Enumeration for supported quantization types.
     """
+
     FLOAT = "FLOAT"
     W8A8 = "W8A8"
     W8A8_DYNAMIC = "W8A8_DYNAMIC"

@@ -9,7 +9,6 @@
 # See the Mulan PSL v2 for more details.
 
 import torch
-import torch_npu
 import torch.distributed as torch_dist
 
 
@@ -29,7 +28,7 @@ def gather_tensor(input_, index):
 
 
 def allgather_and_reorder(input_, process_group, gather_index):
-    # all-gather 
+    # all-gather
     input_ = all_gather(input_, process_group=process_group)
     # gather
     input_ = gather_tensor(input_, gather_index)

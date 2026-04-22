@@ -14,7 +14,7 @@ from ...utils.config import HandlingBackend
 def get_handler_registry(handling_backend):
     if handling_backend == HandlingBackend.PTA:
         from .pta_handlers import PTA_HANDLER_REGISTRY
+
         return PTA_HANDLER_REGISTRY
     else:
-        raise NotImplementedError(
-            f'{handling_backend} not implemented, supported backends `pta`')
+        raise NotImplementedError(f"{handling_backend} not implemented, supported backends `pta`")

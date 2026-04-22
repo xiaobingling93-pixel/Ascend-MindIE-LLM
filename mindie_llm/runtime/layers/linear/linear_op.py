@@ -1,3 +1,20 @@
+#
+# Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# This file is a part of the vllm-ascend project.
+# Implement part of this file based on vllm-ascend.
+#
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 # MindIE is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
@@ -16,18 +33,17 @@ import torch.nn.functional as F
 import torch.distributed as dist
 from torch.nn.parameter import Parameter
 
-from mindie_llm.runtime.utils.distributed import get_parallel_info_manager, init_distributed
+from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelInfo, ParallelType
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
-from mindie_llm.utils.log.logging import logger
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.utils.env import ENV as ENV_utils
 
 # Mapping from Linear layer class name to candidate custom LinearOp implementations.
 # Each value is a callable returning a tuple of op classes to try in order.
 # (Using a lambda delays evaluation so the op classes can be defined below.)
 _LINEAR_TO_CUSTOM_OP_DISPATCH_TABLE = {
-    'RowParallelLinear': lambda: (SequenceRowParallelOp,),
-    'ColumnParallelLinear': lambda: (SequenceColumnParallelOp,),
+    "RowParallelLinear": lambda: (SequenceRowParallelOp,),
+    "ColumnParallelLinear": lambda: (SequenceColumnParallelOp,),
 }
 
 
@@ -35,12 +51,14 @@ _LINEAR_TO_CUSTOM_OP_DISPATCH_TABLE = {
 #   layer -> { op_cls -> op_instance }
 # WeakKeyDictionary is used so that once a layer is garbage-collected,
 # its cache entry is automatically removed (prevents memory leaks).
-_LINEAR_OP_INSTANCE_CACHE: "weakref.WeakKeyDictionary[object, Dict[Type[LinearOp], LinearOp]]" = \
+_LINEAR_OP_INSTANCE_CACHE: "weakref.WeakKeyDictionary[object, Dict[Type[LinearOp], LinearOp]]" = (
     weakref.WeakKeyDictionary()
+)
 
 
 class LinearOp:
     """Base class for different linear forward methods."""
+
     def __init__(self, layer):
         self.layer = layer
         self.bias = None
@@ -84,7 +102,6 @@ class LinearOp:
 
 
 class ColumnParallelOp(LinearOp):
-
     def __init__(self, layer):
         super().__init__(layer)
         self.gather_output = None
@@ -97,7 +114,6 @@ class ColumnParallelOp(LinearOp):
 
 
 class RowParallelOp(LinearOp):
-
     def __init__(self, layer):
         super().__init__(layer)
         self.reduce_results = None
@@ -108,7 +124,6 @@ class RowParallelOp(LinearOp):
 
 
 class SequenceColumnParallelOp(ColumnParallelOp):
-
     @staticmethod
     def enable(layer_cls) -> bool:
         forward_context = get_forward_context()
@@ -119,13 +134,8 @@ class SequenceColumnParallelOp(ColumnParallelOp):
             return False
         return True
 
-    def apply_impl(
-        self, input_: torch.Tensor
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
+    def apply_impl(self, input_: torch.Tensor) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
         """Linear layer with column parallelism."""
-
-        bias = self.bias if not self.skip_bias_add else None
-
         input_ = maybe_all_gather_and_maybe_unpad(input_, self.parallel_info)
         output_parallel = self.quant_method.apply(self.layer, input_)
 
@@ -134,7 +144,6 @@ class SequenceColumnParallelOp(ColumnParallelOp):
 
 
 class SequenceRowParallelOp(RowParallelOp):
-
     @staticmethod
     def enable(layer_cls) -> bool:
         forward_context = get_forward_context()
@@ -142,16 +151,10 @@ class SequenceRowParallelOp(RowParallelOp):
             return True
         return False
 
-    def apply_impl(
-        self, input_: torch.Tensor
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
+    def apply_impl(self, input_: torch.Tensor) -> Union[torch.Tensor, tuple[torch.Tensor, Optional[Parameter]]]:
         """Linear layer with row parallelism."""
-        bias_ = None if (self.parallel_info.rank > 0 or self.skip_bias_add) else self.bias
+        output = self.quant_method.apply(self.layer, input_)
 
-
-        output = self.quant_method.apply(self.layer,
-                                            input_)
-                      
         if self.parallel_info.group_size > 1 and self.reduce_results:
             reduce_scatter_output = maybe_pad_and_reduce_scatter(output, self.parallel_info)
             output = reduce_scatter_output
@@ -161,10 +164,9 @@ class SequenceRowParallelOp(RowParallelOp):
 
 
 def maybe_pad_and_reduce_scatter(
-        input_: torch.Tensor,
-        parallel_info: ParallelInfo,
-    ) -> torch.Tensor:
-
+    input_: torch.Tensor,
+    parallel_info: ParallelInfo,
+) -> torch.Tensor:
     world_size = parallel_info.group_size
 
     # prepare pad_size
@@ -174,20 +176,16 @@ def maybe_pad_and_reduce_scatter(
         input_ = F.pad(input_, (0, 0, 0, pad_size))
 
     reduce_scatter_output = torch.empty(
-                                (input_.shape[0] // world_size, *input_.shape[1:]),
-                                dtype=input_.dtype,
-                                device=input_.device)
-    dist.reduce_scatter_tensor(
-        reduce_scatter_output, input_, group=parallel_info.process_group
+        (input_.shape[0] // world_size, *input_.shape[1:]), dtype=input_.dtype, device=input_.device
     )
+    dist.reduce_scatter_tensor(reduce_scatter_output, input_, group=parallel_info.process_group)
     return reduce_scatter_output
 
 
 def maybe_all_gather_and_maybe_unpad(
-        input_: torch.Tensor,
-        parallel_info: ParallelInfo,
-    ) -> torch.Tensor:
-
+    input_: torch.Tensor,
+    parallel_info: ParallelInfo,
+) -> torch.Tensor:
     # prepare
     comm_group = parallel_info.process_group
     world_size = parallel_info.group_size
@@ -203,22 +201,21 @@ def maybe_all_gather_and_maybe_unpad(
     output_parallel_ = torch.cat(gather_list, dim=0)
 
     # unpad
-    unpad_input_ = maybe_unpad_cross_dp(output_parallel_, parallel_info)        
+    unpad_input_ = maybe_unpad_cross_dp(output_parallel_, parallel_info)
     return unpad_input_
 
 
-def maybe_unpad_cross_dp(
-        input_: torch.Tensor,
-        parallel_info: ParallelInfo
-    ):
+def maybe_unpad_cross_dp(input_: torch.Tensor, parallel_info: ParallelInfo):
     """Auto unpadding the dp data for based on current Allgather worldsize."""
     attn_tp = get_parallel_info_manager().get(ParallelType.ATTN_TP)
     attn_dp = get_parallel_info_manager().get(ParallelType.ATTN_DP)
     attn_tp_world_size = attn_tp.group_size
     cur_world_size = parallel_info.group_size
     if cur_world_size < attn_tp_world_size or cur_world_size % attn_tp_world_size != 0:
-        raise NotImplementedError("world_size of AllGather must be greater than or equal to world_size "
-                                  "of ATTN_TP, i.e., it must be a multiple of attn_tp_world_size.")
+        raise NotImplementedError(
+            "world_size of AllGather must be greater than or equal to world_size "
+            "of ATTN_TP, i.e., it must be a multiple of attn_tp_world_size."
+        )
 
     try:
         forward_context = get_forward_context()
@@ -235,14 +232,13 @@ def maybe_unpad_cross_dp(
     cur_dp_size = len(cur_dp_num_tokens_across_dp_cpu)
 
     result = torch.empty(
-        (cur_dp_num_tokens_across_dp_cpu.sum(), *input_.shape[1:]),
-        device=input_.device,
-        dtype=input_.dtype)
+        (cur_dp_num_tokens_across_dp_cpu.sum(), *input_.shape[1:]), device=input_.device, dtype=input_.dtype
+    )
     input_ = input_.view(cur_dp_size, -1, *input_.shape[1:])
     offset = 0
     for idx in range(cur_dp_size):
         num_tokens_dp = cur_dp_num_tokens_across_dp_cpu[idx]
-        result[offset:offset + num_tokens_dp] = input_[idx, :num_tokens_dp]
+        result[offset : offset + num_tokens_dp] = input_[idx, :num_tokens_dp]
         offset += num_tokens_dp
     input_ = result
     return result
@@ -267,7 +263,7 @@ def get_linear_custom_op(layer) -> LinearOp | None:
 
     if selected_op_cls is None:
         return None
-    
+
     # Fetch or create the per-layer cache bucket.
     per_layer_cache = _LINEAR_OP_INSTANCE_CACHE.get(layer)
     if per_layer_cache is None:

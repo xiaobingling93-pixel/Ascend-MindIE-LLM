@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_ERROR_H
 #define MINDIE_LLM_ERROR_H
 
@@ -20,7 +20,7 @@ namespace mindie_llm {
 /// Error class, which is used to return error code and message.
 /// This class can contain a code in Code format and a message.
 class Error {
-public:
+   public:
     /// The enum class for error code.
     enum class Code {
         OK,
@@ -52,10 +52,10 @@ public:
     /// This function provides a static function to convert the error code to a string.
     static const char *CodeToString(const Code code);
 
-protected:
+   protected:
     Code code_;
     std::string msg_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_INFRA_ERROR_H
+#endif  // MIES_INFRA_ERROR_H

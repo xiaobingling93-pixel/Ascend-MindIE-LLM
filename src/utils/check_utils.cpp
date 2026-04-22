@@ -9,13 +9,14 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
+#include "check_utils.h"
+
 #include <iostream>
 #include <map>
 #include <regex>
 
 #include "basic_types.h"
-#include "check_utils.h"
 
 namespace mindie_llm {
 // Param Type Size
@@ -29,8 +30,7 @@ static std::map<std::string, std::pair<std::string, std::string>> g_integerTypeM
     {"size_t", {"18446744073709551615", "0"}},
 };
 
-int CheckParamRange(const int &intParam, int min, int max)
-{
+int CheckParamRange(const int& intParam, int min, int max) {
     if (intParam < min) {
         std::stringstream ss;
         ss << "This param must be a number greater or equal to " << min << ", please check." << std::endl;
@@ -44,8 +44,7 @@ int CheckParamRange(const int &intParam, int min, int max)
     return intParam;
 }
 
-int CheckPositive(const int &intParam)
-{
+int CheckPositive(const int& intParam) {
     if (intParam <= 0) {
         std::stringstream ss;
         ss << "This param must be a number greater than 0, please check." << std::endl;
@@ -54,8 +53,7 @@ int CheckPositive(const int &intParam)
     return intParam;
 }
 
-std::string NormalizeIntegerString(const std::string &s)
-{
+std::string NormalizeIntegerString(const std::string& s) {
     if (s.empty()) {
         return s;
     }
@@ -77,8 +75,7 @@ std::string NormalizeIntegerString(const std::string &s)
     return isNegative ? "-" + core : core;
 }
 
-bool IsWithinRange(const std::string& integerType, const Json& jsonValue)
-{
+bool IsWithinRange(const std::string& integerType, const Json& jsonValue) {
     std::string value = NormalizeIntegerString(jsonValue.dump());
     bool isIntType = (integerType[0] == 'i');
     std::string maxValue = g_integerTypeMap[integerType].first;
@@ -103,8 +100,7 @@ bool IsWithinRange(const std::string& integerType, const Json& jsonValue)
     return true;
 }
 
-uint32_t GetIntegerParamValue(const Json& jsonData, const std::string& configName, uint32_t defaultVal)
-{
+uint32_t GetIntegerParamValue(const Json& jsonData, const std::string& configName, uint32_t defaultVal) {
     if (jsonData.empty() || !jsonData.contains(configName)) {
         return defaultVal;
     }
@@ -113,19 +109,18 @@ uint32_t GetIntegerParamValue(const Json& jsonData, const std::string& configNam
         return defaultVal;
     }
     if (!IsWithinRange("uint32_t", jsonData[configName])) {
-        std::cout << "The value of [" << configName <<
-            "] is out of range as uint32_t; the default value is applied." << std::endl;
+        std::cout << "The value of [" << configName << "] is out of range as uint32_t; the default value is applied."
+                  << std::endl;
         return defaultVal;
     }
     return jsonData[configName];
 }
 
-std::string GetStringParamValue(const Json& jsonData, const std::string& configName)
-{
+std::string GetStringParamValue(const Json& jsonData, const std::string& configName) {
     if (!jsonData.contains(configName)) {
         throw std::runtime_error("Config parameter '" + configName + "' not found");
     }
-    
+
     const auto& value = jsonData[configName];
     if (!value.is_string()) {
         throw std::runtime_error("Config parameter '" + configName + "' is not a string");
@@ -133,18 +128,17 @@ std::string GetStringParamValue(const Json& jsonData, const std::string& configN
 
     std::string res = value.get<std::string>();
     if (res.length() > MAX_STRING_LENGTH) {
-        throw std::runtime_error("The length of config parameter '" + configName
-            + "' exceeds the maximum limit: " + std::to_string(MAX_STRING_LENGTH));
+        throw std::runtime_error("The length of config parameter '" + configName +
+                                 "' exceeds the maximum limit: " + std::to_string(MAX_STRING_LENGTH));
     }
-    
+
     return res;
 }
 
-bool CheckStringInputLength(const std::string& stringValue, uint32_t maxValLength)
-{
+bool CheckStringInputLength(const std::string& stringValue, uint32_t maxValLength) {
     if (stringValue.length() > maxValLength) {
         return false;
     }
     return true;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

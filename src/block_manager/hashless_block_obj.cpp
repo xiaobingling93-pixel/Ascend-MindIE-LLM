@@ -9,11 +9,10 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "hashless_block_obj.h"
 
 #include <iostream>
-
 
 namespace mindie_llm {
 
@@ -23,18 +22,16 @@ namespace mindie_llm {
     Normally used in an ObjectPool to avoid frequent object creation/deletion.
 */
 void HashLessBlockObj::InitBlockObj(const BlockObjSPtr prevBlock, const std::vector<TokenId> &tokenIds,
-                                    BlockSharedAttr blockSharedAttr, BlockId blockId, HashValue)
-{
+                                    BlockSharedAttr blockSharedAttr, BlockId blockId, HashValue) {
     ResetBlockObj();
     prevBlock_ = prevBlock;
-    tokenIds_ = std::vector<TokenId>{}; // first init and append token ids later
+    tokenIds_ = std::vector<TokenId>{};  // first init and append token ids later
     blockSize_ = blockSharedAttr.blockSize;
     blockId_ = blockId;
     AppendTokenIdsNoCow(tokenIds);
 }
 
-void HashLessBlockObj::ResetBlockObj()
-{
+void HashLessBlockObj::ResetBlockObj() {
     prevBlock_ = nullptr;
 
     tokenIds_ = {};
@@ -49,12 +46,11 @@ void HashLessBlockObj::ResetBlockObj()
     It first appends tokens to block's token id container,
     and then call the allocator to do CoW if necessary.
 */
-void HashLessBlockObj::AppendTokenIds(const std::vector<TokenId> &tokenIds)
-{
+void HashLessBlockObj::AppendTokenIds(const std::vector<TokenId> &tokenIds) {
     if (blockId_ == INVALID_BLOCKID) {
         throw std::runtime_error("block id invalid!");
     }
-    
+
     AppendTokenIdsNoCow(tokenIds);
 }
 
@@ -62,8 +58,7 @@ void HashLessBlockObj::AppendTokenIds(const std::vector<TokenId> &tokenIds)
 Append token ids to the token id container. Only used inside this class.
 Caller must ensure there is enough empty slots in this block!
 */
-void HashLessBlockObj::AppendTokenIdsNoCow(const std::vector<TokenId> &tokenIds)
-{
+void HashLessBlockObj::AppendTokenIdsNoCow(const std::vector<TokenId> &tokenIds) {
     if (tokenIds.empty()) {
         return;
     }
@@ -72,7 +67,7 @@ void HashLessBlockObj::AppendTokenIdsNoCow(const std::vector<TokenId> &tokenIds)
         throw std::runtime_error("space on block is not enough for appending given tokens");
     }
 
-    tokenIds_.insert(tokenIds_.end(), tokenIds.begin(), tokenIds.end()); // append tokens
+    tokenIds_.insert(tokenIds_.end(), tokenIds.begin(), tokenIds.end());  // append tokens
 }
 
 BlockId HashLessBlockObj::GetBlockId() const { return blockId_; }
@@ -83,8 +78,7 @@ size_t HashLessBlockObj::GetRankIdx() const { return rankIdx_; }
 HashValue HashLessBlockObj::GetHashValue() { return INVALID_HASH_VALUE; }
 
 // this should be promoted to a private method in the future...
-void HashLessBlockObj::ResetBlockId()
-{
+void HashLessBlockObj::ResetBlockId() {
     if (blockId_ == INVALID_BLOCKID) {
         throw std::runtime_error("block id is null!");
     }
@@ -92,16 +86,14 @@ void HashLessBlockObj::ResetBlockId()
 }
 
 // this should be promoted to a private method in the future...
-void HashLessBlockObj::SetBlockId(BlockId blockId)
-{
+void HashLessBlockObj::SetBlockId(BlockId blockId) {
     // should check whether it is safe to do so in the future...
     blockId_ = blockId;
 }
 
 bool HashLessBlockObj::IsFull() const { return GetNumEmptySlots() == 0; }
 
-size_t HashLessBlockObj::GetNumEmptySlots() const
-{
+size_t HashLessBlockObj::GetNumEmptySlots() const {
     if (blockSize_ < tokenIds_.size()) {
         throw std::runtime_error("number of empty slots invalid!");
     }
@@ -126,8 +118,7 @@ float HashLessBlockObj::LastAccessed() const { throw std::runtime_error("not imp
 void HashLessBlockObj::SetComputed([[maybe_unused]] bool isCompute) { throw std::runtime_error("not implemented"); };
 
 // not used in HashLessBlock
-void HashLessBlockObj::SetLastAccessed([[maybe_unused]] float lastAccess)
-{
+void HashLessBlockObj::SetLastAccessed([[maybe_unused]] float lastAccess) {
     throw std::runtime_error("not implemented");
 };
 
@@ -137,8 +128,7 @@ HashValue HashLessBlockObj::ExtraHash() { throw std::runtime_error("not implemen
 // not used in HashLessBlock
 HashValue HashLessBlockObj::PrefixHash() { throw std::runtime_error("not implemented"); };
 
-void HashLessBlockObj::ReplaceToken(size_t startIndex, TokenId newToken)
-{
+void HashLessBlockObj::ReplaceToken(size_t startIndex, TokenId newToken) {
     if (startIndex >= tokenIds_.size()) {
         throw std::out_of_range("startIndex is out of range of tokenIds_");
     }
@@ -152,4 +142,4 @@ void HashLessBlockObj::ReplaceToken(size_t startIndex, TokenId newToken)
 
 void HashLessBlockObj::SetRankIdx(size_t rankIdx) { rankIdx_ = rankIdx; }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

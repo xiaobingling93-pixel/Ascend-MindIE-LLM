@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_PREFIX_TREE_H
 #define MINDIE_LLM_PREFIX_TREE_H
 
@@ -31,7 +31,7 @@ struct Node {
 };
 
 class PrefixTree {
-public:
+   public:
     explicit PrefixTree(int rootTokenId, unsigned int maxNode = 65536, unsigned int maxOutputNode = 512)
         : rootTokenId(rootTokenId), maxNode(maxNode), maxOutputNode(maxOutputNode) {}
     void Put(std::vector<int>& tokenIds, const std::string& mode = "output", int batchId = 0);
@@ -39,14 +39,14 @@ public:
     void ResetInputFreq(int batchId);
     void Trim();
 
-private:
+   private:
     void AddNode(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes,
-        const std::string& mode = "output", int batchId = 0, unsigned int tokenIdIndex = 0);
-    void Pack(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes,
-        int batchId, unsigned int tokenIdIndex = 0);
+                 const std::string& mode = "output", int batchId = 0, unsigned int tokenIdIndex = 0);
+    void Pack(std::vector<int>& tokenIds, std::map<int, std::shared_ptr<Node>>& nodes, int batchId,
+              unsigned int tokenIdIndex = 0);
     void AddNodeFreq(std::shared_ptr<Node>& node, int batchId) const;
     std::pair<std::vector<int>, int> SearchBestDraft(std::map<int, std::shared_ptr<Node>> nodes, int batchId,
-        std::vector<int>& draftIds, int decodingLength) const;
+                                                     std::vector<int>& draftIds, int decodingLength) const;
     void ClearInput(std::map<int, std::shared_ptr<Node>>& nodes, int batchId);
     void TrimNode(std::map<int, std::shared_ptr<Node>>& nodes);
     void CountNode(std::map<int, std::shared_ptr<Node>>& nodes, unsigned int& size);
@@ -55,10 +55,10 @@ private:
     unsigned int maxNode = 65536;
     unsigned int maxOutputNode = 512;
     unsigned int nNode = 0;
-    unsigned int nOutputNode = 0 ;
+    unsigned int nOutputNode = 0;
     std::map<int, std::shared_ptr<Node>> fullNodes = {};
 };
-}
-}
+}  // namespace prefix_tree
+}  // namespace mindie_llm
 
 #endif

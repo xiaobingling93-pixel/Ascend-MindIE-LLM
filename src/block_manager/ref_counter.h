@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef REF_COUNTER_H
 #define REF_COUNTER_H
 
@@ -19,7 +19,7 @@
 
 namespace mindie_llm {
 class RefCounter : public RefCounterProtocol {
-public:
+   public:
     explicit RefCounter(const std::vector<BlockId> &allBlockIndices);
 
     RefCount Increase(BlockId blockId) override;
@@ -28,9 +28,9 @@ public:
 
     RefCount GetRefCount(BlockId blockId) const override;
 
-private:
+   private:
     std::unordered_map<BlockId, RefCount> refCounts_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

@@ -21,7 +21,7 @@ from mindie_llm.connector.common.model_execute_data_pb2 import (
     ForwardType,
     SequenceGroupMetadata,
     PDRole,
-    PullKVRequest
+    PullKVRequest,
 )
 
 from mindie_llm.connector.common.input_metadata_composite import InputMetadataComposite
@@ -29,7 +29,6 @@ from mindie_llm.model_wrapper.utils.common_util import split_list_equally, ip_st
 
 from mindie_llm.text_generator.utils.input_metadata import InputMetadata, SIMULATE_SEQUENCE_ID
 from mindie_llm.utils.prof.profiler import span_start, span_end, span_attr
-from ...utils.log.logging import logger
 
 REPETITION_PENALTY_INDEX = 0  # item 0 is used for repetition penalty in ndarray
 FREQUENCY_PENALTY_INDEX = 1  # item 1 is used for frequency penalty in ndarray
@@ -158,11 +157,8 @@ def make_dummy_input_metadata(execute_request, num_npu_blocks, model_config, lwd
         sp_rank_tokens = [[1] + [0] * (model_config.sp_size - 1)]
         sp_batch_tokens = np.array(sp_rank_tokens)
         all_sp_block_tables = [
-            [
-                [block_id_for_empty_req] + [-1] * (block_padding - 1)
-            ] + [
-                [-1] * block_padding for _ in range(model_config.sp_size - 1)
-            ]
+            [[block_id_for_empty_req] + [-1] * (block_padding - 1)]
+            + [[-1] * block_padding for _ in range(model_config.sp_size - 1)]
         ]
         block_tables = np.array(all_sp_block_tables, dtype=np.int64)
     else:
@@ -181,8 +177,7 @@ def make_dummy_input_metadata(execute_request, num_npu_blocks, model_config, lwd
         batch_seq_len=np.array([1], dtype=np.int64),
         total_seq_num=1,
         batch_sampling_params=np.array(
-            [(np.nan, np.nan, np.nan, 0.0, np.nan, np.nan, np.nan, np.nan)],
-            dtype=SAMPLING_DTYPE
+            [(np.nan, np.nan, np.nan, 0.0, np.nan, np.nan, np.nan, np.nan)], dtype=SAMPLING_DTYPE
         ),
         batch_stop_strings=[[]],
         batch_stop_token_ids=[None],
@@ -204,7 +199,7 @@ def make_dummy_input_metadata(execute_request, num_npu_blocks, model_config, lwd
         reserved_sequence_ids=[np.array([], dtype=np.int64)],
         is_dummy_batch=True,
         sp_tokens=sp_batch_tokens,
-        layerwise_disaggregated_exe_stage=lwd_exe_stage
+        layerwise_disaggregated_exe_stage=lwd_exe_stage,
     )
     metadata.seq_lens = []
     for dp_batch_seq_lens in execute_request.execute_model_request.all_dp_batches_seq_lens:
@@ -220,8 +215,7 @@ def make_dummy_input_metadata_dmi_decoder(source_input_metadata, num_npu_blocks,
         batch_size=1,
         batch_request_ids=np.array([18446744073709551], dtype=np.int64),
         batch_max_output_lens=np.array([1], dtype=np.int64),
-        block_tables=np.array([[block_id_for_empty_req] +
-                               [-1] * (block_padding - 1)], dtype=np.int64),
+        block_tables=np.array([[block_id_for_empty_req] + [-1] * (block_padding - 1)], dtype=np.int64),
         max_block_size=model_config.cache_block_size,
         has_sampling=False,
         is_prefill=False,
@@ -247,29 +241,25 @@ def make_dummy_input_metadata_dmi_decoder(source_input_metadata, num_npu_blocks,
         batch_n=np.array([1]),
         batch_use_beam_search=np.array([False]),
         reserved_sequence_ids=[np.array([], dtype=np.int64)],
-        is_dummy_batch=True
+        is_dummy_batch=True,
     )
     return metadata
 
 
 def build_simulate_block_table(
-        seq_group_metadata,
-        block_id_for_simulate_req: int,
-        is_sp_enable: bool,
-        is_cp_enable: bool,
-        config
+    seq_group_metadata, block_id_for_simulate_req: int, is_sp_enable: bool, is_cp_enable: bool, config
 ) -> tuple:
     """
     为虚推请求构建 block table。
-    
+
     虚推请求需要特殊处理，使用固定 block id 作为占位符。在 SP/CP 场景下，
     需要根据 sp_rank_block_num 构造正确长度的 simulate block table，
-    以确保与其他请求组 batch 时 numpy 维度能够对齐。    
+    以确保与其他请求组 batch 时 numpy 维度能够对齐。
     """
     simulate_block_table = [block_id_for_simulate_req]
     sp_rank_block_num = None
     sp_rank_token_num = None
-    
+
     if is_sp_enable or is_cp_enable:
         sp_rank_block_num = list(seq_group_metadata.sp_rank_block_num)
         sp_rank_token_num = list(seq_group_metadata.sp_rank_token_num)
@@ -287,18 +277,18 @@ def build_simulate_block_table(
             seq_blocks = simulate_block_table
     else:
         seq_blocks = simulate_block_table
-    
+
     return seq_blocks, sp_rank_block_num, sp_rank_token_num
 
 
 def convert_execute_model_request_to_input_metadata_composite(
-        request: ExecuteModelRequest,
-        num_npu_blocks,
-        block_size,
-        convert_para=ConvertPara(),
-        is_mix_model=False,
-        layerwise_disaggregated_exe_stage=None,
-        config=None
+    request: ExecuteModelRequest,
+    num_npu_blocks,
+    block_size,
+    convert_para=ConvertPara(),
+    is_mix_model=False,
+    layerwise_disaggregated_exe_stage=None,
+    config=None,
 ) -> InputMetadataComposite:
     """
     将ExecuteModelRequest转换为InputMetadataComposite。
@@ -342,7 +332,7 @@ def convert_execute_model_request_to_input_metadata_composite(
     split_start_pos = []
     split_end_pos = []
     batch_response_format = None
-    
+
     # prefix cache
     computed_blocks = None
     remote_computed_blocks = None
@@ -368,7 +358,7 @@ def convert_execute_model_request_to_input_metadata_composite(
             is_sp_enable = config.sp_size > 1
             is_cp_enable = config.cp_size > 1
             is_mtp_enable = config.enable_mtp
-        lwd_is_slave = getattr(config, 'model_config', {}).get('layerwiseDisaggregatedRoleType', 'master') == 'slave'
+        lwd_is_slave = getattr(config, "model_config", {}).get("layerwiseDisaggregatedRoleType", "master") == "slave"
         is_scp_enbale = is_sp_enable or is_cp_enable
 
         # 根据请求类型构建 block table
@@ -411,7 +401,7 @@ def convert_execute_model_request_to_input_metadata_composite(
             sp_block_tables = []
             for block_num in sp_rank_block_num:
                 # SP场景下，block table增加一个sp维度
-                sp_block_tables.append(seq_blocks[start: start + block_num])
+                sp_block_tables.append(seq_blocks[start : start + block_num])
                 start += block_num
             ibis_block_tables.append(sp_block_tables)
         else:
@@ -451,10 +441,9 @@ def convert_execute_model_request_to_input_metadata_composite(
         batch_is_append_block = np.array(ibis_batch_is_append_block)
     if ibis_batch_prefill_block_rank_id:
         max_len = max(len(x) for x in ibis_batch_prefill_block_rank_id)
-        batch_prefill_block_rank_id = np.array([
-            np.pad(arr, (0, max_len - len(arr)), constant_values=-1)
-            for arr in ibis_batch_prefill_block_rank_id
-        ])
+        batch_prefill_block_rank_id = np.array(
+            [np.pad(arr, (0, max_len - len(arr)), constant_values=-1) for arr in ibis_batch_prefill_block_rank_id]
+        )
     if ibis_batch_block_rank_id:
         batch_block_rank_id = np.array(ibis_batch_block_rank_id)
     if is_prefill:
@@ -484,10 +473,8 @@ def convert_execute_model_request_to_input_metadata_composite(
         for seq_group_metadata in request.seq_group_metadata_list:
             seq_ids = convert_bytes_to_list(seq_group_metadata.seqIds)
             num_sequences = len(seq_ids)
-            
-            batch_seq_ids.append(
-                np.array(seq_ids, copy=True, dtype=np.int64)
-            )
+
+            batch_seq_ids.append(np.array(seq_ids, copy=True, dtype=np.int64))
             reserved_seqs_id_tensor = list(seq_group_metadata.reserved_seq_ids)
             if reserved_seqs_id_tensor is None:
                 reserved_id = np.array([], dtype=np.int64)
@@ -559,7 +546,7 @@ def convert_execute_model_request_to_input_metadata_composite(
             "is_req_prefill": is_req_prefill,
             "split_start_pos": split_start_pos,
             "split_end_pos": split_end_pos,
-            "is_req_last_chunk": is_req_last_chunk
+            "is_req_last_chunk": is_req_last_chunk,
         }
         update_mix_metadata(input_metadata_composite, mix_params)
 
@@ -570,10 +557,7 @@ def convert_execute_model_request_to_input_metadata_composite(
 
 
 def convert_pull_kv_request_to_input_metadata_composite(
-        request: PullKVRequest,
-        num_npu_blocks,
-        block_size,
-        config=None
+    request: PullKVRequest, num_npu_blocks, block_size, config=None
 ) -> InputMetadataComposite:
     batch_req_ids = []
     batch_server_ids = []
@@ -619,7 +603,7 @@ def convert_pull_kv_request_to_input_metadata_composite(
             sp_block_tables = []
             for block_num in sp_rank_block_num:
                 # SP场景下，block table增加一个sp维度
-                sp_block_tables.append(seq_blocks[start: start + block_num])
+                sp_block_tables.append(seq_blocks[start : start + block_num])
                 start += block_num
             ibis_block_tables.append(sp_block_tables)
         else:
@@ -769,9 +753,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
                 stop_strings = json.loads(stop_str_decode)
         batch_stop_strings.append(stop_strings if stop_strings and len(stop_strings) > 0 else None)
 
-        batch_ignore_eos.append(
-            seq_group_metadata.ignore_eos if seq_group_metadata.HasField("ignore_eos") else None
-        )
+        batch_ignore_eos.append(seq_group_metadata.ignore_eos if seq_group_metadata.HasField("ignore_eos") else None)
         batch_skip_special_tokens.append(
             seq_group_metadata.skip_special_tokens if seq_group_metadata.HasField("skip_special_tokens") else None
         )
@@ -779,23 +761,20 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
 
         seq_ids = convert_bytes_to_list(seq_group_metadata.seqIds)
         num_sequences = len(seq_ids)
-        
-        batch_seq_ids.append(
-            np.array(seq_ids, copy=True, dtype=np.int64)
-        )
+
+        batch_seq_ids.append(np.array(seq_ids, copy=True, dtype=np.int64))
         reserved_seqs_id_tensor = list(seq_group_metadata.reserved_seq_ids)
-        reserved_id = np.array(reserved_seqs_id_tensor, copy=True,
-                               dtype=np.int64) if reserved_seqs_id_tensor else np.array([], dtype=np.int64)
+        reserved_id = (
+            np.array(reserved_seqs_id_tensor, copy=True, dtype=np.int64)
+            if reserved_seqs_id_tensor
+            else np.array([], dtype=np.int64)
+        )
         batch_reserved_seq_ids.append(reserved_id)
 
         sampling_params_detail = seq_group_metadata.sampling_params
         batch_best_of = np.append(batch_best_of, np.array([sampling_params_detail.best_of]))
         batch_n = np.append(batch_n, np.array([sampling_params_detail.n]))
-        logprobs = (
-            sampling_params_detail.logprobs
-            if sampling_params_detail.HasField("logprobs")
-            else None
-        )
+        logprobs = sampling_params_detail.logprobs if sampling_params_detail.HasField("logprobs") else None
         batch_logprobs.append(logprobs if logprobs is not None else None)
         batch_use_beam_search = np.append(
             batch_use_beam_search, np.array([sampling_params_detail.use_beam_search], dtype=bool)
@@ -818,20 +797,18 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
                 computed.extend([0] * scp_size)
                 remote_computed.extend([0] * scp_size)
             continue
-        
+
         seq_scp_size = len(seq_group_metadata.sp_rank_block_num)
         computed_ = convert_bytes_to_list(seq_group_metadata.computed_block_lens)
         remote_computed_ = convert_bytes_to_list(seq_group_metadata.remote_computed_block_lens)
-        
+
         if seq_scp_size > 1:
             sp_rank_id = seq_group_metadata.sp_rank_id
             if len(input_ids) == sum(computed_) * block_size:
                 computed_[sp_rank_id] -= 1
                 remote_computed_[sp_rank_id] -= 1
-                del_order_id = sum(remote_computed_[:sp_rank_id + 1])
             elif len(input_ids) == sum(remote_computed_) * block_size:
                 remote_computed_[sp_rank_id] -= 1
-                del_order_id = sum(remote_computed_[:sp_rank_id + 1])
 
         computed.extend(computed_)
         remote_computed.extend(remote_computed_)
@@ -839,7 +816,7 @@ def parse_para_is_prefill(seq_group_metadata_list: List[SequenceGroupMetadata], 
     computed_blocks = None
     remote_computed_blocks = None
 
-    layerwise_disaggregated = getattr(config, 'model_config', {}).get('layerwiseDisaggregated', 'false') == 'true'
+    layerwise_disaggregated = getattr(config, "model_config", {}).get("layerwiseDisaggregated", "false") == "true"
     if scp_size > 1 and not layerwise_disaggregated:
         if computed:
             computed_blocks = np.array(computed, dtype=np.int64).reshape(-1, scp_size)
@@ -891,8 +868,9 @@ def update_mix_metadata(input_metadata_composite, mix_params):
     split_start_pos = mix_params["split_start_pos"]
     split_end_pos = mix_params["split_end_pos"]
     is_req_prefill = mix_params["is_req_prefill"]
-    if (is_req_prefill and
-        (not isinstance(is_req_prefill, list) or not all(isinstance(item, bool) for item in is_req_prefill))):
+    if is_req_prefill and (
+        not isinstance(is_req_prefill, list) or not all(isinstance(item, bool) for item in is_req_prefill)
+    ):
         raise TypeError("'is_req_prefill' must be a boolean list")
     is_req_last_chunk = mix_params["is_req_last_chunk"]
     input_metadata_composite.decode_batch_size = decode_bs
@@ -948,7 +926,7 @@ def get_attribute_info(link_request: PDLinkRequest):
         pd_link_info.unlink_num,
         pd_link_info.host_ip_num,
         pd_link_info.super_id_num,
-        pd_link_info.contains_dp_instance_ids
+        pd_link_info.contains_dp_instance_ids,
     ]
     attribute_info = np.array([attribute_data], dtype=np.int64)
 
@@ -988,9 +966,8 @@ def get_attribute_info(link_request: PDLinkRequest):
 
     if not has_super_info:
         # 检查link_info中的超节点信息，如果没有，检查unlink_info中的超节点信息
-        has_super_info = (
-            _has_super_info_in_remote_infos(pd_link_info.link_info) or
-            _has_super_info_in_remote_infos(pd_link_info.unlink_info)
+        has_super_info = _has_super_info_in_remote_infos(pd_link_info.link_info) or _has_super_info_in_remote_infos(
+            pd_link_info.unlink_info
         )
 
     if has_super_info:
@@ -1003,7 +980,7 @@ def get_attribute_info(link_request: PDLinkRequest):
     # In mspd scenario, globalipinfo doesn't have DpInstanceId
     # In large EP scenario, globalipinfo has DpInstanceId
     if pd_link_info.contains_dp_instance_ids == 1:
-        if (pd_link_info.link_num != 0):
+        if pd_link_info.link_num != 0:
             host_ip_num_per_dp = pd_link_info.host_ip_num // pd_link_info.link_num
     device_data = np.zeros((device_pd_num, device_num + host_ip_num_per_dp, device_info_num), dtype=np.int64)
     # 处理link_info

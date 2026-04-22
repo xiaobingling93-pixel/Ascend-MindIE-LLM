@@ -13,34 +13,27 @@
 #ifndef OCK_HTTP_SSL_H
 #define OCK_HTTP_SSL_H
 
-#include <condition_variable>
-#include <thread>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
+
+#include <condition_variable>
+#include <thread>
+
 #include "config_manager.h"
 #include "endpoint_def.h"
 
 namespace mindie_llm {
-enum SSLCertCategory : uint16_t {
-    MANAGEMENT_CERT,
-    BUSINESS_CERT,
-    METRICS_CERT
-};
+enum SSLCertCategory : uint16_t { MANAGEMENT_CERT, BUSINESS_CERT, METRICS_CERT };
 
-enum ServerGroupType : uint16_t {
-    ALL_SAME,
-    BUSINESS_MANAGEMENT_SAME,
-    MANAGEMENT_METRICS_SAME,
-    ALL_DIFFERENT
-};
+enum ServerGroupType : uint16_t { ALL_SAME, BUSINESS_MANAGEMENT_SAME, MANAGEMENT_METRICS_SAME, ALL_DIFFERENT };
 
 class HttpSsl {
-public:
+   public:
     EpCode Start(SSL_CTX *sslCtx, SSLCertCategory certCategory);
 
-private:
+   private:
     EpCode InitWorkDir();
     EpCode InitTlsPath(ServerConfig &serverConfig);
     EpCode InitSSL(SSL_CTX *sslCtx);
@@ -52,7 +45,7 @@ private:
     EpCode LoadPrivateKey(SSL_CTX *sslCtx);
     EpCode CertVerify(X509 *cert);
 
-private:
+   private:
     std::string workDir;
     std::string crlFullPath;
     // 证书相关路径
@@ -64,6 +57,6 @@ private:
     std::string tlsPk;
     SSLCertCategory sslCertCategory;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // OCK_HTTP_SSL_H
+#endif  // OCK_HTTP_SSL_H

@@ -15,38 +15,40 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
+#include "single_req_infer_interface_base.h"
 
 namespace mindie_llm {
 /**
  * @brief Triton text 格式的推理请求处理类
  */
 class SingleReqVllmInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqVllmInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                          bool isReCompute = false,
                                          const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool BuildResponseJson(ResponseSPtr response, const std::vector<BestNTokens> &tempTokens,
-                            RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
+                           RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
     void SetDMIReComputeBuilder() override;
-    const InferParam::FeatureSupport &GetFeatureSupport() const override
-    {
+    const InferParam::FeatureSupport &GetFeatureSupport() const override {
         static constexpr InferParam::FeatureSupport kSupport{false, false, true, false};
         return kSupport;
     }
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
-protected:
+
+   protected:
     bool ValidateAndPrepareReqToken(nlohmann::ordered_json &body, std::string &msg, uint64_t &timestamp) override;
     void SendStreamResponse(RespBodyQueue &jsonStrings) override;
-private:
+
+   private:
     bool SetReturnSeqCount(RequestSPtr req, std::string &errMsg);
     std::string ChangeUtf8Str(std::string &input) const;
     bool EncodeVllmResponse(RespBodyQueue &jsonStrs);
     bool EncodeVllmStreamResponse(RespBodyQueue &jsonStrings) noexcept;
-    std::string BuildVllmReComputeBody(const std::vector<BestNTokens>& tokens);
+    std::string BuildVllmReComputeBody(const std::vector<BestNTokens> &tokens);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // ENDPOINT_VLLM_INFER_H

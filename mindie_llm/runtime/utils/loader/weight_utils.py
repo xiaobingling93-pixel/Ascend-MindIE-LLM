@@ -13,7 +13,6 @@ import json
 from typing import List, Any, Tuple
 from pathlib import Path
 
-import torch
 import transformers
 import safetensors
 
@@ -34,15 +33,12 @@ class WeightsFileHandler:
     @property
     def extension(self) -> str:
         return ".safetensors"
-    
 
-    
     def release_file_handler(self) -> None:
         """Release all file handlers"""
         if self._handlers:
             del self._handlers
             self._handlers = {}
-
 
     def get_tensor(self, tensor_name: str) -> Any:
         """Get tensor by full name."""
@@ -60,9 +56,9 @@ class WeightsFileHandler:
             return f
         return self._handlers[filename]
 
-    def _get_weight_filenames(self,
-                              model_weight_path: str, extension: str,
-                              index_file_name: str = transformers.utils.SAFE_WEIGHTS_INDEX_NAME) -> List[Path]:
+    def _get_weight_filenames(
+        self, model_weight_path: str, extension: str, index_file_name: str = transformers.utils.SAFE_WEIGHTS_INDEX_NAME
+    ) -> List[Path]:
         """Get the local files"""
         if Path(model_weight_path).exists() and Path(model_weight_path).is_dir():
             local_files = list(Path(model_weight_path).glob(f"*{extension}"))
@@ -114,4 +110,3 @@ class WeightsFileHandler:
                         raise ValueError("Weight was found in multiple files.")
                     routing[k] = filename
         return routing
-    

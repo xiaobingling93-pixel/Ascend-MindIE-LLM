@@ -13,18 +13,20 @@
 #ifndef ENDPOINT_HTTP_REST_RESOURCE_H
 #define ENDPOINT_HTTP_REST_RESOURCE_H
 
-#include <cstdint>
-#include <memory>
-#include <ostream>
-#include <unordered_map>
-#include <functional>
-#include <mutex>
-#include <stdexcept>
 #include <sys/types.h>
-#include "httplib.h"
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <ostream>
+#include <stdexcept>
+#include <unordered_map>
+
 #include "event_dispatcher.h"
-#include "log.h"
+#include "httplib.h"
 #include "infer_instances.h"
+#include "log.h"
 
 namespace mindie_llm {
 using InferRequestIdType = uint32_t;
@@ -38,15 +40,15 @@ const std::unordered_map<uint64_t, std::string> g_exceptionInfo = {
     {httplib::StatusCode::InternalServerError_500, "Incomplete Generation"},
     {httplib::StatusCode::ServiceUnavailable_503, "Service Unavailable"}};
 class RequestContext {
-public:
+   public:
     RequestContext(const httplib::Request &request, httplib::Response &response) noexcept;
     ~RequestContext() = default;
 
-public:
+   public:
     uint32_t CallbackId() const noexcept;
     void SetCallbackId(uint32_t id) noexcept;
     void SetResponseFinished(bool isFinished);
-    std::unique_lock<std::mutex> LockAndCheckResponseFinished(bool& flagOut);
+    std::unique_lock<std::mutex> LockAndCheckResponseFinished(bool &flagOut);
     InferRequestIdType InferRequestId() const;
     void SetHTTPRequestUUID(std::string uuid);
     std::string GetHTTPRequestUUID();
@@ -59,8 +61,7 @@ public:
     const httplib::Request &Req() const noexcept;
     httplib::Response &Res() noexcept;
     bool IsConnectionClosed() const noexcept;
-    std::string ToString() const
-    {
+    std::string ToString() const {
         std::ostringstream oss;
         oss << "RequestContext { " << "CallbackId: " << cbId << ", InferRequestId: " << inferRequestId
             << ", RequestUUID: " << reqUuid << ", Method: " << method << ", Version: " << version << ", Path: " << path
@@ -68,7 +69,7 @@ public:
         return oss.str();
     }
 
-private:
+   private:
     static const std::string requestIdPrefix;
     static std::atomic<uint64_t> requestIdContext;
 
@@ -94,7 +95,7 @@ private:
 using ReqCtxPtr = std::shared_ptr<RequestContext>;
 
 class HttpRestResource {
-public:
+   public:
     static int ResponseNobody(const ReqCtxPtr &requestContext, int code) noexcept;
     static int ResponseJsonBody(const ReqCtxPtr &requestContext, int code, const std::string &body) noexcept;
     static int ResponseWithBody(const ReqCtxPtr &requestContext, int code, const std::string &contentType,
@@ -105,6 +106,6 @@ public:
     static std::string WrapperJson(const std::string &error, const std::string &errorType = "validation") noexcept;
     static std::string WrapperStatusJson(const std::string &message) noexcept;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // ENDPOINT_HTTP_REST_RESOURCE_H
+#endif  // ENDPOINT_HTTP_REST_RESOURCE_H

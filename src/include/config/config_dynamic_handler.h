@@ -13,33 +13,32 @@
 #ifndef MINDIE_DYNAMIC_CONFIG_HANDLER_H
 #define MINDIE_DYNAMIC_CONFIG_HANDLER_H
 
-#include <functional>
-#include <vector>
-#include <mutex>
 #include <atomic>
+#include <functional>
+#include <mutex>
 #include <nlohmann/json.hpp>
+#include <vector>
 
 namespace mindie_llm {
 
 class DynamicConfigHandler {
-public:
-    static DynamicConfigHandler& GetInstance();
+   public:
+    static DynamicConfigHandler &GetInstance();
     void Start() const;
     void Stop() const;
 
     template <typename T>
     void RegisterCallBackFunction(const std::string &pathExpression, T *obj, void (T::*method)(uint64_t),
-                                  uint64_t value) const
-    {
+                                  uint64_t value) const {
         std::lock_guard<std::mutex> locker(GetInstance().vectorMutex);
         GetInstance().callBackFunctions.push_back(
             std::make_pair(pathExpression, [obj, method, value] { (obj->*method)(value); }));
     }
 
-private:
+   private:
     DynamicConfigHandler() {}
     ~DynamicConfigHandler();
-    std::vector<std::string> splitString(const std::string& s, const char delimiter = '.') const;
+    std::vector<std::string> splitString(const std::string &s, const char delimiter = '.') const;
     std::string getConfigFilePath() const;
     bool CheckSystemConfig(const std::string &jsonPath, nlohmann::json &inputJsonData, std::string paramType) const;
     bool isTriggered(const std::string pathExpression) const;
@@ -49,6 +48,6 @@ private:
     std::mutex vectorMutex;
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_DYNAMIC_CONFIG_HANDLER_H
+#endif  // MINDIE_DYNAMIC_CONFIG_HANDLER_H

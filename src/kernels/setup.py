@@ -17,22 +17,21 @@
 import os
 import sys
 import glob
-import torch
-from setuptools import setup, find_packages
+from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension
 
 import torch_npu
 from torch_npu.utils.cpp_extension import NpuExtension
 
 PYTORCH_NPU_INSTALL_PATH = os.path.dirname(os.path.abspath(torch_npu.__file__))
-USE_NINJA = os.getenv('USE_NINJA') == '1'
+USE_NINJA = os.getenv("USE_NINJA") == "1"
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 if "--ops" in sys.argv:
     idx = sys.argv.index("--ops")
     if idx + 1 < len(sys.argv):
         ops = sys.argv[idx + 1]
-        del sys.argv[idx:idx + 2] # 从 argv 中移除 --ops 及其值，避免 setuptools 报错
+        del sys.argv[idx : idx + 2]  # 从 argv 中移除 --ops 及其值，避免 setuptools 报错
     else:
         raise ValueError("Missing the value of input parameter '--ops', mie_ops setup failed!")
 else:
@@ -46,33 +45,33 @@ ext = NpuExtension(
     name=mie_ops_version + ".mie_ops_lib",
     sources=source_files,
     extra_compile_args=[
-        '-I' + os.path.join(PYTORCH_NPU_INSTALL_PATH, "include"),
-        '-I' + os.path.join(PYTORCH_NPU_INSTALL_PATH, "include/third_party/acl/inc"),
-        '-Wno-unused-variable',
-        '-Wno-unused-parameter',
-        '-Wno-unused-function',
-        '-Wno-narrowing',
+        "-I" + os.path.join(PYTORCH_NPU_INSTALL_PATH, "include"),
+        "-I" + os.path.join(PYTORCH_NPU_INSTALL_PATH, "include/third_party/acl/inc"),
+        "-Wno-unused-variable",
+        "-Wno-unused-parameter",
+        "-Wno-unused-function",
+        "-Wno-narrowing",
     ],
     extra_link_args=[
-        '-L' + os.path.join(PYTORCH_NPU_INSTALL_PATH, "lib"),  # torch_npu 的 so 所在目录
-        '-ltorch_npu',  # 链接 libtorch_npu.so
-        '-ltorch',      # 可能还需要链接 libtorch.so
-        '-lc10',        # PyTorch 依赖的库
-        '-Wl,-rpath,/path/to/torch_npu/lib',  # 运行时 rpath
+        "-L" + os.path.join(PYTORCH_NPU_INSTALL_PATH, "lib"),  # torch_npu 的 so 所在目录
+        "-ltorch_npu",  # 链接 libtorch_npu.so
+        "-ltorch",  # 可能还需要链接 libtorch.so
+        "-lc10",  # PyTorch 依赖的库
+        "-Wl,-z,now",
     ],
 )
 exts.append(ext)
 
 setup(
     name=mie_ops_version,
-    version='1.0',
+    version="1.0",
     keywords=mie_ops_version,
     packages=[mie_ops_version],
     package_dir={mie_ops_version: "mie_ops"},  # 将实际版本的mie_ops映射到mie_ops目录
     ext_modules=exts,
     package_data={
-        mie_ops_version: ['*.py', '*.so', 'opp/**/*'],
-        mie_ops_version + '.torch_ops_extension': ['*.py', '*.so'],
+        mie_ops_version: ["*.py", "*.so", "opp/**/*"],
+        mie_ops_version + ".torch_ops_extension": ["*.py", "*.so"],
     },
     cmdclass={"build_ext": BuildExtension.with_options(use_ninja=USE_NINJA)},
 )

@@ -47,7 +47,7 @@ function fn_build()
 
     fn_build_version_info
     fn_build_third_party
-    
+
     if [ -z "$ASCEND_HOME_PATH" ]; then
         echo "env ASCEND_HOME_PATH not exist, skip kernels compilation"
     else
@@ -102,7 +102,7 @@ function fn_main()
         if [[ "$cfg_flag" == 1 ]];then
             arg1="master"
         else
-            echo "argument $1 is unknown, please type build.sh help for more imformation"
+            echo "argument $1 is unknown, please type build.sh help for more information"
             exit 1
         fi
     fi
@@ -153,6 +153,7 @@ function fn_main()
             COMPILE_OPTIONS="${COMPILE_OPTIONS} -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDOMAIN_LAYERED_TEST=OFF"
             build_type="release"
             fn_build
+            fn_make_whl
             fn_make_run_package
             fn_make_debug_symbols_package
             ;;

@@ -36,22 +36,22 @@ class LinkMapParams:
 
     def __post_init__(self):
         for f in fields(self):
-            if f.name == 'role':
+            if f.name == "role":
                 continue
             value = getattr(self, f.name)
             if isinstance(value, int) and value < 1:
                 raise ValueError(f"Field '{f.name}' must be a positive integer (>=1).")
-            
 
-class BaseConfig():
+
+class BaseConfig:
     def __init__(self, model_config: dict):
         if model_config is None:
             raise ValueError("model_config is None!")
         logger.info("model_config %s", model_config)
 
         self.model_config = model_config
-        self.local_rank = self.parse('local_rank', required=True, to_int=True)
-        self.infer_mode = self.parse('infer_mode', required=False, default_value="standard")
+        self.local_rank = self.parse("local_rank", required=True, to_int=True)
+        self.infer_mode = self.parse("infer_mode", required=False, default_value="standard")
 
         self.remote_super_pod_id = {}
         self.remote_super_device_id = {}
@@ -74,16 +74,16 @@ class BaseConfig():
             if (target_path == mount_point or target_path.is_relative_to(mount_point)) and fs_type in shared_fs_types:
                 return True
         return False
-    
+
     def layerwise_disaggregated_initialize(self):
         self.layerwise_disaggregated = self.parse("layerwiseDisaggregated", required=False, default_value=None)
-        self.p_inst_enable_sp_cp = False    # 分布式边云协同场景暂不支持
+        self.p_inst_enable_sp_cp = False  # 分布式边云协同场景暂不支持
 
     def initialize(self):
         # optional
         self.model_instance_type = self.parse("model_instance_type")
         self.speculation_gamma = self.parse("speculation_gamma")
-        self.backend_type = self.parse('backend_type', default_value="")
+        self.backend_type = self.parse("backend_type", default_value="")
         self.plugin_params = self.parse("plugin_params", default_value="")
         self.tp_size = self.parse("tp", default_value=1, to_int=True)
         self.pp_size = self.parse("pp", default_value=1)
@@ -93,29 +93,29 @@ class BaseConfig():
         self.sp_size = self.parse("sp", default_value=1, to_int=True)
         self.cp_size = self.parse("cp", default_value=1, to_int=True)
         # not optional
-        self.model_weight_path = self.parse('model_id', required=True)
+        self.model_weight_path = self.parse("model_id", required=True)
 
-        self.trust_remote_code = self.parse('trust_remote_code', default_value=False)
+        self.trust_remote_code = self.parse("trust_remote_code", default_value=False)
         self.local_rank = self.parse("local_rank", required=True, to_int=True)
-        self.rank = self.parse('rank', required=True, to_int=True)
-        self.global_rank = self.parse('globalRankIds')
+        self.rank = self.parse("rank", required=True, to_int=True)
+        self.global_rank = self.parse("globalRankIds")
         if self.global_rank is not None:
             self.global_rank = self.global_rank.split(",")
-            if self.global_rank != ['']:
+            if self.global_rank != [""]:
                 self.rank = int(self.global_rank[self.local_rank])
 
         self.global_world_size = self.parse("globalWorldSize", to_int=True)
-        self.world_size = self.parse('world_size', required=True, to_int=True)
-        self.npu_device_id = self.parse('npu_device_id', required=True, to_int=True)
-        self.npu_device_ids = self.parse_list('npu_device_ids', required=True, to_int=True)
-        self.cpu_mem_size = self.parse('cpu_mem', required=True, to_int=True)
-        self.npu_mem_size = self.parse('npu_mem', required=True, to_int=True)
-        self.max_seq_len = self.parse('max_seq_len', required=True, to_int=True)
-        self.max_iter_times = self.parse('max_iter_times', required=True, to_int=True)
-        self.max_prefill_tokens = self.parse('max_prefill_tokens', required=True, to_int=True)
+        self.world_size = self.parse("world_size", required=True, to_int=True)
+        self.npu_device_id = self.parse("npu_device_id", required=True, to_int=True)
+        self.npu_device_ids = self.parse_list("npu_device_ids", required=True, to_int=True)
+        self.cpu_mem_size = self.parse("cpu_mem", required=True, to_int=True)
+        self.npu_mem_size = self.parse("npu_mem", required=True, to_int=True)
+        self.max_seq_len = self.parse("max_seq_len", required=True, to_int=True)
+        self.max_iter_times = self.parse("max_iter_times", required=True, to_int=True)
+        self.max_prefill_tokens = self.parse("max_prefill_tokens", required=True, to_int=True)
         self.cache_block_size = self.parse("block_size", required=True, to_int=True)
 
-        self.distributed_enable = self.parse("distributed_enable", required=True) == 'true'
+        self.distributed_enable = self.parse("distributed_enable", required=True) == "true"
 
     def parse(self, item_name, required=False, to_int=False, default_value=None):
         value = self.model_config.get(item_name)
@@ -135,7 +135,7 @@ class BaseConfig():
         logger.info(f"The item {item_name} value is {value}.")
         return value
 
-    def parse_list(self, item_name, split_char=',', required=False, to_int=False, default_value=None):
+    def parse_list(self, item_name, split_char=",", required=False, to_int=False, default_value=None):
         value = self.model_config.get(item_name)
         if value is None:
             if required:
@@ -178,7 +178,7 @@ class DmiConfig(BaseConfig):
     @staticmethod
     def generate_link_map(params: LinkMapParams):
         d_to_p = {}
-        
+
         # 根据 sp_p 的值选择不同的映射逻辑
         if params.sp_p != 1:
             # SP 模式的映射逻辑
@@ -191,8 +191,7 @@ class DmiConfig(BaseConfig):
         else:
             # 标准模式的映射逻辑
             if params.tp_d == 0 or params.tp_p == 0:
-                raise ValueError(
-                    f"Invalid tp mapping: tp_p ({params.tp_p}) and tp_d ({params.tp_d}) must not equal 0")
+                raise ValueError(f"Invalid tp mapping: tp_p ({params.tp_p}) and tp_d ({params.tp_d}) must not equal 0")
             if params.tp_p % params.tp_d != 0 and params.tp_d % params.tp_p != 0:
                 raise ValueError(
                     f"Invalid tp mapping: tp_p ({params.tp_p}) must be divisible by tp_d ({params.tp_d}) or "
@@ -231,8 +230,11 @@ class DmiConfig(BaseConfig):
 
     def init_dmi_config(self):
         self.role = self.parse("role", required=True)
-        if self.role != DmiModeNodeRole.PREFILL and self.role != DmiModeNodeRole.DECODER and\
-            self.role != DmiModeNodeRole.FLEX:
+        if (
+            self.role != DmiModeNodeRole.PREFILL
+            and self.role != DmiModeNodeRole.DECODER
+            and self.role != DmiModeNodeRole.FLEX
+        ):
             error_msg = "The pd_role should be prefill or decoder in DMI mode."
             logger.error(error_msg)
             raise ValueError(error_msg)
@@ -258,7 +260,7 @@ class DmiConfig(BaseConfig):
         self.model_config["local_host_ip"] = local_host_ip[node_num]
 
         if self.dp_size > 1:
-            self.local_dp_rank_to_id = generate_dp_inst_id(self.model_config['local_instance_id'], self.dp_size)
+            self.local_dp_rank_to_id = generate_dp_inst_id(self.model_config["local_instance_id"], self.dp_size)
             self.model_config["local_instance_id"] = self.local_dp_rank_to_id[self.rank // self.tp_size]
 
         self.model_config["local_device_ip"] = local_device_ip
@@ -298,7 +300,7 @@ class DmiConfig(BaseConfig):
         logger.info("[Config]>>> PD remote policy info: %s.", policy_info.tolist())
 
         self.set_pd_role(attr_info[0][0])
-        self.need_switch = (attr_info[0][1] == 1)
+        self.need_switch = attr_info[0][1] == 1
         link_num = attr_info[0][2]
         unlink_num = attr_info[0][3]
         host_ip_num = attr_info[0][4]
@@ -308,13 +310,20 @@ class DmiConfig(BaseConfig):
         # 暂时只支持所有remote实例相同tp dp sp配置
         self.remote_sp_size = int(policy_info[0][1])
         self.remote_cp_size = int(policy_info[0][2])
-            
-        self.p_inst_enable_sp_cp = ((self.role == DmiModeNodeRole.PREFILL) and (self.sp_size * self.cp_size != 1)) or \
-                                ((self.role == DmiModeNodeRole.DECODER) and (self.remote_sp_size * self.remote_cp_size != 1))
 
-        logger.info("[Config]\t>>> PD switch is %s, link num : %s, unlink_num : %s," \
-                    " host_ip_num : %s, p_inst_enable_sp_cp : %s.",
-                    self.need_switch, link_num, unlink_num, host_ip_num, self.p_inst_enable_sp_cp)
+        self.p_inst_enable_sp_cp = ((self.role == DmiModeNodeRole.PREFILL) and (self.sp_size * self.cp_size != 1)) or (
+            (self.role == DmiModeNodeRole.DECODER) and (self.remote_sp_size * self.remote_cp_size != 1)
+        )
+
+        logger.info(
+            "[Config]\t>>> PD switch is %s, link num : %s, unlink_num : %s,"
+            " host_ip_num : %s, p_inst_enable_sp_cp : %s.",
+            self.need_switch,
+            link_num,
+            unlink_num,
+            host_ip_num,
+            self.p_inst_enable_sp_cp,
+        )
 
         if link_num == 0 and unlink_num == 0:
             logger.info("[Config]\t>>> Do not need to link and unlink.")
@@ -335,7 +344,7 @@ class DmiConfig(BaseConfig):
         # 判断是否存在跨机的情况
         is_cross_machine = (host_ip_num > link_num) and contains_dpinstance_ids == 1
         host_ip_per_dp = host_ip_num // link_num
-        
+
         logger.info(f"[Config]\t>>> Is remote dp group across machine: {is_cross_machine}.")
         if is_cross_machine:
             # 跨机情况下，需要考虑多个 host IP，tensor 结构发生变化
@@ -382,7 +391,7 @@ class DmiConfig(BaseConfig):
                 if super_id_num != 0:
                     self.remote_super_pod_id[instance_id] = []
                     self.remote_super_device_id[instance_id] = []
-  
+
             for remote_rank in remote_link_ranks:
                 # for one device links with several devices, mark every link using different cluster id
                 cp_remote_rank = remote_rank // self.remote_sp_size

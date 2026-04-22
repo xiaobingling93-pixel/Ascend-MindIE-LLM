@@ -40,9 +40,7 @@ def check_owner_and_permission(path: str, current_uid: int) -> None:
             f"but current process is running as user ID {current_uid}. Access denied."
         )
     if (stat_info.st_mode & 0o777) != 0o600:
-        raise PermissionError(
-            f"'{path}' permission is {oct(stat_info.st_mode & 0o777)}, expected 0o600."
-        )
+        raise PermissionError(f"'{path}' permission is {oct(stat_info.st_mode & 0o777)}, expected 0o600.")
 
 
 class SharedMemoryChannel:
@@ -66,7 +64,7 @@ class SharedMemoryChannel:
         sem_producer_name = f"{self.name_prefix}_{role}_produce_{self.local_rank_id}"
         sem_consumer_name = f"{self.name_prefix}_{role}_consume_{self.local_rank_id}"
         current_uid = os.getuid()
-        
+
         check_owner_and_permission(f"/dev/shm/sem.{sem_producer_name.lstrip('/')}", current_uid)
         check_owner_and_permission(f"/dev/shm/sem.{sem_consumer_name.lstrip('/')}", current_uid)
         check_owner_and_permission(f"/dev/shm/{self.name_prefix}_{role}", current_uid)
@@ -77,7 +75,7 @@ class SharedMemoryChannel:
 
         logger.debug(f"Open shared memory:{self.name_prefix}_{role}")
         self.shared_memory = shm.SharedMemory(f"{self.name_prefix}_{role}")
-    
+
     def close_channel(self):
         if self.consumer_semaphore is not None:
             try:
@@ -96,7 +94,7 @@ class SharedMemoryChannel:
                 logger.warning(f"Failed to close producer semaphore: {e}")
             finally:
                 self.producer_semaphore = None
-        
+
         if self.shared_memory is not None:
             try:
                 self.shared_memory.close()
@@ -109,7 +107,7 @@ class SharedMemoryChannel:
         sem_producer_name = f"{self.name_prefix}_produce_0"
         sem_consumer_name = f"{self.name_prefix}_consume_0"
         current_uid = os.getuid()
-        
+
         check_owner_and_permission(f"/dev/shm/sem.{sem_producer_name.lstrip('/')}", current_uid)
         check_owner_and_permission(f"/dev/shm/sem.{sem_consumer_name.lstrip('/')}", current_uid)
         check_owner_and_permission(f"/dev/shm/{self.name_prefix}", current_uid)
@@ -132,7 +130,7 @@ class SharedMemoryChannel:
         msg_length = int.from_bytes(mem[:msg_length_bytes], "little")
         if msg_length <= 0:
             raise ValueError(f"Invalid message length: {msg_length}")
-        proto_data = bytes(mem[msg_length_bytes: msg_length_bytes + msg_length])
+        proto_data = bytes(mem[msg_length_bytes : msg_length_bytes + msg_length])
         self.producer_semaphore.release()
 
         message = message_class()
@@ -151,10 +149,10 @@ class SharedMemoryChannel:
             raise ValueError(f"Message size {msg_length} exceeds shared memory size limit at offset {buffer_offset}")
 
         self.producer_semaphore.acquire()
-        self.shared_memory.buf[buffer_offset: buffer_offset + msg_length_bytes] = msg_length.to_bytes(
+        self.shared_memory.buf[buffer_offset : buffer_offset + msg_length_bytes] = msg_length.to_bytes(
             msg_length_bytes, "little"
         )
-        self.shared_memory.buf[buffer_offset + msg_length_bytes: buffer_offset + msg_length_bytes + msg_length] = (
+        self.shared_memory.buf[buffer_offset + msg_length_bytes : buffer_offset + msg_length_bytes + msg_length] = (
             proto_data
         )
         span_end(prof_serialize)
@@ -168,12 +166,8 @@ class SharedMemoryChannel:
             raise ValueError(f"Message size {msg_length} exceeds shared memory size limit")
 
         self.producer_semaphore.acquire()
-        self.shared_memory.buf[0:msg_length_bytes] = msg_length.to_bytes(
-            msg_length_bytes, "little"
-        )
-        self.shared_memory.buf[msg_length_bytes: msg_length_bytes + msg_length] = (
-            byte_message
-        )
+        self.shared_memory.buf[0:msg_length_bytes] = msg_length.to_bytes(msg_length_bytes, "little")
+        self.shared_memory.buf[msg_length_bytes : msg_length_bytes + msg_length] = byte_message
         self.consumer_semaphore.release()
 
 
@@ -276,19 +270,19 @@ class SharedMemCommunication:
         for thread in self._threads:
             thread.join()
 
-    def send_response(self,
+    def send_response(
+        self,
         response: ExecuteResponse,
         is_transfer: bool = False,
         is_command: bool = False,
         is_link: bool = False,
-        is_recover_command: bool = False
-        ):
+        is_recover_command: bool = False,
+    ):
         shared_sync_link_key = "shared_sync_link"
         response_key = "response"
 
         # 故障码通过execute_error通道发送
-        has_err_msg = (response.HasField("execute_model_response") and
-                       response.execute_model_response.err_msg != "")
+        has_err_msg = response.HasField("execute_model_response") and response.execute_model_response.err_msg != ""
         if has_err_msg:
             error_channel = self._channels["execute_error"][response_key]
             error_channel.send_message(response, buffer_offset=0)
@@ -325,7 +319,6 @@ class SharedMemCommunication:
             response_channel.producer_semaphore.acquire()
             response_channel.consumer_semaphore.release()
 
-
     def send_model_execute_binary_data(self, binary_response):
         response_channel = self._channels["execute"]["response"]
         if self.config.local_rank % self.config.npu_num_per_dp == 0:
@@ -353,7 +346,7 @@ class SharedMemCommunication:
         response_channel = self._channels[channel_name]["response"]
         buffer_offset = (self.config.local_rank % self.config.npu_num_per_dp) * slot_size
         response_channel.send_message(response, buffer_offset=buffer_offset)
-    
+
     def _process_incoming_requests(self, channel_name: str):
         channel: SharedMemoryChannel = self._channels[channel_name]["request"]
         while self._is_running:
@@ -367,7 +360,7 @@ class SharedMemCommunication:
                 ExecuteType.TEXT_GENERATOR_CLEANUP,
             ]:
                 AdaptiveGarbageCollector.get_instance().request_counter_increase()
-            
+
             if request.execute_type == ExecuteType.MODEL_FINALIZE:
                 self._is_running = False
                 break

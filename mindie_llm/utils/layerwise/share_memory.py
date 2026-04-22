@@ -20,14 +20,14 @@ import posix_ipc
 
 from mindie_llm.utils.log.logging import logger
 
-SHARED_MEM_TYPE = 'i'
+SHARED_MEM_TYPE = "i"
 
 
 class SharedMemoryManager:
-    _instance: Optional['SharedMemoryManager'] = None
+    _instance: Optional["SharedMemoryManager"] = None
     _shm_path = "/dev/shm/llm_share_memory"
-    _sem_mutex_path = "/llm_semaphore"  
-    _sem_date_ready_path = "/llm_data_ready_semaphore" 
+    _sem_mutex_path = "/llm_semaphore"
+    _sem_date_ready_path = "/llm_data_ready_semaphore"
     _shm_size = 4096
     _ptr = None
     _shm_fd = -1
@@ -36,7 +36,7 @@ class SharedMemoryManager:
 
     _is_producer = False
     _consumer_num = 0
-    _share_mem_type = 'i'
+    _share_mem_type = "i"
     _mem_type_size = struct.calcsize(_share_mem_type)
 
     tmp_fd = None
@@ -50,7 +50,7 @@ class SharedMemoryManager:
         return cls._instance
 
     def __init__(self, parent_pid):
-        tmp_str = '_' + str(parent_pid)
+        tmp_str = "_" + str(parent_pid)
         self._shm_path += tmp_str
         self._sem_mutex_path += tmp_str
         self._sem_date_ready_path += tmp_str
@@ -82,7 +82,7 @@ class SharedMemoryManager:
             return {}
 
     # init interface
-    def initialize(self, is_producer, consumer_num, share_mem_type='i'):
+    def initialize(self, is_producer, consumer_num, share_mem_type="i"):
         self._initialize(is_producer, consumer_num, share_mem_type)
         if is_producer:
             self._initialize_mem_path()
@@ -95,8 +95,9 @@ class SharedMemoryManager:
                 self._ptr = mmap.mmap(self._shm_fd, self._shm_size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
                 self._sem = posix_ipc.Semaphore(self._sem_mutex_path, posix_ipc.O_RDWR)
                 self._data_sem = posix_ipc.Semaphore(self._sem_date_ready_path, posix_ipc.O_RDWR)
-                logger.info(f"[layerwiseDisaggregated] successed initialize SharedMemoryManager, "
-                            f"shm path: {self._shm_path}")
+                logger.info(
+                    f"[layerwiseDisaggregated] successed initialize SharedMemoryManager, shm path: {self._shm_path}"
+                )
                 return
             except Exception:
                 time.sleep(0.1)
@@ -130,7 +131,8 @@ class SharedMemoryManager:
         item = self._ptr.read(self._mem_type_size)
         can_read = struct.unpack(self._share_mem_type, item)[0]
         logger.info(
-            f"[layerwiseDisaggregated] sem value is {self._data_sem.value} id: {consumer_id} can_read: {can_read}")
+            f"[layerwiseDisaggregated] sem value is {self._data_sem.value} id: {consumer_id} can_read: {can_read}"
+        )
         if can_read == 0:
             return False
         else:
@@ -164,7 +166,7 @@ class SharedMemoryManager:
                     packed_item = struct.pack(SHARED_MEM_TYPE, item)
                 else:
                     raise ValueError(f"Unsupported data type in list, item: {item} type: {type(item)}")
-                
+
                 self._ptr.seek(data_offset)
                 data_offset += self._ptr.write(packed_item)
 
@@ -295,11 +297,10 @@ class SharedMemoryManager:
         self.tmp_sem = posix_ipc.Semaphore(self._sem_date_ready_path, flags=posix_ipc.O_CREAT, initial_value=0)
         self.tmp_mutex = posix_ipc.Semaphore(self._sem_mutex_path, flags=posix_ipc.O_CREAT, initial_value=1)
 
-    def _initialize(self, is_producer, consumer_num, share_mem_type='i'):
+    def _initialize(self, is_producer, consumer_num, share_mem_type="i"):
         if consumer_num < 1:
             raise ValueError("lwd share memory consumer_num can't be lower than 1.")
         self._is_producer = is_producer
         self._consumer_num = consumer_num
         self._share_mem_type = share_mem_type
         self._mem_type_size = struct.calcsize(share_mem_type)
-

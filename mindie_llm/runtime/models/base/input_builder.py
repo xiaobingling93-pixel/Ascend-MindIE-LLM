@@ -9,7 +9,7 @@
 # See the Mulan PSL v2 for more details.
 
 from copy import deepcopy
-from typing import Dict, Iterable, List, Any, Optional, Union
+from typing import Dict, Iterable, List, Any
 from enum import Enum
 
 import numpy as np
@@ -36,13 +36,14 @@ class InputBuilder:
         user_role_name: The role name of user. Default is 'user'.
         max_length: The maximum length of the input used to truncate the input of multi-turn conversations.
     """
+
     def __init__(
         self,
         tokenizer: Any,
         chat_template: str = "",
         system_role_name: str = "system",
         user_role_name: str = "user",
-        max_length: int = 2048
+        max_length: int = 2048,
     ) -> None:
         self.tokenizer = tokenizer
         self.system_role_name = system_role_name
@@ -74,11 +75,12 @@ class InputBuilder:
     @staticmethod
     def update_chat_template(**kwargs):
         """
-        If the chat_template parameter is present in the chat argument, the template passed via the parameter 
+        If the chat_template parameter is present in the chat argument, the template passed via the parameter
         will be used. Both string templates and file paths are supported as valid formats for this parameter.
         """
         import os
         from mindie_llm.runtime.utils.helpers.safety.file import safe_readlines, safe_open
+
         if kwargs is None:
             return
         chat_template_kwargs_string = "chat_template_kwargs"
@@ -95,9 +97,9 @@ class InputBuilder:
                     logger.error("chat_template should not be a relative file path.")
                     raise ValueError("chat_template is a relative file path, Only absolute file paths are allowed.")
                 try:
-                    with safe_open(chat_template, 'r', encoding='utf-8') as f:
+                    with safe_open(chat_template, "r", encoding="utf-8") as f:
                         template_content = safe_readlines(f)
-                        template_str = ''.join(template_content)
+                        template_str = "".join(template_content)
                     chat_template_kwargs[chat_template_string] = template_str
                 except Exception as e:
                     logger.error(f"Failed to load chat template from {chat_template}: {e}")
@@ -111,7 +113,7 @@ class InputBuilder:
         conversation: List[Dict[str, str]],
         add_generation_prompt: bool = True,
         adapt_to_max_length: bool = False,
-        **kwargs
+        **kwargs,
     ) -> List[int]:
         """Make chat context.
 
@@ -154,47 +156,59 @@ class InputBuilder:
             # extract user message
             query_turn = [conversation.pop()]
             if query_turn[0].get(self.role_key) != self.user_role_name:
-                print_log(rank, logger.warning, f"The last query is not offered by {self.user_role_name}. "
-                                                f"If your role name is not {self.user_role_name}, "
-                                                f"please update it by user_role_name=`your_user_role_name`")
-            # build minimum context 
+                print_log(
+                    rank,
+                    logger.warning,
+                    f"The last query is not offered by {self.user_role_name}. "
+                    f"If your role name is not {self.user_role_name}, "
+                    f"please update it by user_role_name=`your_user_role_name`",
+                )
+            # build minimum context
             last_turn = system_turn + query_turn
-            last_turn_tokens = self._apply_chat_template(last_turn, add_generation_prompt=add_generation_prompt, 
-                                                         **kwargs)
+            last_turn_tokens = self._apply_chat_template(
+                last_turn, add_generation_prompt=add_generation_prompt, **kwargs
+            )
             num_turns = len(conversation)
 
             # minimum context exceeds max length ,truncated to max_length
             if len(last_turn_tokens) >= self.max_length:
-                context_tokens = last_turn_tokens[:self.max_length]
-                print_log(rank, logger.warning, f"The sentence `{context_tokens}` has been truncated "
-                                                f"due to exceeding the maximum length limit.")
+                context_tokens = last_turn_tokens[: self.max_length]
+                print_log(
+                    rank,
+                    logger.warning,
+                    f"The sentence `{context_tokens}` has been truncated due to exceeding the maximum length limit.",
+                )
 
-            # no history chats, return last turn 
+            # no history chats, return last turn
             elif num_turns <= 1:
                 context_tokens = last_turn_tokens
-            
+
             # multiple history chats, try adding history chats from back to front
             else:
-                context_tokens = self._make_multi_turns_context(conversation, system_turn, query_turn, last_turn_tokens,
-                                                                add_generation_prompt=add_generation_prompt, **kwargs)
+                context_tokens = self._make_multi_turns_context(
+                    conversation,
+                    system_turn,
+                    query_turn,
+                    last_turn_tokens,
+                    add_generation_prompt=add_generation_prompt,
+                    **kwargs,
+                )
 
         # disable dynamic truncation
         else:
             if len(tools_msg) != 0:
-                context_tokens = self._apply_chat_template(conversation, add_generation_prompt=add_generation_prompt,
-                                                        tools_msg=tools_msg, **kwargs)
+                context_tokens = self._apply_chat_template(
+                    conversation, add_generation_prompt=add_generation_prompt, tools_msg=tools_msg, **kwargs
+                )
             else:
-                context_tokens = self._apply_chat_template(conversation, add_generation_prompt=add_generation_prompt,
-                                                        **kwargs)
+                context_tokens = self._apply_chat_template(
+                    conversation, add_generation_prompt=add_generation_prompt, **kwargs
+                )
 
         print_log(rank, logger.debug, f"input_texts: {self.tokenizer.decode(context_tokens)}")
         return context_tokens
-        
-    def _apply_chat_template(
-        self,
-        conversation: List[Dict[str, str]],
-        **kwargs
-    ) -> List[int]:
+
+    def _apply_chat_template(self, conversation: List[Dict[str, str]], **kwargs) -> List[int]:
         """A basic application of chat template.
 
         This method should be overwritten if the model has special prompt template. Note that a parameter
@@ -209,13 +223,16 @@ class InputBuilder:
             List[int]: The token ids that have been concatenated with flags and tokenized.
         """
         if not hasattr(self.tokenizer, "apply_chat_template"):
-            raise RuntimeError("Your transformers version is detected to be <4.34. This message indicates that this "
-                               "model is not supported to run on transformers <4.34. You can upgrade transformers to "
-                               "4.34 or above, or rewrite the InputBuilder provided with this model and load it in the "
-                               "router.")
+            raise RuntimeError(
+                "Your transformers version is detected to be <4.34. This message indicates that this "
+                "model is not supported to run on transformers <4.34. You can upgrade transformers to "
+                "4.34 or above, or rewrite the InputBuilder provided with this model and load it in the "
+                "router."
+            )
         if not self.tokenizer.chat_template:
-            raise RuntimeError("The model does not appear to be a chat model because it is not configured with a "
-                               "`chat_template`.")
+            raise RuntimeError(
+                "The model does not appear to be a chat model because it is not configured with a `chat_template`."
+            )
         truncation_method = kwargs.pop(self.truncation, TruncationSide.RIGHT)
         """
         When truncation_method is set to -1, the truncation is performed on the right.
@@ -229,7 +246,7 @@ class InputBuilder:
             kwargs["tokenize"] = True
             max_length = kwargs.pop("max_length", None)
         input_ids = self.tokenizer.apply_chat_template(conversation, **kwargs)
-        if(truncation_method == TruncationSide.LEFT and len(input_ids) > max_length):
+        if truncation_method == TruncationSide.LEFT and len(input_ids) > max_length:
             input_ids = input_ids[-max_length:]
         return input_ids
 
@@ -239,10 +256,10 @@ class InputBuilder:
         system_turn: List[Dict[str, str]],
         query_turn: List[Dict[str, str]],
         last_turn_tokens: List[int],
-        **kwargs
+        **kwargs,
     ) -> List[int]:
         content_key = "content"
-        prompt, answer = conversation[-2], conversation[-1] 
+        prompt, answer = conversation[-2], conversation[-1]
         multi_turns = system_turn + [prompt, answer] + query_turn
         multi_turns_tokens = self._apply_chat_template(multi_turns, **kwargs)
         one_turn_history_tokens = self.tokenizer.encode(prompt[content_key] + " " + answer[content_key])

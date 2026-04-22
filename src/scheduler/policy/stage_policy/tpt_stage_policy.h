@@ -14,24 +14,25 @@
 #define TPT_STAGE_POLICY_H
 
 #include <stdexcept>
+
 #include "concurrent_deque.h"
-#include "sequence_group.h"
 #include "config_info.h"
-#include "policy/stage_policy/stage_policy.h"
 #include "policy/seq_group_collection.h"
+#include "policy/stage_policy/stage_policy.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 class TptStagePolicy final : public StagePolicy {
-public:
+   public:
     explicit TptStagePolicy(const SchedulerConfigSPtr schedulerConfig);
 
     PDPriorityType Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting, ConcurrentDeque<SequenceGroupSPtr> &running,
                          ConcurrentDeque<SequenceGroupSPtr> &swapped) override;
 
-private:
+   private:
     SchedulerConfigSPtr schedulerConfig_;
     uint64_t decodeWasteTime_{0};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

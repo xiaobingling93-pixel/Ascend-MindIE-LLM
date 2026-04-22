@@ -11,13 +11,13 @@
  */
 
 #include "pre_scheduler.h"
+
+#include "log.h"
 #include "process_group.h"
 #include "thread_group_cc.h"
-#include "log.h"
 
 namespace mindie_llm {
-std::vector<SchedInfo> PreScheduler::ShareSchedInfo(const SchedInfo &schedInfo, size_t dpRank, bool enableDistributed)
-{
+std::vector<SchedInfo> PreScheduler::ShareSchedInfo(const SchedInfo &schedInfo, size_t dpRank, bool enableDistributed) {
     if (enableDistributed) {
         return ShareSchedInfoCrossNode(schedInfo);
     } else {
@@ -25,8 +25,7 @@ std::vector<SchedInfo> PreScheduler::ShareSchedInfo(const SchedInfo &schedInfo, 
     }
 }
 
-std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossDP(const SchedInfo &schedInfo, size_t dpRank)
-{
+std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossDP(const SchedInfo &schedInfo, size_t dpRank) {
     // 1. 使用ThreadGroupCC进行allGather通信
     std::vector<int64_t> sendData = {
         static_cast<int64_t>(schedInfo.pdPriority_),
@@ -42,17 +41,16 @@ std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossDP(const SchedInfo &sche
     for (size_t i = 0; i < recvData.size(); ++i) {
         if (recvData[i].size() < indexNum) {
             throw std::runtime_error("Invalid received data from dpRank " + std::to_string(i) +
-                ": expected 3 elements, got " + std::to_string(recvData[i].size()));
+                                     ": expected 3 elements, got " + std::to_string(recvData[i].size()));
         }
         result[i].pdPriority_ = static_cast<PDPriorityType>(recvData[i][0]);
-        result[i].waitingSeqGroupNum_ = recvData[i][1]; // 1: waitingSeqGroupNum_
-        result[i].runningSeqGroupNum_ = recvData[i][2]; // 2: runningSeqGroupNum_
+        result[i].waitingSeqGroupNum_ = recvData[i][1];  // 1: waitingSeqGroupNum_
+        result[i].runningSeqGroupNum_ = recvData[i][2];  // 2: runningSeqGroupNum_
     }
     return result;
 }
 
-std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossNode(const SchedInfo &schedInfo)
-{
+std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossNode(const SchedInfo &schedInfo) {
     // 1. 使用ThreadGroupCC进行allGather通信
     std::vector<int64_t> sendData = {
         static_cast<int64_t>(schedInfo.pdPriority_),
@@ -66,7 +64,7 @@ std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossNode(const SchedInfo &sc
         if (outputs.empty() || outputs[0].empty()) {
             return {};
         }
-        
+
         // 2. 转换成SchedInfoPerRank
         std::vector<SchedInfo> result(outputs[0].size());
         for (size_t i = 0; i < outputs[0].size(); ++i) {
@@ -76,14 +74,13 @@ std::vector<SchedInfo> PreScheduler::ShareSchedInfoCrossNode(const SchedInfo &sc
             result[i].runningSeqGroupNum_ = tensor[2].item<int64_t>();
         }
         return result;
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         MINDIE_LLM_LOG_ERROR("ShareSchedInfoCrossNode failed: outputs is invalid.");
         return {};
     }
 }
 
-PDPriorityType PreScheduler::DecidePDPriority(const std::vector<SchedInfo> &schedInfos)
-{
+PDPriorityType PreScheduler::DecidePDPriority(const std::vector<SchedInfo> &schedInfos) {
     std::vector<SchedInfo> decideScheduleInfos;
     for (auto it = schedInfos.begin(); it != schedInfos.end(); ++it) {
         bool allQueEmpty = (it->waitingSeqGroupNum_ + it->runningSeqGroupNum_ + it->swapSeqGroupNum_) == 0;
@@ -99,4 +96,4 @@ PDPriorityType PreScheduler::DecidePDPriority(const std::vector<SchedInfo> &sche
     return numPrefill >= (decideScheduleInfos.size() - numPrefill) ? PDPriorityType::PREFILL_FIRST
                                                                    : PDPriorityType::DECODE_FIRST;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -47,7 +47,7 @@ class Engine:
 
         self.cv_map = {}
         self.ctrl_status_map = {}
-        
+
         self.remain_blocks = 0
         self.remain_prefill_slots = 0
         self.remain_prefill_tokens = 0
@@ -58,26 +58,26 @@ class Engine:
         self.max_position_embeddings = 0
         self.mutex_start = Lock()
         self.started = False
-    
+
     @staticmethod
     def get_config_path():
-        config_path = os.getenv('MIES_CONFIG_JSON_PATH')
+        config_path = os.getenv("MIES_CONFIG_JSON_PATH")
         if config_path:
             return config_path
 
-        home_path = os.getenv('MINDIE_LLM_HOME_PATH')
-        if not home_path:
-            home_path = os.getenv('MINDIE_LLM_HOME_PATH')
+        home_path = os.getenv("MINDIE_LLM_HOME_PATH")
+        if not home_path or not os.path.exists(os.path.join(home_path, "__init__.py")):
+            home_path = os.getenv("MIES_INSTALL_PATH")
         if home_path:
             return os.path.join(home_path, "conf/config.json")
         else:
             raise RuntimeError("no config path found")
-    
+
     @staticmethod
     def get_scheduler_config(config_path):
-        with safe_open(config_path, 'r') as file:
+        with safe_open(config_path, "r") as file:
             config = json.load(file)
-            return config['BackendConfig']['ScheduleConfig']
+            return config["BackendConfig"]["ScheduleConfig"]
 
     @staticmethod
     def convert_request_id(req_id: llm_manager_python.InferRequestId):
@@ -87,14 +87,14 @@ class Engine:
             return req_id.unsigned_int_value()
 
     @staticmethod
-    def construct_response_by_tensor_map(llm_req_id: Union[str, int],
-                                         output: llm_manager_python.TensorMap,
-                                         is_final: bool, err_msg: str) -> Response:
+    def construct_response_by_tensor_map(
+        llm_req_id: Union[str, int], output: llm_manager_python.TensorMap, is_final: bool, err_msg: str
+    ) -> Response:
         response = Response(llm_req_id)
 
         for _, tensor in output.items():
             response_data = infer_tensor_to_data(tensor)
-    
+
             ret = response.add_output(response_data)
             if not ret.is_ok():
                 continue
@@ -113,7 +113,7 @@ class Engine:
         if not inputs:
             return Status(Code.ERROR, "Missing inputs in request")
         return Status(Code.OK)
- 
+
     def init(self, config_path=None, response_callback=None, load_all_data=False, data_len=0) -> Status:
         """
         初始化engine对象
@@ -121,27 +121,31 @@ class Engine:
         """
         if config_path is None:
             config_path = self.get_config_path()
-        
+
         if response_callback is not None:
             self.response_callback = response_callback
-        
+
         def get_requests_callback_inner():
             requests: list[llm_manager_python.InferRequest] = []
             with self.forward_mutex:
-                while (len(self.request_queue) != 0):
+                while len(self.request_queue) != 0:
                     requests.append(self.request_queue.pop(0))
             return requests
 
         def get_requests_callback():
             if load_all_data:
                 if len(self.request_queue) == data_len:
-                    return get_requests_callback_inner()  
+                    return get_requests_callback_inner()
             else:
                 return get_requests_callback_inner()
             return []
 
-        def send_responses_callback(req_id: llm_manager_python.InferRequestId, output: llm_manager_python.TensorMap,
-                                    is_final: bool, err_msg: str):
+        def send_responses_callback(
+            req_id: llm_manager_python.InferRequestId,
+            output: llm_manager_python.TensorMap,
+            is_final: bool,
+            err_msg: str,
+        ):
             with self.forward_mutex:
                 if req_id.string_value() in self.callback_map:
                     self.callback_map[req_id.string_value()](req_id, output, is_final, err_msg)
@@ -150,11 +154,11 @@ class Engine:
                     return
             if self.response_callback is not None:
                 self.response_callback(req_id, output, is_final, err_msg)
-        
+
         def stop_signal_callback():
             stop_list = []
             with self.stop_mutex:
-                while (len(self.stop_id_queue) != 0):
+                while len(self.stop_id_queue) != 0:
                     stop_list.append(self.stop_id_queue.pop(0))
             return stop_list
 
@@ -167,8 +171,9 @@ class Engine:
                 self.remain_prefill_tokens = received_json.get("free_npu_block_num")
                 self.processing_request_num = received_json.get("processing_request_num")
 
-        def send_status_callback(req_id: llm_manager_python.InferRequestId,
-                                 status: llm_manager_python.Status, status_response_type: str):
+        def send_status_callback(
+            req_id: llm_manager_python.InferRequestId, status: llm_manager_python.Status, status_response_type: str
+        ):
             req_id_str = req_id.string_value()
             if status_response_type == llm_manager_python.StatusResponseType.CONTROL_SIGNAL_STATUS:
                 with self.stop_mutex:
@@ -184,10 +189,16 @@ class Engine:
                             cv.notify()
             else:
                 raise RuntimeError("SendStatusResponseCallback type invalid!")
-        
-        self.llm_manager = llm_manager_python.LlmManager(config_path, get_requests_callback, send_responses_callback,
-                                             stop_signal_callback, stats_callback, send_status_callback)
-        with safe_open(config_path, 'r') as f:
+
+        self.llm_manager = llm_manager_python.LlmManager(
+            config_path,
+            get_requests_callback,
+            send_responses_callback,
+            stop_signal_callback,
+            stats_callback,
+            send_status_callback,
+        )
+        with safe_open(config_path, "r") as f:
             config_data = json.load(f)
             model_instance_id = 0
             npu_device_id = set(config_data["BackendConfig"]["npuDeviceIds"][model_instance_id])
@@ -195,7 +206,7 @@ class Engine:
             if not status.is_ok():
                 return Status(Code.ERROR, status.status_msg())
         return Status(Code.OK, "Success")
-    
+
     def add_request_to_queue(self, runtime_req_id, send_response_callback, runtime_request) -> Status:
         runtime_req_id_str = runtime_req_id.string_value()
         with self.forward_mutex:
@@ -232,18 +243,10 @@ class Engine:
         input_tensors = llm_infer_request.get_immutable_inputs()
         for input_tensor_name, input_tensor in input_tensors.items():
             runtime_tensor = llm_manager_python.InferTensor(
-                input_tensor_name,
-                get_infer_datatype_by_dtype(input_tensor.get_type()),
-                input_tensor.get_shape()
+                input_tensor_name, get_infer_datatype_by_dtype(input_tensor.get_type()), input_tensor.get_shape()
             )
-            runtime_tensor.set_buffer(
-                input_tensor.get_data(),
-                False
-            )
-            runtime_request.add_tensor(
-                input_tensor_name,
-                runtime_tensor
-            )
+            runtime_tensor.set_buffer(input_tensor.get_data(), False)
+            runtime_request.add_tensor(input_tensor_name, runtime_tensor)
 
         if llm_infer_request.get_send_response_callback() is None:
             llm_infer_request.set_send_response_callback(self.response_callback)
@@ -251,7 +254,6 @@ class Engine:
         send_response_callback = llm_infer_request.get_send_response_callback()
         res = self.add_request_to_queue(runtime_req_id, send_response_callback, runtime_request)
         return res
-        
 
     def finalize(self) -> Status:
         """

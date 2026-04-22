@@ -16,6 +16,7 @@
  */
 
 #include "threadpool_monitor.h"
+
 #include <cstring>
 
 #include "http_rest_resource.h"
@@ -25,8 +26,7 @@
 namespace mindie_llm {
 const int connectionCheckInterval = 200;
 
-ThreadPoolMonitor::ThreadPoolMonitor(size_t n, size_t mqr) : shutdown_(false), max_queued_requests_(mqr)
-{
+ThreadPoolMonitor::ThreadPoolMonitor(size_t n, size_t mqr) : shutdown_(false), max_queued_requests_(mqr) {
     while (n > 0) {
         threads_.emplace_back(Worker(*this));
         n--;
@@ -35,16 +35,14 @@ ThreadPoolMonitor::ThreadPoolMonitor(size_t n, size_t mqr) : shutdown_(false), m
     monitor_thread = std::thread(&ThreadPoolMonitor::Monitor, this);
 }
 
-ThreadPoolMonitor::~ThreadPoolMonitor()
-{
+ThreadPoolMonitor::~ThreadPoolMonitor() {
     if (monitor_thread.joinable()) {
         stop_monitor_flag.store(true);
         monitor_thread.join();
     }
 }
 
-bool ThreadPoolMonitor::enqueue(std::function<void()> fn)
-{
+bool ThreadPoolMonitor::enqueue(std::function<void()> fn) {
     bool enqueSuc = false;
     size_t num = 0;
     {
@@ -63,14 +61,13 @@ bool ThreadPoolMonitor::enqueue(std::function<void()> fn)
         return true;
     } else {
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-            GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, SUBPROCESS_ERROR),
-            "[ThreadPoolMonitor] enqueue fail: wait num is " << num << ", max is " << max_queued_requests_);
+                   GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SERVER_REQUEST, SUBPROCESS_ERROR),
+                   "[ThreadPoolMonitor] enqueue fail: wait num is " << num << ", max is " << max_queued_requests_);
         return false;
     }
 }
 
-void ThreadPoolMonitor::shutdown()
-{
+void ThreadPoolMonitor::shutdown() {
     {
         std::unique_lock<std::mutex> lock(mutex_);
         shutdown_ = true;
@@ -81,8 +78,7 @@ void ThreadPoolMonitor::shutdown()
     }
 }
 
-void ThreadPoolMonitor::CheckAndRemoveClosedConnections()
-{
+void ThreadPoolMonitor::CheckAndRemoveClosedConnections() {
     std::unique_lock<std::shared_mutex> lock(monitor_map_mutex_);
     for (auto it = monitorRequests_.begin(); it != monitorRequests_.end();) {
         auto req = it->first;
@@ -123,13 +119,12 @@ void ThreadPoolMonitor::CheckAndRemoveClosedConnections()
     }
 }
 
-std::function<void()> ThreadPoolMonitor::Worker::GetNextJob()
-{
+std::function<void()> ThreadPoolMonitor::Worker::GetNextJob() {
     std::unique_lock<std::mutex> lock(pool_.mutex_);
     pool_.cond_.wait(lock, [this] { return !pool_.jobs_.empty() || pool_.shutdown_; });
 
     if (pool_.shutdown_ && pool_.jobs_.empty()) {
-        return nullptr; // No more jobs and shutdown flag set
+        return nullptr;  // No more jobs and shutdown flag set
     }
 
     // 获取并移除队列中的第一个任务
@@ -139,8 +134,7 @@ std::function<void()> ThreadPoolMonitor::Worker::GetNextJob()
     return job;
 }
 
-void ThreadPoolMonitor::Worker::operator()()
-{
+void ThreadPoolMonitor::Worker::operator()() {
     while (true) {
         std::function<void()> task = GetNextJob();
         if (!task) {
@@ -154,24 +148,21 @@ void ThreadPoolMonitor::Worker::operator()()
 #endif
 }
 
-void ThreadPoolMonitor::AddRequestToMonitor(std::shared_ptr<RequestContext> requestContext)
-{
+void ThreadPoolMonitor::AddRequestToMonitor(std::shared_ptr<RequestContext> requestContext) {
     std::unique_lock<std::shared_mutex> lock(monitor_map_mutex_);
     monitorRequests_.insert({requestContext->GetHTTPRequestUUID(), requestContext});
 }
 
-void ThreadPoolMonitor::RemoveMonitorRequest(std::string reqid)
-{
+void ThreadPoolMonitor::RemoveMonitorRequest(std::string reqid) {
     std::unique_lock<std::shared_mutex> lock(monitor_map_mutex_);
     monitorRequests_.erase(reqid);
 }
 
-void ThreadPoolMonitor::Monitor()
-{
+void ThreadPoolMonitor::Monitor() {
     pthread_setname_np(pthread_self(), "Monitor");
     while (!stop_monitor_flag) {
         std::this_thread::sleep_for(std::chrono::milliseconds(connectionCheckInterval));
         CheckAndRemoveClosedConnections();
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

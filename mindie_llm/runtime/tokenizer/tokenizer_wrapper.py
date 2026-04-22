@@ -42,11 +42,8 @@ class TokenizerWrapper:
     def __init__(self, model_name_or_path: str, **kwargs) -> None:
         model_dict_key = "models_dict"
         if model_dict_key in kwargs.keys():
-            kwargs[model_dict_key] = None if kwargs[model_dict_key] == '' else json.loads(kwargs[model_dict_key])
-        load_config = LoadConfig(
-            model_name_or_path=model_name_or_path,
-            models_dict=kwargs[model_dict_key]
-        )
+            kwargs[model_dict_key] = None if kwargs[model_dict_key] == "" else json.loads(kwargs[model_dict_key])
+        load_config = LoadConfig(model_name_or_path=model_name_or_path, models_dict=kwargs[model_dict_key])
         router_ins = get_router_ins(load_config)
         self.config = router_ins.config
         self.tokenizer = router_ins.tokenizer
@@ -56,7 +53,7 @@ class TokenizerWrapper:
         self.llm_config = router_ins.llm_config
         self.enable_thinking = self.tokenizer.init_kwargs.get("enable_thinking", True)
         self.truncation = "truncation"
-        
+
     def encode(self, inputs, **kwargs) -> list[int]:
         """Encodes input text or conversation into token IDs.
 
@@ -76,7 +73,7 @@ class TokenizerWrapper:
                 kwargs[self.truncation] = False
             else:
                 kwargs[self.truncation] = True
-                if truncation_method == TruncationSide.RIGHT:   
+                if truncation_method == TruncationSide.RIGHT:
                     self.tokenizer.truncation_side = "right"
                 else:
                     self.tokenizer.truncation_side = "left"
@@ -84,13 +81,14 @@ class TokenizerWrapper:
         return token_ids
 
     def decode(
-            self, all_token_ids: list[int], 
-            skip_special_tokens: bool, 
-            use_tool_calls: bool, 
-            is_chat_req: bool,
-            stream: bool, 
-            **kwargs
-        ) -> dict:
+        self,
+        all_token_ids: list[int],
+        skip_special_tokens: bool,
+        use_tool_calls: bool,
+        is_chat_req: bool,
+        stream: bool,
+        **kwargs,
+    ) -> dict:
         """Decodes token IDs into structured output, supporting reasoning and tool calls.
 
         Args:
@@ -105,11 +103,10 @@ class TokenizerWrapper:
             dict: Decoded result containing content, reasoning content, tool calls, and metadata.
         """
         metadata = kwargs.get(METADATA_KEY, {})
-        self.tool_calls_processor.tools = metadata.get('tools', None)
+        self.tool_calls_processor.tools = metadata.get("tools", None)
         use_reasoning_parser = self._is_use_reasoning_parser(metadata)
         if not stream:
-
-            """Case 1: separate the reasoning content ; tool call parsing for final content; 
+            """Case 1: separate the reasoning content ; tool call parsing for final content;
             combine: reasoning_content + content + tool_calls"""
             if use_reasoning_parser and use_tool_calls and is_chat_req:
                 reasoning_result = self._extract_reasoning_content(all_token_ids, skip_special_tokens)
@@ -123,14 +120,13 @@ class TokenizerWrapper:
 
             # Case 3: directly parse the complete text using tool calls.
             elif use_tool_calls and is_chat_req:
-                result = self.tool_calls_processor.decode(self._tokenizer_decode(
-                    all_token_ids, skip_special_tokens=skip_special_tokens))
+                result = self.tool_calls_processor.decode(
+                    self._tokenizer_decode(all_token_ids, skip_special_tokens=skip_special_tokens)
+                )
 
             # Case 4: Simple decoding to plain text
             else:
-                result = {
-                    CONTENT_KEY: self._tokenizer_decode(all_token_ids, skip_special_tokens=skip_special_tokens)
-                }
+                result = {CONTENT_KEY: self._tokenizer_decode(all_token_ids, skip_special_tokens=skip_special_tokens)}
 
             if self.reasoning_parser is None:
                 return result
@@ -145,30 +141,34 @@ class TokenizerWrapper:
 
             # Calculate the actual delta text
             curr_and_prev_content = self._tokenizer_decode(
-                all_token_ids[prev_decode_index:], skip_special_tokens=skip_special_tokens)
+                all_token_ids[prev_decode_index:], skip_special_tokens=skip_special_tokens
+            )
             pre_text = self._tokenizer_decode(
-                all_token_ids[prev_decode_index:curr_decode_index], skip_special_tokens=skip_special_tokens)
+                all_token_ids[prev_decode_index:curr_decode_index], skip_special_tokens=skip_special_tokens
+            )
             # No new content is added or the characters are incomplete.
             if len(curr_and_prev_content) <= len(pre_text) or curr_and_prev_content.endswith("�"):
                 if not metadata.get("req_end_flag", False):
                     if use_tool_calls:
                         return {"update_index": False, METADATA_KEY: metadata}
                     return {"update_index": False}
-            delta_text = curr_and_prev_content[len(pre_text):]
+            delta_text = curr_and_prev_content[len(pre_text) :]
 
             # Case 1: call get_combined_stream_result
             if use_reasoning_parser and use_tool_calls and is_chat_req:
-                return self._get_combined_stream_result(all_token_ids, prev_decode_index, curr_decode_index,
-                                                       skip_special_tokens, delta_text, metadata)
-                                                       
+                return self._get_combined_stream_result(
+                    all_token_ids, prev_decode_index, curr_decode_index, skip_special_tokens, delta_text, metadata
+                )
+
             # Case 2: call streaming method of the reasoning parser
             elif use_reasoning_parser and is_chat_req:
                 return self._extract_reasoning_content_streaming(all_token_ids, curr_decode_index, skip_special_tokens)
-            
+
             # Case 3: call streaming method of tool call method
             elif use_tool_calls and is_chat_req:
-                return self._extract_tool_calls_streaming(all_token_ids, prev_decode_index, curr_decode_index,
-                                                         skip_special_tokens, delta_text, metadata)
+                return self._extract_tool_calls_streaming(
+                    all_token_ids, prev_decode_index, curr_decode_index, skip_special_tokens, delta_text, metadata
+                )
             # Case 4: return incremental text directly
             else:
                 return {CONTENT_KEY: delta_text}
@@ -186,37 +186,37 @@ class TokenizerWrapper:
         reasoning_content_token_ids, content_token_ids = self.reasoning_parser.single_process_reasoning(all_token_ids)
         return {
             REASON_CONTENT_KEY: self._tokenizer_decode(
-                reasoning_content_token_ids, skip_special_tokens=skip_special_tokens),
-            CONTENT_KEY: self._tokenizer_decode(content_token_ids, skip_special_tokens=skip_special_tokens)
+                reasoning_content_token_ids, skip_special_tokens=skip_special_tokens
+            ),
+            CONTENT_KEY: self._tokenizer_decode(content_token_ids, skip_special_tokens=skip_special_tokens),
         }
 
     def _extract_reasoning_content_streaming(
-            self, 
-            all_token_ids: list[int], 
-            curr_decode_index: int,
-            skip_special_tokens: bool
-        ) -> dict:
+        self, all_token_ids: list[int], curr_decode_index: int, skip_special_tokens: bool
+    ) -> dict:
         reasoning_content_token_ids, content_token_ids = self.reasoning_parser.stream_process_reasoning(
-            all_token_ids, curr_decode_index)
+            all_token_ids, curr_decode_index
+        )
         # decode delta tokens
         reasoning_result = {
             REASON_CONTENT_KEY: self._tokenizer_decode(
-                reasoning_content_token_ids, skip_special_tokens=skip_special_tokens),
-            CONTENT_KEY: self._tokenizer_decode(content_token_ids, skip_special_tokens=skip_special_tokens)
+                reasoning_content_token_ids, skip_special_tokens=skip_special_tokens
+            ),
+            CONTENT_KEY: self._tokenizer_decode(content_token_ids, skip_special_tokens=skip_special_tokens),
         }
         return {k: v for k, v in reasoning_result.items() if v}
 
     def _extract_tool_calls_streaming(
-            self, 
-            all_token_ids: list[int], 
-            prev_decode_index: int, 
-            curr_decode_index: int,
-            skip_special_tokens: bool, 
-            delta_text: str, 
-            metadata: dict
-        ) -> dict:
+        self,
+        all_token_ids: list[int],
+        prev_decode_index: int,
+        curr_decode_index: int,
+        skip_special_tokens: bool,
+        delta_text: str,
+        metadata: dict,
+    ) -> dict:
         """Parses incremental tool call updates in streaming mode.
-           Multiple tokenizer processes, compatible with the same 
+           Multiple tokenizer processes, compatible with the same
            request toolcallsprocessor with different objects
 
         Args:
@@ -230,32 +230,39 @@ class TokenizerWrapper:
         Returns:
             Dict[str, Any]: Tool call delta or fallback content, plus updated metadata.
         """
-        if hasattr(self.tool_calls_processor, 'decode_stream'):
+        if hasattr(self.tool_calls_processor, "decode_stream"):
             # fetch the internal states of tool call parser: function name, arguments structure, called tool id
             self.tool_calls_processor.current_tool_name_sent = metadata.get("current_tool_name_sent")
             self.tool_calls_processor.current_tool_arguments_sent = metadata.get("current_tool_arguments_sent")
             self.tool_calls_processor.current_tool_id = metadata.get("current_tool_id")
-            # call stream decode 
-            result = self.tool_calls_processor.decode_stream(all_token_ids, prev_decode_index, curr_decode_index,
-                                                        skip_special_tokens, delta_text)
+            # call stream decode
+            result = self.tool_calls_processor.decode_stream(
+                all_token_ids, prev_decode_index, curr_decode_index, skip_special_tokens, delta_text
+            )
             # persist states
-            result.update({"metadata": {"current_tool_name_sent": self.tool_calls_processor.current_tool_name_sent,
-                "current_tool_arguments_sent": self.tool_calls_processor.current_tool_arguments_sent,
-                "current_tool_id": self.tool_calls_processor.current_tool_id}})
+            result.update(
+                {
+                    "metadata": {
+                        "current_tool_name_sent": self.tool_calls_processor.current_tool_name_sent,
+                        "current_tool_arguments_sent": self.tool_calls_processor.current_tool_arguments_sent,
+                        "current_tool_id": self.tool_calls_processor.current_tool_id,
+                    }
+                }
+            )
         else:
             logger.warning("Streaming function call parsing is not supported by the current model.")
             result = {CONTENT_KEY: delta_text}
         return result
 
     def _get_combined_stream_result(
-            self, 
-            all_token_ids: list[int], 
-            prev_decode_index: int, 
-            curr_decode_index: int,
-            skip_special_tokens: bool, 
-            delta_text: str, 
-            metadata: dict
-        ) -> dict:
+        self,
+        all_token_ids: list[int],
+        prev_decode_index: int,
+        curr_decode_index: int,
+        skip_special_tokens: bool,
+        delta_text: str,
+        metadata: dict,
+    ) -> dict:
         """
         Preferentially parse the thought chain.
         When the end tag of the thought chain is encountered, parse the function call.
@@ -280,31 +287,47 @@ class TokenizerWrapper:
             return self._extract_reasoning_content_streaming(all_token_ids, curr_decode_index, skip_special_tokens)
         elif full_has_over_think and delta_has_over_think:  # New content includes thought chain end tag
             reasoning_content_token_ids, content_token_ids = self.reasoning_parser.stream_process_reasoning(
-                all_token_ids, curr_decode_index)
+                all_token_ids, curr_decode_index
+            )
             if not content_token_ids:
-                return {REASON_CONTENT_KEY: self._tokenizer_decode(reasoning_content_token_ids, \
-                        skip_special_tokens=skip_special_tokens)} if reasoning_content_token_ids else {}
+                return (
+                    {
+                        REASON_CONTENT_KEY: self._tokenizer_decode(
+                            reasoning_content_token_ids, skip_special_tokens=skip_special_tokens
+                        )
+                    }
+                    if reasoning_content_token_ids
+                    else {}
+                )
             # case : New content = reasoning content + </think> + tool_call content
             prev_decode_index = curr_decode_index
             curr_decode_index = len(all_token_ids) - len(content_token_ids)
             # update delta_text
             curr_and_prev_content = self._tokenizer_decode(
-                all_token_ids[prev_decode_index:], skip_special_tokens=skip_special_tokens)
+                all_token_ids[prev_decode_index:], skip_special_tokens=skip_special_tokens
+            )
             pre_text = self._tokenizer_decode(
-                all_token_ids[prev_decode_index:curr_decode_index], skip_special_tokens=skip_special_tokens)
+                all_token_ids[prev_decode_index:curr_decode_index], skip_special_tokens=skip_special_tokens
+            )
             # No new content is added.
             if len(curr_and_prev_content) <= len(pre_text):
                 return {"update_index": False, "metadata": metadata}
-            delta_text = curr_and_prev_content[len(pre_text):]
-            tool_calls_result = self._extract_tool_calls_streaming(all_token_ids, prev_decode_index, curr_decode_index,
-                                                                  skip_special_tokens, delta_text, metadata)
+            delta_text = curr_and_prev_content[len(pre_text) :]
+            tool_calls_result = self._extract_tool_calls_streaming(
+                all_token_ids, prev_decode_index, curr_decode_index, skip_special_tokens, delta_text, metadata
+            )
             tool_calls_result.update(
-                {REASON_CONTENT_KEY:
-                    self._tokenizer_decode(reasoning_content_token_ids, skip_special_tokens=skip_special_tokens)})
+                {
+                    REASON_CONTENT_KEY: self._tokenizer_decode(
+                        reasoning_content_token_ids, skip_special_tokens=skip_special_tokens
+                    )
+                }
+            )
             return {k: v for k, v in tool_calls_result.items() if v}
         else:
-            return self._extract_tool_calls_streaming(all_token_ids, prev_decode_index, curr_decode_index, \
-                                                    skip_special_tokens, delta_text, metadata)
+            return self._extract_tool_calls_streaming(
+                all_token_ids, prev_decode_index, curr_decode_index, skip_special_tokens, delta_text, metadata
+            )
 
     def _tokenizer_decode(self, outputs: list[int], **kwargs) -> str:
         """Decodes token IDs to a string using the internal tokenizer.

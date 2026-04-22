@@ -16,23 +16,24 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+
 #include "basic_types.h"
+#include "config_info.h"
 #include "executor/executor_interface.h"
+#include "lora/loraops_mixin.h"
+#include "metric.h"
 #include "request_response/request.h"
 #include "request_response/response.h"
-#include "config_info.h"
-#include "metric.h"
-#include "lora/loraops_mixin.h"
 
 namespace mindie_llm {
 using ForwardRespToManagerCall = std::function<void(ResponseSPtr response)>;
 
 class ILlmEngine : public LoraOpsMixin {
-public:
+   public:
     virtual ~ILlmEngine() = default;
 
     virtual void InitProcessGroup(const std::vector<NodeInfo> &nodeInfos, std::string &processGroupMasterIP,
-        uint32_t processGroupMasterPort) = 0;
+                                  uint32_t processGroupMasterPort) = 0;
 
     virtual void StartEngineThread() = 0;
 
@@ -61,8 +62,8 @@ public:
 using LlmEnginePtr = std::unique_ptr<ILlmEngine>;
 
 LlmEnginePtr MakeLlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr> executors,
-    ForwardRespToManagerCall cb, Role pdRole, std::atomic<bool> *engineReadyFlag = nullptr);
+                           ForwardRespToManagerCall cb, Role pdRole, std::atomic<bool> *engineReadyFlag = nullptr);
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

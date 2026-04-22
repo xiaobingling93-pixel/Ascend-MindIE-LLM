@@ -1,9 +1,18 @@
 #!/bin/bash
+
+PACKAGE_NAME=""
+
+function fn_get_version()
+{
+    PACKAGE_NAME=${MINDIE_LLM_VERSION_OVERRIDE:-1.0.0}
+}
+
 function fn_make_run_package()
 {
+    fn_get_version
     mkdir -p $OUTPUT_DIR/scripts $OUTPUT_DIR/lib $RELEASE_DIR/$ARCH $OUTPUT_DIR/conf $OUTPUT_DIR/server/scripts/
     cp $CODE_ROOT/scripts/install.sh $OUTPUT_DIR
-    cp $CODE_ROOT/scripts/set_env.sh $OUTPUT_DIR
+    cp $CODE_ROOT/scripts/build_run_package/set_env.sh $OUTPUT_DIR
     cp $CODE_ROOT/scripts/uninstall.sh $OUTPUT_DIR/scripts
     cp $CODE_ROOT/src/server/conf/config.json $OUTPUT_DIR/conf
     cp -r $CODE_ROOT/src/server/scripts/* $OUTPUT_DIR/server/scripts
@@ -83,7 +92,7 @@ function fn_make_run_package()
     PY_VERSION="py3$PY_MINOR_VERSION"
     chmod +x $OUTPUT_DIR/*
     $THIRD_PARTY_OUTPUT_DIR/makeself/makeself.sh --header $CODE_ROOT/scripts/makeself-header.sh \
-       --help-header $CODE_ROOT/scripts/help.info --gzip --complevel 4 --nomd5 --sha256 --chown \
+       --help-header $CODE_ROOT/scripts/help.info --gzip --complevel 4 --nomd5 --sha256 --chown --tar-format gnu \
         ${OUTPUT_DIR} $RELEASE_DIR/$ARCH/Ascend-mindie-llm_${PACKAGE_NAME}_${PY_VERSION}_linux-${ARCH}.run "Ascend-mindie-llm" ./install.sh
 
     mv $RELEASE_DIR/$ARCH $OUTPUT_DIR
@@ -91,12 +100,34 @@ function fn_make_run_package()
 }
 
 function fn_make_debug_symbols_package() {
+    fn_get_version
     mkdir -p "$OUTPUT_DIR/debug_symbols"
     debug_symbols_package_name="$OUTPUT_DIR/debug_symbols/Ascend-mindie-llm-debug-symbols_${PACKAGE_NAME}_${PY_VERSION}_linux-${ARCH}.tar.gz"
     cd "$CODE_ROOT"
     tar czpf $debug_symbols_package_name llm_debug_symbols
     echo "Build tar package for llm debug symbols: $debug_symbols_package_name"
     cd -
+}
+
+function fn_make_whl() {
+    # PACKAGE_NAME=$(echo $PACKAGE_NAME | sed -E 's/([0-9]+)\.([0-9]+)\.RC([0-9]+)\.([0-9]+)/\1.\2rc\3.post\4/')
+    # PACKAGE_NAME=$(echo $PACKAGE_NAME | sed -s 's!.T!.alpha!')
+    fn_get_version
+    echo "MindIELLMWHLVersion $PACKAGE_NAME"
+    echo "make mindie-llm whl package"
+    cd $CODE_ROOT
+    python3 setup_mindie_llm.py --setup_cmd="bdist_wheel" --version=${PACKAGE_NAME}
+    cp dist/*.whl $OUTPUT_DIR
+    rm -rf dist mindie_llm.egg-info
+    cd -
+    if [ "$build_type" = "release" ]; then
+        cd $CODE_ROOT/tools
+        cp $OUTPUT_DIR/lib/llm_manager_python.so $CODE_ROOT/tools/llm_manager_python_api_demo
+        python3 setup.py --setup_cmd="bdist_wheel" --version=${PACKAGE_NAME}
+        cp dist/*.whl $OUTPUT_DIR
+        rm -rf dist llm_manager_python_api_demo.egg-info
+        cd -
+    fi
 }
 
 function fn_build_for_ci()

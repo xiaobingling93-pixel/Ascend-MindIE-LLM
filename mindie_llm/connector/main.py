@@ -22,28 +22,32 @@ def parse_from_cmd():
     parser = argparse.ArgumentParser()
     hyphens = "--"
     parser.add_argument(hyphens + ProcessStartArgName.LOCAL_RANK, type=int, default=0, help="local_rank")
-    parser.add_argument(hyphens + ProcessStartArgName.LOCAL_WORLD_SIZE, type=int, default=1,
-                        help="local_world_size")
+    parser.add_argument(hyphens + ProcessStartArgName.LOCAL_WORLD_SIZE, type=int, default=1, help="local_world_size")
     parser.add_argument(hyphens + ProcessStartArgName.GLOBAL_RANK, type=int, help="global_rank")
-    parser.add_argument(hyphens + ProcessStartArgName.GLOBAL_WORLD_SIZE, type=int,
-                        help="global_world_size")
+    parser.add_argument(hyphens + ProcessStartArgName.GLOBAL_WORLD_SIZE, type=int, help="global_world_size")
     parser.add_argument(hyphens + ProcessStartArgName.NPU_NUM_PER_DP, type=int, default=1, help="tp * cp")
     parser.add_argument(hyphens + ProcessStartArgName.NPU_DEVICE_ID, type=int, default=0, help="npu_device_id")
     parser.add_argument(hyphens + ProcessStartArgName.PARENT_PID, type=int, default=1, help="parent_pid")
-    parser.add_argument(hyphens + ProcessStartArgName.SHM_NAME_PREFIX, type=str, default="/integrated_testing",
-                        help="shm_name_prefix")
-    parser.add_argument(hyphens + ProcessStartArgName.COMMUNICATION_TYPE, type=str, default="shared_meme",
-                        help="communication_type:shared_meme|http")
+    parser.add_argument(
+        hyphens + ProcessStartArgName.SHM_NAME_PREFIX, type=str, default="/integrated_testing", help="shm_name_prefix"
+    )
+    parser.add_argument(
+        hyphens + ProcessStartArgName.COMMUNICATION_TYPE,
+        type=str,
+        default="shared_meme",
+        help="communication_type:shared_meme|http",
+    )
     parser.add_argument(hyphens + ProcessStartArgName.USE_MOCK_MODEL, type=bool, default=False, help="use_mock_model")
 
-    parser.add_argument(hyphens + ProcessStartArgName.LAYERWISE_DISAGGREGATED, 
-                        type=str, 
-                        default="false", 
-                        help="layerwise_disaggregated")
-    parser.add_argument(hyphens + ProcessStartArgName.LAYERWISE_DISAGGREGATED_ROLE_TYPE,
-                        type=str, 
-                        default="", 
-                        help="layerwise_disaggregated_role_type")
+    parser.add_argument(
+        hyphens + ProcessStartArgName.LAYERWISE_DISAGGREGATED, type=str, default="false", help="layerwise_disaggregated"
+    )
+    parser.add_argument(
+        hyphens + ProcessStartArgName.LAYERWISE_DISAGGREGATED_ROLE_TYPE,
+        type=str,
+        default="",
+        help="layerwise_disaggregated_role_type",
+    )
     # 解析参数
     args = parser.parse_args()
 
@@ -78,7 +82,7 @@ def check_config(args):
     if args.communication_type not in ["shared_meme", "http"]:
         logger.error(f"communication_type error! communication_type={args.communication_type}")
         return False
-    if hasattr(args, 'layerwise_disaggregated'):
+    if hasattr(args, "layerwise_disaggregated"):
         if args.layerwise_disaggregated not in ["false", "true"]:
             logger.error(
                 f"[layerwiseDisaggregated] layerwise_disaggregated error! "
@@ -87,8 +91,7 @@ def check_config(args):
             return False
         if args.layerwise_disaggregated_role_type not in ["", "master", "slave"]:
             logger.error(
-                f"[layerwiseDisaggregated] role_type error! "
-                f"role_type={args.layerwise_disaggregated_role_type}"
+                f"[layerwiseDisaggregated] role_type error! role_type={args.layerwise_disaggregated_role_type}"
             )
             return False
     return True
@@ -138,6 +141,7 @@ def register_signal(request_listener: RequestListener):
     # kill命令
     signal.signal(signal.SIGTERM, handler_signal)
     signal.signal(signal.SIGINT, handler_signal)
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MIES_ENV_UTIL_H
 #define MIES_ENV_UTIL_H
 
@@ -19,9 +19,8 @@
 
 namespace mindie_llm {
 class EnvUtil {
-public:
-    static EnvUtil& GetInstance()
-    {
+   public:
+    static EnvUtil& GetInstance() {
         static EnvUtil instance;
         return instance;
     }
@@ -42,10 +41,10 @@ public:
     EnvUtil& operator=(const EnvUtil&) = delete;
     ~EnvUtil() = default;
 
-private:
+   private:
     EnvUtil();
     std::map<std::string, std::string> vars;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_ENV_UTIL_H
+#endif  // MIES_ENV_UTIL_H

@@ -11,14 +11,16 @@
  */
 #include "file_utils.h"
 
-#include <iostream>
-#include <sstream>
-#include <cstring>
 #include <unistd.h>
-#include <climits>
+
 #include <cerrno>
-#include <regex>
+#include <climits>
+#include <cstring>
 #include <experimental/filesystem>
+#include <iostream>
+#include <regex>
+#include <sstream>
+
 #include "log.h"
 namespace fs = std::experimental::filesystem;
 namespace {
@@ -26,15 +28,14 @@ constexpr long MIN_MALLOC_SIZE = 1;
 constexpr uint64_t DEFAULT_MAX_DATA_SIZE = 4294967296;
 constexpr int PER_PERMISSION_MASK_RWX = 0b111;
 constexpr size_t MAX_ENV_LENGTH = 256;
-} // namespace
+}  // namespace
 
 namespace mindie_llm {
 
 static uint64_t g_defaultMaxDataSize = DEFAULT_MAX_DATA_SIZE;
 static const mode_t FILE_MODE = 0740;
 
-static bool GetFileSize(const std::string &filePath, size_t &fileSize)
-{
+static bool GetFileSize(const std::string &filePath, size_t &fileSize) {
     if (!FileUtils::CheckFileExists(filePath)) {
         std::cerr << "File does not exist!" << std::endl;
         return false;
@@ -69,8 +70,7 @@ static bool GetFileSize(const std::string &filePath, size_t &fileSize)
     return true;
 }
 
-static std::string GetBaseFileName(const std::string &path)
-{
+static std::string GetBaseFileName(const std::string &path) {
     std::string tempPath = path;
     if (!tempPath.empty() && (tempPath.back() == '/' || tempPath.back() == '\\')) {
         tempPath.pop_back();
@@ -82,8 +82,7 @@ static std::string GetBaseFileName(const std::string &path)
     return tempPath.substr(lastSlashPos + 1);
 }
 
-static size_t GetFileSize(const std::string &filePath)
-{
+static size_t GetFileSize(const std::string &filePath) {
     if (!FileUtils::CheckFileExists(filePath)) {
         std::cerr << "File does not exist!" << std::endl;
         return 0;
@@ -126,8 +125,7 @@ static size_t GetFileSize(const std::string &filePath)
     return fileSize;
 }
 
-static bool CheckDataSize(uint64_t size, uint64_t maxFileSize = DEFAULT_MAX_DATA_SIZE)
-{
+static bool CheckDataSize(uint64_t size, uint64_t maxFileSize = DEFAULT_MAX_DATA_SIZE) {
     if (maxFileSize <= MIN_MALLOC_SIZE || maxFileSize > g_defaultMaxDataSize) {
         return false;
     }
@@ -140,14 +138,12 @@ static bool CheckDataSize(uint64_t size, uint64_t maxFileSize = DEFAULT_MAX_DATA
     return true;
 }
 
-bool FileUtils::CheckFileExists(const std::string &filePath)
-{
+bool FileUtils::CheckFileExists(const std::string &filePath) {
     struct stat buffer;
     return (stat(filePath.c_str(), &buffer) == 0);
 }
 
-bool FileUtils::CheckDirectoryExists(const std::string &dirPath)
-{
+bool FileUtils::CheckDirectoryExists(const std::string &dirPath) {
     struct stat buffer;
     if (stat(dirPath.c_str(), &buffer) != 0) {
         return false;
@@ -155,8 +151,7 @@ bool FileUtils::CheckDirectoryExists(const std::string &dirPath)
     return (S_ISDIR(buffer.st_mode) == 1);
 }
 
-bool FileUtils::IsSymlink(const std::string &filePath)
-{
+bool FileUtils::IsSymlink(const std::string &filePath) {
     struct stat buf;
     std::string normalizedPath = filePath;
     while (!normalizedPath.empty() && normalizedPath.back() == '/') {
@@ -168,8 +163,8 @@ bool FileUtils::IsSymlink(const std::string &filePath)
     return S_ISLNK(buf.st_mode);
 }
 
-bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg, bool flag, std::string &regularPath)
-{
+bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg, bool flag,
+                                std::string &regularPath) {
     if (filePath.empty()) {
         errMsg = "The file path: " + filePath + " is empty.";
         return false;
@@ -208,8 +203,8 @@ bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &
     regularPath = realFilePath;
     return true;
 }
-bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg, std::string &regularPath)
-{
+bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &baseDir, std::string &errMsg,
+                                std::string &regularPath) {
     if (filePath.empty()) {
         errMsg = "The file path: " + GetBaseFileName(filePath) + " is empty.";
         return false;
@@ -245,8 +240,7 @@ bool FileUtils::RegularFilePath(const std::string &filePath, const std::string &
     regularPath = filePath;
     return true;
 }
-bool FileUtils::RegularFilePath(const std::string &filePath, std::string &errMsg, std::string &regularPath)
-{
+bool FileUtils::RegularFilePath(const std::string &filePath, std::string &errMsg, std::string &regularPath) {
     if (filePath.empty()) {
         errMsg = "The file path: " + filePath + " is empty.";
         return false;
@@ -273,8 +267,7 @@ bool FileUtils::RegularFilePath(const std::string &filePath, std::string &errMsg
     return true;
 }
 
-bool FileUtils::IsFileValid(const std::string &filePath, std::string &errMsg, const FileValidationParams &params)
-{
+bool FileUtils::IsFileValid(const std::string &filePath, std::string &errMsg, const FileValidationParams &params) {
     if (!CheckFileExists(filePath)) {
         errMsg = "The input file is not a regular file or not exists";
         return !params.isFileExist;
@@ -298,8 +291,7 @@ bool FileUtils::IsFileValid(const std::string &filePath, std::string &errMsg, co
 }
 
 bool FileUtils::IsFileValid(const std::string &filePath, std::string &errMsg, bool isFileExit, mode_t mode,
-                            bool checkPermission, uint64_t maxfileSize)
-{
+                            bool checkPermission, uint64_t maxfileSize) {
     if (!CheckFileExists(filePath)) {
         errMsg = "The input file: " + GetBaseFileName(filePath) + " is not a regular file or not exists";
         return !isFileExit;
@@ -330,8 +322,7 @@ bool FileUtils::IsFileValid(const std::string &filePath, std::string &errMsg, bo
 }
 
 bool FileUtils::IsFileAndDirectoryExists(const std::string &filePath, std::string &errMsg,
-                                         const FileValidationParams &params)
-{
+                                         const FileValidationParams &params) {
     if (!CheckFileExists(filePath)) {
         errMsg = "The input file is not a regular file or not exists";
         return !params.isFileExist;
@@ -348,8 +339,7 @@ bool FileUtils::IsFileAndDirectoryExists(const std::string &filePath, std::strin
     return true;
 }
 
-bool FileUtils::ConstrainOwner(const std::string &filePath, std::string &errMsg)
-{
+bool FileUtils::ConstrainOwner(const std::string &filePath, std::string &errMsg) {
     struct stat buf;
     int ret = stat(filePath.c_str(), &buf);
     if (ret != 0) {
@@ -364,15 +354,13 @@ bool FileUtils::ConstrainOwner(const std::string &filePath, std::string &errMsg)
     return true;
 }
 
-std::string GetModeString(const mode_t mode)
-{
+std::string GetModeString(const mode_t mode) {
     std::ostringstream oss;
     oss << std::oct << (mode & (S_IRWXU | S_IRWXG | S_IRWXO));
     return oss.str();
 }
 
-bool FileUtils::ConstrainPermission(const std::string &filePath, const mode_t &mode, std::string &errMsg)
-{
+bool FileUtils::ConstrainPermission(const std::string &filePath, const mode_t &mode, std::string &errMsg) {
     struct stat buf;
     int ret = stat(filePath.c_str(), &buf);
     if (ret != 0) {
@@ -397,8 +385,7 @@ bool FileUtils::ConstrainPermission(const std::string &filePath, const mode_t &m
     return true;
 }
 
-bool FileUtils::GetRealFilePath(const std::string &filePath, std::string &realFilePath, std::string &errMsg) noexcept
-{
+bool FileUtils::GetRealFilePath(const std::string &filePath, std::string &realFilePath, std::string &errMsg) noexcept {
     if (filePath.empty()) {
         errMsg = "[FileUtils::GetRealFilePath] filePath is empty";
         return false;
@@ -422,8 +409,7 @@ bool FileUtils::GetRealFilePath(const std::string &filePath, std::string &realFi
     return true;
 }
 
-bool FileUtils::GetInstallPath(std::string &installPath, std::string &errMsg) noexcept
-{
+bool FileUtils::GetInstallPath(std::string &installPath, std::string &errMsg) noexcept {
     std::string linkedPath = "/proc/" + std::to_string(getpid()) + "/exe";
     std::string realPath;
     try {
@@ -464,13 +450,12 @@ bool FileUtils::GetInstallPath(std::string &installPath, std::string &errMsg) no
     return true;
 }
 
-std::string FileUtils::GetSafeRelativePath(const std::string &oldPath)
-{
+std::string FileUtils::GetSafeRelativePath(const std::string &oldPath) {
     if (oldPath.empty()) {
         return "";
     }
     // Split path
-    char separator = '/'; // For Linux only
+    char separator = '/';  // For Linux only
     std::vector<std::string> parsedParts;
     std::stringstream ss(oldPath);
     std::string part;
@@ -486,7 +471,7 @@ std::string FileUtils::GetSafeRelativePath(const std::string &oldPath)
     }
 
     std::string safePath = "***";
-    if (parsedParts.size() > 2) { // Replace the first 2 level directories by "***"
+    if (parsedParts.size() > 2) {  // Replace the first 2 level directories by "***"
         for (size_t i = 2; i < parsedParts.size(); ++i) {
             safePath += separator + parsedParts[i];
         }
@@ -497,8 +482,7 @@ std::string FileUtils::GetSafeRelativePath(const std::string &oldPath)
     return safePath;
 }
 
-static std::string GetEnvByName(const std::string &name)
-{
+static std::string GetEnvByName(const std::string &name) {
     const char *info = std::getenv(name.c_str());
     if (info == nullptr) {
         return "";
@@ -512,8 +496,7 @@ static std::string GetEnvByName(const std::string &name)
     return std::string(info);
 }
 
-bool FileUtils::GetCheckPermissionFlag()
-{
+bool FileUtils::GetCheckPermissionFlag() {
     bool defaultFlag = true;
     const std::string checkPermission = GetEnvByName("MINDIE_CHECK_INPUTFILES_PERMISSION");
     if (checkPermission == "") {
@@ -526,4 +509,4 @@ bool FileUtils::GetCheckPermissionFlag()
     }
     return checkPermission == "1";
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

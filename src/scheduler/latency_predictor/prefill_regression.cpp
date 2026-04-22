@@ -9,16 +9,17 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include "prefill_regression.h"
+
 #include <cmath>
+
 #include "log.h"
 
 namespace mindie_llm {
 PrefillRegression::PrefillRegression() : count_(0), sumX_(0), sumY_(0), sumXX_(0), sumXY_(0) {}
 
-void PrefillRegression::AddDataPoint(float tokenNum, float execTime)
-{
+void PrefillRegression::AddDataPoint(float tokenNum, float execTime) {
     count_++;
     MINDIE_LLM_LOG_DEBUG("prefill predictor: AddDataPoint count: " << count_);
     MINDIE_LLM_LOG_DEBUG("prefill predictor: AddDataPoint tokenNum: " << tokenNum << " execTime: " << execTime);
@@ -26,14 +27,12 @@ void PrefillRegression::AddDataPoint(float tokenNum, float execTime)
     MINDIE_LLM_LOG_DEBUG("prefill predictor: update coefficients: " << slope_ << " * tokenNum + " << intercept_);
 }
 
-float PrefillRegression::Predict(int tokenNum) const
-{
+float PrefillRegression::Predict(int tokenNum) const {
     MINDIE_LLM_LOG_DEBUG("prefill predictor: predict tokenNum: " << tokenNum);
     return slope_ * tokenNum + intercept_;
 }
 
-void PrefillRegression::LinearRegression(float tokenNum, float execTime)
-{
+void PrefillRegression::LinearRegression(float tokenNum, float execTime) {
     if (count_ == 1) {
         // 如果仅有一个点加入prefill拟合
         sumX_ += tokenNum;
@@ -78,4 +77,4 @@ void PrefillRegression::LinearRegression(float tokenNum, float execTime)
         }
     }
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

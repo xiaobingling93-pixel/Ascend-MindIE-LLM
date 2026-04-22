@@ -9,16 +9,17 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_CALLBACK_V2_H
 #define MINDIE_LLM_CALLBACK_V2_H
-#include <string>
-#include <vector>
-#include <unordered_set>
-#include <memory>
 #include <functional>
-#include "status.h"
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 #include "request_id.h"
+#include "status.h"
 
 namespace mindie_llm {
 struct Request;
@@ -75,5 +76,5 @@ using ControlSignalCallbackV2 = std::function<std::vector<std::pair<RequestIdNew
 ///
 /// \param std::string stats: The statistics of the LLM Manager.
 using LlmManagerStatsCallback = std::function<void(const std::string &)>;
-} // namespace mindie_llm
-#endif // MINDIE_LLM_CALLBACK_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_CALLBACK_H

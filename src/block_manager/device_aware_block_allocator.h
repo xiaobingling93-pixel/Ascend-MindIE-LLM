@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #pragma once
 
 #include <algorithm>
@@ -31,7 +31,7 @@ struct AllocatorConfig {
 
 // 支持多种设备的内存分配器
 class DeviceAwareBlockAllocator {
-public:
+   public:
     DeviceAwareBlockAllocator() = default;
 
     virtual ~DeviceAwareBlockAllocator() = default;
@@ -52,10 +52,10 @@ public:
     virtual size_t GetNumFreeBlock(DeviceType blockType) const = 0;
 
     virtual size_t GetNumFreeBlock(DeviceType blockType, size_t rankId) const = 0;
-    
+
     virtual size_t GetNumTotalBlocks(DeviceType blockType) const = 0;
 
-    virtual void Free(BlockObjSPtr &block) = 0; // 会根据blockid找到device
+    virtual void Free(BlockObjSPtr &block) = 0;  // 会根据blockid找到device
 
     virtual std::vector<BlockObjSPtr> Fork(BlockObjSPtr &lastBlock) = 0;
 
@@ -65,8 +65,8 @@ public:
 
     virtual void MarkBlocksAsComputed() = 0;
 
-    virtual std::vector<BlockId>
-    GetCommonComputedBlockIds(const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const = 0;
+    virtual std::vector<BlockId> GetCommonComputedBlockIds(
+        const std::vector<std::vector<BlockId>> &computedSeqBlockIds) const = 0;
 
     virtual std::vector<size_t> GetAllRankCommonComputedBlockNum(
         const std::vector<std::vector<std::vector<BlockId>>> &rankedComputedSeqBlockIds) const = 0;
@@ -95,4 +95,4 @@ public:
 };
 
 using DeviceAwareBlockAllocatorSPtr = std::shared_ptr<DeviceAwareBlockAllocator>;
-} // namespace mindie_llm
+}  // namespace mindie_llm

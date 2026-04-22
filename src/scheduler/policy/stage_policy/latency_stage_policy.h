@@ -13,29 +13,29 @@
 #ifndef LATENCY_STAGE_POLICY_H
 #define LATENCY_STAGE_POLICY_H
 
-#include "policy/seq_group_collection.h"
-#include "dataclass/metric.h"
 #include "concurrent_deque.h"
-#include "sequence_group.h"
-#include "scheduling_budget.h"
+#include "dataclass/metric.h"
 #include "latency_predictor/latency_predictor.h"
 #include "latency_predictor/queue_counter.h"
+#include "policy/seq_group_collection.h"
 #include "policy/stage_policy/stage_policy.h"
+#include "scheduling_budget.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 
 class LatencyStagePolicy final : public StagePolicy {
-public:
+   public:
     explicit LatencyStagePolicy(const SchedulerConfigSPtr schedulerConfig, std::shared_ptr<LatencyPredictor> predictor,
                                 std::shared_ptr<BlockSpaceManager> blockManager);
 
     PDPriorityType Apply(ConcurrentDeque<SequenceGroupSPtr> &waiting, ConcurrentDeque<SequenceGroupSPtr> &running,
                          ConcurrentDeque<SequenceGroupSPtr> &swapped) override;
 
-private:
+   private:
     SchedulerConfigSPtr schedulerConfig_;
     std::shared_ptr<LatencyPredictor> predictor_;
-    BlockSpaceManagerSPtr blockManager_; // kv cache manager
+    BlockSpaceManagerSPtr blockManager_;  // kv cache manager
     std::unique_ptr<QueueCounter> counter_;
     uint64_t decodeWasteTime_{0};
     std::shared_ptr<SeqCounter> prefillCounter_ = std::make_shared<SeqCounter>();
@@ -60,6 +60,6 @@ private:
     void UpdateCounter(ConcurrentDeque<SequenceGroupSPtr> &waiting, ConcurrentDeque<SequenceGroupSPtr> &running,
                        ConcurrentDeque<SequenceGroupSPtr> &swapped);
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

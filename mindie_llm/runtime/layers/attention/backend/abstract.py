@@ -19,7 +19,6 @@ import torch
 
 
 class AttentionBackend(ABC):
-
     @staticmethod
     @abstractmethod
     def get_name() -> str:
@@ -29,7 +28,7 @@ class AttentionBackend(ABC):
     @abstractmethod
     def get_impl_cls() -> type["AttentionImpl"]:
         raise NotImplementedError
-    
+
     @staticmethod
     @abstractmethod
     def get_builder_cls():
@@ -63,7 +62,6 @@ class AttentionLayer(Protocol):
 
 
 class AttentionImpl(ABC, Generic[T]):
-
     @abstractmethod
     def forward(
         self,
@@ -76,22 +74,15 @@ class AttentionImpl(ABC, Generic[T]):
         output: torch.Tensor | None = None,
     ) -> torch.Tensor:
         raise NotImplementedError
-    
+
     def process_weights_after_loading(self):
         pass
 
 
 class SelectAttentionImpl(AttentionImpl[T], Generic[T]):
-
     @abstractmethod
-    def forward(
-        self,
-        layer,
-        hidden_states,
-        kv_cache,
-        cos_sin
-    ) -> torch.Tensor:
+    def forward(self, layer, hidden_states, kv_cache, cos_sin) -> torch.Tensor:
         raise NotImplementedError
-    
+
     def process_weights_after_loading(self):
         pass

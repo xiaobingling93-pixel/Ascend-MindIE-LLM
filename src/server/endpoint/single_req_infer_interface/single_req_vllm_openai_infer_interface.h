@@ -15,9 +15,10 @@
 
 #include <cstdint>
 #include <vector>
+
 #include "httplib.h"
-#include "single_req_infer_interface_base.h"
 #include "infer_param.h"
+#include "single_req_infer_interface_base.h"
 
 using OrderedJson = nlohmann::ordered_json;
 
@@ -26,20 +27,20 @@ namespace mindie_llm {
  * @brief Vllm OpenAi 格式的推理请求处理类
  */
 class SingleReqVllmOpenAiInferInterface : public SingleReqInferInterfaceBase {
-public:
+   public:
     explicit SingleReqVllmOpenAiInferInterface(const std::shared_ptr<SingleLLMReqHandlerBase> &singleLLMReqHandlerBase,
                                                bool isReCompute = false,
                                                const std::vector<LoraParamSPtr> loraConfigs = {}) noexcept;
     bool BuildResponseJson(ResponseSPtr response, const std::vector<BestNTokens> &tempTokens,
                            RespBodyQueue &jsonStrings, const uint64_t &timestamp = 0) override;
     void SetDMIReComputeBuilder() override;
-    const InferParam::FeatureSupport &GetFeatureSupport() const override
-    {
+    const InferParam::FeatureSupport &GetFeatureSupport() const override {
         static constexpr InferParam::FeatureSupport kSupport{true, true, true, true};
         return kSupport;
     }
     bool SetupInferParams(RequestSPtr tmpReq, std::string &msg) override;
-protected:
+
+   protected:
     // Model resolution. Default: check model exists in deploy config (LoRA mapping).
     // Openai overrides this to not support LoRA->base model resolution.
     virtual bool ParseModelName(OrderedJson &body, std::string &outModel, std::string &err);
@@ -56,13 +57,13 @@ protected:
     bool ParseTextInput(nlohmann::ordered_json &body, std::string &msg);
     bool SetReturnSeqCount(RequestSPtr req, std::string &errMsg);
     std::string BuildVllmOpenAIReComputeBody(const std::vector<BestNTokens> &tokens);
-    void BuildStopWords(nlohmann::ordered_json& newReqJsonObj);
-    void BuildThinkingConfig(nlohmann::ordered_json& newReqJsonObj);
-    void BuildResponseFormat(nlohmann::ordered_json& newReqJsonObj);
+    void BuildStopWords(nlohmann::ordered_json &newReqJsonObj);
+    void BuildThinkingConfig(nlohmann::ordered_json &newReqJsonObj);
+    void BuildResponseFormat(nlohmann::ordered_json &newReqJsonObj);
     bool ParseToolCall(nlohmann::ordered_json &body, std::string &msg);
     bool ValidMessagesArray(OrderedJson &body, OrderedJson &messges, std::string &msg) const;
     void FilterToolChoice(OrderedJson &filterTools);
-    bool PrepareMessageArray(nlohmann::ordered_json &body, std::string &msg, OrderedJson& messageArray);
+    bool PrepareMessageArray(nlohmann::ordered_json &body, std::string &msg, OrderedJson &messageArray);
     bool ValidAssistantMessage(OrderedJson &message, std::string &msg) const;
     bool ValidToolCall(OrderedJson &toolCalls, std::string &msg) const;
     bool ValidToolCallID(OrderedJson &paramItem, std::string &msg) const;
@@ -84,6 +85,6 @@ protected:
     bool CheckToolType(const OrderedJson &toolParam, std::string &error) const;
     void AssignLora(const OrderedJson &jsonObj, RequestSPtr tmpReq) const;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // ENDPOINT_VLLM_OPENAI_INFER_H
+#endif  // ENDPOINT_VLLM_OPENAI_INFER_H

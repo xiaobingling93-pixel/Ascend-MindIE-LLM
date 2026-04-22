@@ -13,9 +13,9 @@
 #ifndef FCFS_POLICY_H
 #define FCFS_POLICY_H
 
-#include "scheduler.h"
 #include "policy.h"
 #include "policy_helper.h"
+#include "scheduler.h"
 
 namespace mindie_llm {
 /**
@@ -31,7 +31,7 @@ struct PrefillOutputs {
 struct RunningOutputs {
     std::vector<std::shared_ptr<ScheduledSequenceGroup>> decodeSeqGroups_;
 
-    std::vector<std::shared_ptr<ScheduledSequenceGroup>> chunkedPrefillSeqGroups_; // only used for chunked prefill
+    std::vector<std::shared_ptr<ScheduledSequenceGroup>> chunkedPrefillSeqGroups_;  // only used for chunked prefill
 
     std::vector<SequenceGroupSPtr> preempted_;
 
@@ -51,7 +51,7 @@ struct RunningOutputs {
 struct SwappedInOutputs {
     std::vector<std::shared_ptr<ScheduledSequenceGroup>> decodeSeqGroups_;
 
-    std::vector<std::shared_ptr<ScheduledSequenceGroup>> chunkedPrefillSeqGroups_; // only used for chunked prefill
+    std::vector<std::shared_ptr<ScheduledSequenceGroup>> chunkedPrefillSeqGroups_;  // only used for chunked prefill
 
     std::vector<SequenceGroupSPtr> infeasibleSeqGroups_;
 
@@ -61,12 +61,12 @@ struct SwappedInOutputs {
 };
 
 class FcfsPolicy : public Policy {
-public:
+   public:
     FcfsPolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockSpaceManagerSPtr &blockManager);
 
     PolicyOutput Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) override;
 
-protected:
+   protected:
     void PreprocessCollection(const std::shared_ptr<SeqGroupCollection> &collection);
 
     PolicyOutput SchedulePrefill(SchedulingBudget &budget);
@@ -83,7 +83,7 @@ protected:
     SwappedInOutputs ApplyToSwappedQueue(SchedulingBudget &budget, const bool enableChunking = false);
 
     PreemptionMode Preempt(SequenceGroupSPtr &seqGroup, std::vector<std::pair<BlockId, BlockId>> &blockToSwapOut,
-        size_t &swapNum);
+                           size_t &swapNum);
 
     void PreemptByRecompute(const SequenceGroupSPtr &seqGroup);
 
@@ -95,12 +95,12 @@ protected:
 
     virtual PolicyOutput ScheduleChunkedPrefill(SchedulingBudget &budget);
 
-    void ScheduleRunningSeqGroup(const SequenceGroupSPtr &seqGroup, size_t numUncachedNewTokens,
-                                 bool enableChunking, RunningOutputs &runningOutput, SchedulingBudget &budget);
+    void ScheduleRunningSeqGroup(const SequenceGroupSPtr &seqGroup, size_t numUncachedNewTokens, bool enableChunking,
+                                 RunningOutputs &runningOutput, SchedulingBudget &budget);
 
     void UpdateStatusForRecompute(const SequenceGroupSPtr &seqGroup);
 
-protected:
+   protected:
     int numCumulativePreemption_{};
 
     PolicyHelper policyHelper_;
@@ -111,6 +111,6 @@ protected:
 
     BlockSpaceManagerSPtr blockManager_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

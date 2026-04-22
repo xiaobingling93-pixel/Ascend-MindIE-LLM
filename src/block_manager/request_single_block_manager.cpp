@@ -24,8 +24,7 @@ RequestSingleBlockManager::RequestSingleBlockManager(const BlockManagerConfig &c
       enableCaching_(config.enableCaching),
       rankSize_(config.rankSize),
       hostSize_(config.hostSize),
-      localDPRank_(localDPRank)
-{
+      localDPRank_(localDPRank) {
     if (rankSize_ == 0 || hostSize_ == 0) {
         throw std::invalid_argument("The rank and host size must be greater than 0");
     }
@@ -46,8 +45,7 @@ RequestSingleBlockManager::RequestSingleBlockManager(const BlockManagerConfig &c
     blockAllocator_ = std::make_shared<CpuNpuBlockAllocator>(allocatorConfig);
 }
 
-const RequestId* RequestSingleBlockManager::GetRequestIdBySeqId_(SequenceId seqId) const
-{
+const RequestId *RequestSingleBlockManager::GetRequestIdBySeqId_(SequenceId seqId) const {
     auto it = seqId2RequestId_.find(seqId);
     if (it == seqId2RequestId_.end()) {
         return nullptr;
@@ -55,8 +53,7 @@ const RequestId* RequestSingleBlockManager::GetRequestIdBySeqId_(SequenceId seqI
     return &it->second;
 }
 
-RequestSingleBlockManager::RequestEntry* RequestSingleBlockManager::GetEntryByRequestId_(const RequestId &rid)
-{
+RequestSingleBlockManager::RequestEntry *RequestSingleBlockManager::GetEntryByRequestId_(const RequestId &rid) {
     auto it = requestEntries_.find(rid);
     if (it == requestEntries_.end()) {
         return nullptr;
@@ -64,9 +61,8 @@ RequestSingleBlockManager::RequestEntry* RequestSingleBlockManager::GetEntryByRe
     return &it->second;
 }
 
-const RequestSingleBlockManager::RequestEntry* RequestSingleBlockManager::GetEntryByRequestId_(
-    const RequestId &rid) const
-{
+const RequestSingleBlockManager::RequestEntry *RequestSingleBlockManager::GetEntryByRequestId_(
+    const RequestId &rid) const {
     auto it = requestEntries_.find(rid);
     if (it == requestEntries_.end()) {
         return nullptr;
@@ -74,8 +70,7 @@ const RequestSingleBlockManager::RequestEntry* RequestSingleBlockManager::GetEnt
     return &it->second;
 }
 
-AllocStatus RequestSingleBlockManager::CanAllocate(const SequenceGroupSPtr &seqGroup) const
-{
+AllocStatus RequestSingleBlockManager::CanAllocate(const SequenceGroupSPtr &seqGroup) const {
     if (!seqGroup) {
         return AllocStatus::NEVER;
     }
@@ -97,8 +92,7 @@ AllocStatus RequestSingleBlockManager::CanAllocate(const SequenceGroupSPtr &seqG
     return (blockAllocator_->GetNumFreeBlock(DeviceType::NPU, 0) >= 1) ? AllocStatus::OK : AllocStatus::LATER;
 }
 
-bool RequestSingleBlockManager::Allocate(const SequenceGroupSPtr &seqGroup)
-{
+bool RequestSingleBlockManager::Allocate(const SequenceGroupSPtr &seqGroup) {
     if (!seqGroup) {
         return false;
     }
@@ -133,8 +127,7 @@ bool RequestSingleBlockManager::Allocate(const SequenceGroupSPtr &seqGroup)
     return true;
 }
 
-bool RequestSingleBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup) const
-{
+bool RequestSingleBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup) const {
     if (!seqGroup) {
         return false;
     }
@@ -142,31 +135,24 @@ bool RequestSingleBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup)
     return (GetEntryByRequestId_(seqGroup->requestId) != nullptr);
 }
 
-std::vector<std::pair<BlockId, BlockId>> RequestSingleBlockManager::AppendSlot(const SequenceSPtr &seq)
-{
+std::vector<std::pair<BlockId, BlockId>> RequestSingleBlockManager::AppendSlot(const SequenceSPtr &seq) {
     (void)seq;
     // No-op: the request always reuses the same blockId; no COW mapping.
     return {};
 }
 
-bool RequestSingleBlockManager::CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) const
-{
+bool RequestSingleBlockManager::CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) const {
     return CanAppendSlot(seqGroup);
 }
 
-void RequestSingleBlockManager::AppendSlotNew(const SequenceGroupSPtr &seqGroup)
-{
-    (void)seqGroup;
-}
+void RequestSingleBlockManager::AppendSlotNew(const SequenceGroupSPtr &seqGroup) { (void)seqGroup; }
 
-void RequestSingleBlockManager::AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId>& tokens)
-{
+void RequestSingleBlockManager::AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId> &tokens) {
     (void)seqId;
     (void)tokens;
 }
 
-void RequestSingleBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq)
-{
+void RequestSingleBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq) {
     if (!parentSeq || !childSeq) {
         throw std::invalid_argument("parentSeq/childSeq cannot be null");
     }
@@ -182,23 +168,20 @@ void RequestSingleBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &chil
     entry->refCount++;
 }
 
-bool RequestSingleBlockManager::CanSwapOut(const SequenceGroupSPtr &seqGroup)
-{
+bool RequestSingleBlockManager::CanSwapOut(const SequenceGroupSPtr &seqGroup) {
     (void)seqGroup;
     // Not supported.
     return false;
 }
 
 std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> RequestSingleBlockManager::SwapOut(
-    const SequenceGroupSPtr &seqGroup)
-{
+    const SequenceGroupSPtr &seqGroup) {
     (void)seqGroup;
     // Not supported.
     return {};
 }
 
-AllocStatus RequestSingleBlockManager::CanSwapIn(const SequenceGroupSPtr &seqGroup, size_t numLookheadSlots)
-{
+AllocStatus RequestSingleBlockManager::CanSwapIn(const SequenceGroupSPtr &seqGroup, size_t numLookheadSlots) {
     (void)numLookheadSlots;
     (void)seqGroup;
     // Not supported.
@@ -206,15 +189,13 @@ AllocStatus RequestSingleBlockManager::CanSwapIn(const SequenceGroupSPtr &seqGro
 }
 
 std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> RequestSingleBlockManager::SwapIn(
-    const SequenceGroupSPtr &seqGroup)
-{
+    const SequenceGroupSPtr &seqGroup) {
     (void)seqGroup;
     // Not supported.
     return {};
 }
 
-void RequestSingleBlockManager::Free(SequenceId seqId)
-{
+void RequestSingleBlockManager::Free(SequenceId seqId) {
     const RequestId *rid = GetRequestIdBySeqId_(seqId);
     if (!rid) {
         return;
@@ -239,8 +220,7 @@ void RequestSingleBlockManager::Free(SequenceId seqId)
     }
 }
 
-std::vector<BlockIds> RequestSingleBlockManager::GetBlockIds(SequenceId seqId) const
-{
+std::vector<BlockIds> RequestSingleBlockManager::GetBlockIds(SequenceId seqId) const {
     const RequestId *rid = GetRequestIdBySeqId_(seqId);
     if (!rid) {
         return {};
@@ -252,9 +232,7 @@ std::vector<BlockIds> RequestSingleBlockManager::GetBlockIds(SequenceId seqId) c
     return {{entry->block->GetBlockId()}};
 }
 
-void RequestSingleBlockManager::GetRankedBlockIds(SequenceId seqId,
-    std::vector<RankedBlockId> &rankedBlockIds) const
-{
+void RequestSingleBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const {
     rankedBlockIds.clear();
     const auto allIds = GetBlockIds(seqId);
     if (allIds.empty() || allIds[0].empty()) {
@@ -269,8 +247,7 @@ void RequestSingleBlockManager::GetRankedBlockIds(SequenceId seqId,
 }
 
 void RequestSingleBlockManager::GetRankedBlockIds(SequenceId seqId,
-    std::vector<std::vector<BlockId>> &rankedBlockIds) const
-{
+                                                  std::vector<std::vector<BlockId>> &rankedBlockIds) const {
     rankedBlockIds.clear();
     rankedBlockIds.resize(rankSize_);
     const auto allIds = GetBlockIds(seqId);
@@ -284,76 +261,65 @@ void RequestSingleBlockManager::GetRankedBlockIds(SequenceId seqId,
     }
 }
 
-std::vector<std::vector<HashValue>> RequestSingleBlockManager::GetRankedHashValues(SequenceId seqId) const
-{
+std::vector<std::vector<HashValue>> RequestSingleBlockManager::GetRankedHashValues(SequenceId seqId) const {
     (void)seqId;
     return {};
 }
 
-std::vector<HashValue> RequestSingleBlockManager::GetSeqHashValues(SequenceId seqId) const
-{
+std::vector<HashValue> RequestSingleBlockManager::GetSeqHashValues(SequenceId seqId) const {
     (void)seqId;
     return {};
 }
 
-std::vector<size_t> RequestSingleBlockManager::GetTokenCountPerRank(SequenceId seqId) const
-{
+std::vector<size_t> RequestSingleBlockManager::GetTokenCountPerRank(SequenceId seqId) const {
     (void)seqId;
     // Keep shape consistent with sp/cp callers.
     return std::vector<size_t>(rankSize_, 0);
 }
 
-size_t RequestSingleBlockManager::GetLatestAppendedRankId(SequenceId seqId) const
-{
+size_t RequestSingleBlockManager::GetLatestAppendedRankId(SequenceId seqId) const {
     (void)seqId;
     return 0;
 }
 
-size_t RequestSingleBlockManager::GetAppendedBlockRankId(SequenceId seqId) const
-{
+size_t RequestSingleBlockManager::GetAppendedBlockRankId(SequenceId seqId) const {
     (void)seqId;
     return 0;
 }
 
-bool RequestSingleBlockManager::IsAppendBlock(SequenceId seqId)
-{
+bool RequestSingleBlockManager::IsAppendBlock(SequenceId seqId) {
     (void)seqId;
     return false;
 }
 
-size_t RequestSingleBlockManager::GetNumFreeNpuBlocks() const
-{
+size_t RequestSingleBlockManager::GetNumFreeNpuBlocks() const {
     // We only allocate from rank0 (others reuse rank0), so rank0 is the effective capacity.
     return blockAllocator_->GetNumFreeBlock(DeviceType::NPU, 0);
 }
 
-size_t RequestSingleBlockManager::GetNumFreeCpuBlocks() const
-{
+size_t RequestSingleBlockManager::GetNumFreeCpuBlocks() const {
     return blockAllocator_->GetNumFreeBlock(DeviceType::CPU);
 }
 
-void RequestSingleBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float accessTime)
-{
+void RequestSingleBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float accessTime) {
     (void)seq;
     (void)accessTime;
     // No prefix-cache tracking in this manager.
 }
 
-std::vector<BlockId> RequestSingleBlockManager::GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs)
-{
+std::vector<BlockId> RequestSingleBlockManager::GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs) {
     (void)seqs;
     return {};
 }
 
-std::vector<size_t> RequestSingleBlockManager::GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs)
-{
+std::vector<size_t> RequestSingleBlockManager::GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) {
     (void)seqs;
     return {};
 }
 
 std::vector<BlockId> RequestSingleBlockManager::GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
-    size_t computedLens, uint32_t tpSize, std::string modelName)
-{
+                                                                          size_t computedLens, uint32_t tpSize,
+                                                                          std::string modelName) {
     (void)seqs;
     (void)computedLens;
     (void)tpSize;
@@ -361,80 +327,64 @@ std::vector<BlockId> RequestSingleBlockManager::GetRemoteComputedBlockIds(const 
     return {};
 }
 
-std::vector<size_t> RequestSingleBlockManager::GetAllRankRemoteComputedBlockIds(
-    const std::vector<SequenceSPtr> &seqs, std::vector<size_t> &computedBlocksNum, std::string modelName)
-{
+std::vector<size_t> RequestSingleBlockManager::GetAllRankRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+                                                                                std::vector<size_t> &computedBlocksNum,
+                                                                                std::string modelName) {
     (void)seqs;
     (void)computedBlocksNum;
     (void)modelName;
     return {};
 }
 
-void RequestSingleBlockManager::MarkBlocksAsComputed()
-{
+void RequestSingleBlockManager::MarkBlocksAsComputed() {
     // No-op; keep allocator state unchanged.
 }
 
-float RequestSingleBlockManager::GetPrefixCacheHitRate() const
-{
-    return blockAllocator_->GetPrefixCacheHitRate();
-}
+float RequestSingleBlockManager::GetPrefixCacheHitRate() const { return blockAllocator_->GetPrefixCacheHitRate(); }
 
-bool RequestSingleBlockManager::ResetPrefixCache() const
-{
-    return blockAllocator_->ResetPrefixCache();
-}
+bool RequestSingleBlockManager::ResetPrefixCache() const { return blockAllocator_->ResetPrefixCache(); }
 
-size_t RequestSingleBlockManager::GetNumCachedTokens(const SequenceSPtr &seq)
-{
+size_t RequestSingleBlockManager::GetNumCachedTokens(const SequenceSPtr &seq) {
     (void)seq;
     return 0;
 }
 
-size_t RequestSingleBlockManager::GetSeqNumCachedTokens(const SequenceSPtr &seq)
-{
+size_t RequestSingleBlockManager::GetSeqNumCachedTokens(const SequenceSPtr &seq) {
     (void)seq;
     return 0;
 }
 
 void RequestSingleBlockManager::ReplaceTrailingPlaceHolder(const SequenceSPtr &seq, size_t trailingPlaceHolderNum,
-    size_t replacedPlaceHolderNum)
-{
+                                                           size_t replacedPlaceHolderNum) {
     (void)seq;
     (void)trailingPlaceHolderNum;
     (void)replacedPlaceHolderNum;
 }
 
-void RequestSingleBlockManager::LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig,
-    size_t localDPRank)
-{
+void RequestSingleBlockManager::LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank) {
     (void)lwdCloudConfig;
     (void)localDPRank;
 }
 
 void RequestSingleBlockManager::LwdGetCloudRankedBlockIds(SequenceId seqId,
-    std::vector<std::vector<BlockId>> &rankedBlockIds) const
-{
+                                                          std::vector<std::vector<BlockId>> &rankedBlockIds) const {
     (void)seqId;
     rankedBlockIds.clear();
 }
 
-size_t RequestSingleBlockManager::LwdGetCloudLatestAppendedRankId(SequenceId seqId) const
-{
+size_t RequestSingleBlockManager::LwdGetCloudLatestAppendedRankId(SequenceId seqId) const {
     (void)seqId;
     return 0;
 }
 
-size_t RequestSingleBlockManager::LwdGetCloudAppendedBlockRankId(SequenceId seqId) const
-{
+size_t RequestSingleBlockManager::LwdGetCloudAppendedBlockRankId(SequenceId seqId) const {
     (void)seqId;
     return 0;
 }
 
-std::vector<size_t> RequestSingleBlockManager::LwdGetCloudTokenCountPerRank(SequenceId seqId) const
-{
+std::vector<size_t> RequestSingleBlockManager::LwdGetCloudTokenCountPerRank(SequenceId seqId) const {
     (void)seqId;
     return {};
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

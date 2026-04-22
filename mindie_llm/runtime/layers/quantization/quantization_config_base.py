@@ -32,9 +32,9 @@ def get_model_quant_type(quant_config):
     """
     if quant_config is None:
         return None
-    if hasattr(quant_config, 'model_quant_type'):
+    if hasattr(quant_config, "model_quant_type"):
         return quant_config.model_quant_type
-    elif hasattr(quant_config, 'adaptee') and hasattr(quant_config.adaptee, 'model_quant_type'):
+    elif hasattr(quant_config, "adaptee") and hasattr(quant_config.adaptee, "model_quant_type"):
         return quant_config.adaptee.model_quant_type
     return None
 
@@ -58,14 +58,11 @@ class QuantizationConfigBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_quant_method(
-        self, layer: torch.nn.Module, prefix: str
-    ) -> QuantizationMethodBase | None:
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> QuantizationMethodBase | None:
         """Retrieve the appropriate quantization method for a given layer."""
         raise NotImplementedError
 
     @abstractmethod
-    def get_quant_type_by_weight_name(
-        self, prefix: str | list[str], suffix: str) -> str:
+    def get_quant_type_by_weight_name(self, prefix: str | list[str], suffix: str) -> str:
         """Retrieve the quantization type for a specific weight parameter."""
         raise NotImplementedError

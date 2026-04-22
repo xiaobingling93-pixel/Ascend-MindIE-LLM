@@ -35,20 +35,22 @@ class LoraModelConfig:
         max_loras: the MAX number of LoRAs to store in NPU memory
         max_lora_rank: the MAX LoRA rank
     """
-    max_loras: int = field(default=0, metadata={'validator': IntParameterValidator(Field(ge=0), allow_none=False)})
-    max_lora_rank: int = field(default=0, metadata={'validator': IntParameterValidator(Field(ge=0), allow_none=False)})
+
+    max_loras: int = field(default=0, metadata={"validator": IntParameterValidator(Field(ge=0), allow_none=False)})
+    max_lora_rank: int = field(default=0, metadata={"validator": IntParameterValidator(Field(ge=0), allow_none=False)})
 
     def __post_init__(self):
         for field_name, field_value in self.__dataclass_fields__.items():
-            validator: ParameterValidator = field_value.metadata.get('validator')
+            validator: ParameterValidator = field_value.metadata.get("validator")
             if validator:
                 validator.validate(getattr(self, field_name), field_name)
 
 
 @dataclass
 class SpeculativeConfig:
-    num_speculative_tokens: int = field(default=0,\
-        metadata={'validator': IntParameterValidator(Field(ge=0), allow_none=False)})
+    num_speculative_tokens: int = field(
+        default=0, metadata={"validator": IntParameterValidator(Field(ge=0), allow_none=False)}
+    )
 
 
 @dataclass
@@ -64,6 +66,7 @@ class MindIELLMConfig:
         quant_config (Optional[QuantizationConfigBase]): model's quant config
         lora_model_config (Optional[LoraModelConfig]): model's lora config
     """
+
     model_name_or_path: str
     hf_config: HuggingFaceConfig
     llm_config: LLMConfig
@@ -94,7 +97,7 @@ class MindIELLMConfig:
             config_files = [str(file) for file in config_files]
         quant_config_files = []
         old_format_warned = False
-    
+
         for file_name in quant_cls.get_config_filenames():
             for actual_file_path in config_files:
                 if actual_file_path.endswith(file_name):
@@ -108,24 +111,23 @@ class MindIELLMConfig:
                         )
                         old_format_warned = True
         if len(quant_config_files) == 0:
-            logger.warning(f"Cannot find the config file for `QuantizationConfig`. "
-                        f"Try to load weights in the floating points instead.")
+            logger.warning(
+                "Cannot find the config file for `QuantizationConfig`. "
+                "Try to load weights in the floating points instead."
+            )
             return None
         if len(quant_config_files) > 1:
-            raise ValueError(
-                f"Found multiple config files for `QuantizationConfig`: "
-                f"{quant_config_files}"
-            )
-        
+            raise ValueError(f"Found multiple config files for `QuantizationConfig`: {quant_config_files}")
+
         quant_descs = {}
-        with safe_open(quant_config_files[0], 'r', check_link=False) as f:
+        with safe_open(quant_config_files[0], "r", check_link=False) as f:
             quant_descs = json.load(f)
 
         if quantize in [QuantType.W8A8SC]:
             mapped_quant_descs = {}
             mapper_cls = get_weight_mapper_cls(self.hf_config)
             if not mapper_cls:
-                raise NotImplementedError(f"This model type has not implemented W8A8SC quant method yet.")
+                raise NotImplementedError("This model type has not implemented W8A8SC quant method yet.")
             for key, value in quant_descs.items():
                 mapped_keys = mapper_cls.map_weight_to_model(key)
                 for mapped_key in mapped_keys:

@@ -25,24 +25,24 @@ namespace mindie_llm {
  * As Scheduler and KV transmission are independent,
  */
 class PDDSPolicy final : public FcfsPolicy {
-public:
+   public:
     PDDSPolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockSpaceManagerSPtr &blockManager, Role role);
 
     PolicyOutput Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) override;
 
-private:
+   private:
     Role role_;
     PolicyOutput ScheduleChunkedPrefill(SchedulingBudget &budget) override;
 };
 
 class KVTransferSchedulePolicy : public KVTransferPolicy {
-public:
+   public:
     KVTransferSchedulePolicy(std::shared_ptr<SchedulerConfig> &schedulerConfig, BlockSpaceManagerSPtr &blockManager,
                              Role role);
 
     KVTransferPolicyOutput Apply(SchedulingBudget &budget, std::shared_ptr<SeqGroupCollection> &collection) override;
 
-protected:
+   protected:
     KVTransferPolicyOutput ScheduleKVTransferInD(SchedulingBudget &budget, bool enableChunking = false);
 
     std::vector<SequenceGroupSPtr> PickPublishSeqGroup();
@@ -52,7 +52,8 @@ protected:
     std::vector<SequenceGroupSPtr> PickPulledSeqGroup();
 
     KVTransferPolicyOutput BuildTransferPolicyOutput(std::vector<ScheduledSequenceGroupSPtr> &pullSeqGroups) const;
-private:
+
+   private:
     PolicyHelper policyHelper_;
 
     std::shared_ptr<SchedulerConfig> schedulerConfig_;
@@ -63,6 +64,6 @@ private:
 
     ISeqGroupCollectionSPtr queuesCollection_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

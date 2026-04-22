@@ -40,7 +40,7 @@ def get_batch_size(is_prefill_pre_batch, requests):
 
 
 @dataclass
-class LwdMetadata():
+class LwdMetadata:
     request_key: int = 0
     start_exec_layer: int = 0
     end_exec_layer: int = 0
@@ -150,9 +150,9 @@ class InputMetadata:
 
             if self.max_block_size == 0:
                 message = (
-                    'It has been detected that `max_block_size` is set to 0, but `max_block_size` must be '
-                    'greater than 0 to ensure the program runs correctly. If you are unsure of an appropriate '
-                    'value, you can simply omit this parameter.'
+                    "It has been detected that `max_block_size` is set to 0, but `max_block_size` must be "
+                    "greater than 0 to ensure the program runs correctly. If you are unsure of an appropriate "
+                    "value, you can simply omit this parameter."
                 )
                 logger.error(message, ErrorCode.TEXT_GENERATOR_MAX_BLOCK_SIZE_INVALID)
                 raise ZeroDivisionError(message)
@@ -165,7 +165,7 @@ class InputMetadata:
             self.batch_block_tables = self.block_tables[:, :, :max_block_num].astype(np.int32)
         else:
             self.batch_block_tables = self.block_tables[:, :default_max_block_num].astype(np.int32)
-    
+
     @staticmethod
     def form_block_tables(llm_requests: List[Request]) -> np.ndarray:
         batch_size = len(llm_requests)
@@ -176,14 +176,14 @@ class InputMetadata:
             max_block_num = max(len(block_table) for block_table in block_tables)
             result = np.full((batch_size, max_block_num), -1, dtype=np.int32)
             for i, block_table in enumerate(block_tables):
-                result[i, :len(block_table)] = block_table
+                result[i, : len(block_table)] = block_table
 
         elif first_block_table.ndim == 2:
-            scp_size = first_block_table.shape[0] 
+            scp_size = first_block_table.shape[0]
             max_block_num = max(block_table.shape[1] for block_table in block_tables)
             result = np.full((batch_size, scp_size, max_block_num), -1, dtype=np.int32)
             for i, block_table in enumerate(block_tables):
-                result[i, :, :block_table.shape[1]] = block_table
+                result[i, :, : block_table.shape[1]] = block_table
         return result
 
     @classmethod
@@ -192,7 +192,7 @@ class InputMetadata:
         llm_requests: list[Request],
         req_block_tables: np.ndarray | None = None,
         is_prefill: bool | np.ndarray = False,
-        max_block_size: int = 128
+        max_block_size: int = 128,
     ):
         enable_splitfuse = False
         is_mix = None
@@ -212,7 +212,7 @@ class InputMetadata:
         batch_request_ids = np.asarray([req.req_id for req in llm_requests])
         batch_sequence_ids = [np.asarray(list(req.sequences.keys())) for req in llm_requests]
         reserved_sequence_ids = [np.asarray(req.reserved_seq_ids) for req in llm_requests]
-        
+
         adapter_ids = None
         batch_best_of = None
         batch_n = None
@@ -301,8 +301,7 @@ class InputMetadata:
             if batch_prefill_block_rank_id:
                 max_len = max(len(x) for x in batch_prefill_block_rank_id)
                 batch_prefill_block_rank_id = [
-                    np.pad(arr, (0, max_len - len(arr)), constant_values=-1)
-                    for arr in batch_prefill_block_rank_id
+                    np.pad(arr, (0, max_len - len(arr)), constant_values=-1) for arr in batch_prefill_block_rank_id
                 ]
 
             if all(e is None for e in batch_stop_strings):
@@ -324,13 +323,13 @@ class InputMetadata:
             for llm_request in llm_requests:
                 num_sequences = len(llm_request.sequences.keys())
                 batch_max_output_lens.extend([llm_request.max_new_tokens] * num_sequences)
-                # 收集 response_format（每个 sequence 都需要相同的 response_format） 
-                batch_dp_rank_ids.append(llm_request.dp_rank_id) 
-                if llm_request.sp_tokens is not None: 
-                    batch_sp_tokens.append(llm_request.sp_tokens) 
-                    batch_sp_rank_ids.append(llm_request.sp_rank_id) 
-                    batch_is_append_block.append(llm_request.is_append_block) 
-                    batch_block_rank_id.append(llm_request.block_rank_id)                
+                # 收集 response_format（每个 sequence 都需要相同的 response_format）
+                batch_dp_rank_ids.append(llm_request.dp_rank_id)
+                if llm_request.sp_tokens is not None:
+                    batch_sp_tokens.append(llm_request.sp_tokens)
+                    batch_sp_rank_ids.append(llm_request.sp_rank_id)
+                    batch_is_append_block.append(llm_request.is_append_block)
+                    batch_block_rank_id.append(llm_request.block_rank_id)
 
         batch_max_output_lens = np.array(batch_max_output_lens, dtype=np.int64)
         if req_block_tables is not None:
@@ -376,5 +375,5 @@ class InputMetadata:
             batch_response_format=batch_response_format,
             batch_is_prefill=batch_is_prefill,
             computed_blocks=np.asarray(batch_computed_blocks) if batch_computed_blocks else None,
-            remote_computed_blocks=np.asarray(batch_remote_computed_blocks) if batch_remote_computed_blocks else None
+            remote_computed_blocks=np.asarray(batch_remote_computed_blocks) if batch_remote_computed_blocks else None,
         )

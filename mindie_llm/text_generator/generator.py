@@ -327,6 +327,11 @@ class Generator(PDInterface):
         if kv_pool_async_write and "splitfuse" in model_config.get("plugin_params", ""):
             raise ValueError("Async mempool does not support plugin_type: splitfuse!")
 
+        if self.pd_config.model_role == DmiModeNodeRole.DECODER and "prefix_cache" in model_config.get(
+            "plugin_params", ""
+        ):
+            raise ValueError("Prefix Cache is not supported on D nodes under PD separation!")
+
         self.layerwise_disaggregated = parse_config(
             model_config,
             "layerwiseDisaggregated",
@@ -562,18 +567,16 @@ class Generator(PDInterface):
             )
         self.copy_blocks_ops.copy_blocks(src_dst_map)
 
-    def check_batch_size_limit(self, is_prefill: bool, batch_size: int) -> None:
-        if is_prefill:
-            max_allowed = self.max_prefill_batch_size
-            stage_name = "prefill"
-        else:
+    def check_batch_size_limit(self, is_prefill: bool, is_mix: bool, batch_size: int) -> None:
+        if is_mix or not is_prefill:
             max_allowed = self.max_batch_size
-            stage_name = "Decode"
+        else:
+            max_allowed = self.max_prefill_batch_size
 
         if batch_size > max_allowed:
             message = (
-                f"The `batch_size` is {batch_size} but 'max_{stage_name}_batch_size' is {max_allowed}. "
-                f"The `batch_size` should be less than 'max_{stage_name}_batch_size'."
+                f"The `batch_size` is {batch_size} but max batchsize is {max_allowed}. "
+                f"The `batch_size` should be less than max batchsize."
             )
             logger.warning(message)
 
@@ -609,7 +612,7 @@ class Generator(PDInterface):
                     f"`input_id` should be less than 'max_prefill_tokens'."
                 )
                 logger.warning(message)
-            self.check_batch_size_limit(input_metadata.is_prefill, batch_size)
+            self.check_batch_size_limit(input_metadata.is_prefill, input_metadata.is_mix, batch_size)
 
         from ..utils.prof.profiler import span_start, span_end, span_attr, Level
 

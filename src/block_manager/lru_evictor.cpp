@@ -16,13 +16,11 @@
 
 #include "math_utils.h"
 
-
 namespace mindie_llm {
 
 bool LRUEvictor::ContainsBlock(BlockId blockId) const { return candidates_.find(blockId) != candidates_.end(); }
 
-EvictionResult LRUEvictor::Evict()
-{
+EvictionResult LRUEvictor::Evict() {
     if (candidates_.empty()) {
         throw std::runtime_error("No usable cache memory!");
     }
@@ -42,8 +40,7 @@ EvictionResult LRUEvictor::Evict()
     throw std::runtime_error("No usable cache memory left");
 }
 
-void LRUEvictor::Add(BlockId blockId, HashValue prefixHash, size_t numHashedTokens, TimeStamp lastAccessedTime)
-{
+void LRUEvictor::Add(BlockId blockId, HashValue prefixHash, size_t numHashedTokens, TimeStamp lastAccessedTime) {
     BlockMetaData data{blockId, prefixHash, numHashedTokens, lastAccessedTime};
     candidates_[blockId] = data;
     priorityQueue_.push(data);
@@ -53,13 +50,11 @@ void LRUEvictor::Add(BlockId blockId, HashValue prefixHash, size_t numHashedToke
     }
 }
 
-void LRUEvictor::Update(BlockId blockId, TimeStamp lastAccessed)
-{
+void LRUEvictor::Update(BlockId blockId, TimeStamp lastAccessed) {
     candidates_[blockId].lastAccessedTime = lastAccessed;
 }
 
-void LRUEvictor::Remove(BlockId blockId)
-{
+void LRUEvictor::Remove(BlockId blockId) {
     if (candidates_.find(blockId) != candidates_.end()) {
         candidates_.erase(blockId);
     }
@@ -67,8 +62,7 @@ void LRUEvictor::Remove(BlockId blockId)
 
 size_t LRUEvictor::GetNumblocks() const { return candidates_.size(); }
 
-void LRUEvictor::Cleanup()
-{
+void LRUEvictor::Cleanup() {
     std::priority_queue<BlockMetaData> queue;
 
     for (const auto &candidate : candidates_) {
@@ -78,12 +72,11 @@ void LRUEvictor::Cleanup()
     priorityQueue_ = std::move(queue);
 }
 
-EvictorPtr MakeEvictor(EvictionPolicy policy)
-{
+EvictorPtr MakeEvictor(EvictionPolicy policy) {
     if (policy == EvictionPolicy::LRU) {
         return std::make_unique<LRUEvictor>();
     }
 
     throw std::runtime_error("Unknown cache eviction policy");
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

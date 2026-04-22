@@ -35,7 +35,6 @@ class FusedMoEMethodBase(QuantizationMethodBase):
     ) -> None:
         raise NotImplementedError
 
-
     @abstractmethod
     def apply(
         self,
@@ -43,6 +42,6 @@ class FusedMoEMethodBase(QuantizationMethodBase):
         x: torch.Tensor,
         group_list: torch.Tensor,
         group_list_type: int = 1,
-        dynamic_scale: torch.Tensor = None
+        dynamic_scale: torch.Tensor = None,
     ) -> torch.Tensor:
         raise NotImplementedError

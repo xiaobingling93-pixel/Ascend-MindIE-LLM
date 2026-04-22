@@ -15,39 +15,38 @@
 #include "pylog.h"
 
 namespace FOUNDATION {
-    PyDoc_STRVAR(InterfaceModuleDoc, "The part of the MindIE-LLM module that is implemented in CXX.");
+PyDoc_STRVAR(InterfaceModuleDoc, "The part of the MindIE-LLM module that is implemented in CXX.");
 
-    static PyModuleDef g_InterfaceModule = {
-        PyModuleDef_HEAD_INIT,
-        "foundation",        // m_name
-        InterfaceModuleDoc,  // m_doc
-        -1,                  // m_size
-        nullptr,             // m_methods
-        nullptr,             // m_slots
-        nullptr,             // m_traverse
-        nullptr,             // m_clear
-        nullptr              // m_free
-    };
+static PyModuleDef g_InterfaceModule = {
+    PyModuleDef_HEAD_INIT,
+    "foundation",        // m_name
+    InterfaceModuleDoc,  // m_doc
+    -1,                  // m_size
+    nullptr,             // m_methods
+    nullptr,             // m_slots
+    nullptr,             // m_traverse
+    nullptr,             // m_clear
+    nullptr              // m_free
+};
 
-    PyMODINIT_FUNC PyInit_foundation(void)
-    {
-        PyObject* m = PyModule_Create(&g_InterfaceModule);
-        if (!m) {
-            return nullptr;
-        }
-        PyObject* pyLog = GetLogModule();
-        if (!pyLog) {
-            PyErr_SetString(PyExc_ImportError, "Failed to create log submodule.");
-            Py_DECREF(m);
-            return nullptr;
-        }
-        Py_INCREF(pyLog);
-        if (PyModule_AddObject(m, "log", pyLog) < 0) {
-            PyErr_SetString(PyExc_ImportError, "Failed to add log submodule.");
-            Py_DECREF(pyLog);
-            Py_DECREF(m);
-            return nullptr;
-        }
-        return m;
+PyMODINIT_FUNC PyInit_foundation(void) {
+    PyObject* m = PyModule_Create(&g_InterfaceModule);
+    if (!m) {
+        return nullptr;
     }
-} // namespace FOUNDATION
+    PyObject* pyLog = GetLogModule();
+    if (!pyLog) {
+        PyErr_SetString(PyExc_ImportError, "Failed to create log submodule.");
+        Py_DECREF(m);
+        return nullptr;
+    }
+    Py_INCREF(pyLog);
+    if (PyModule_AddObject(m, "log", pyLog) < 0) {
+        PyErr_SetString(PyExc_ImportError, "Failed to add log submodule.");
+        Py_DECREF(pyLog);
+        Py_DECREF(m);
+        return nullptr;
+    }
+    return m;
+}
+}  // namespace FOUNDATION

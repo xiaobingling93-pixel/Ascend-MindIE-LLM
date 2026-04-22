@@ -19,20 +19,20 @@ class ObjectPool(ABC):
             raise ValueError(f"Pool size cannot be negative (got {size})")
         self._pool_size = size
         self._pool = queue.Queue()
-        self._expand_pool() # initialize the pool
+        self._expand_pool()  # initialize the pool
 
     @abstractmethod
     def _create_object(self):
-        '''
+        """
         an interface to create a new object, subclasses should override it
-        '''
+        """
         return None
 
     @abstractmethod
     def _reset_object(self, obj):
-        '''
+        """
         an interface to reset a given object, subclasses should override it
-        '''
+        """
         pass
 
     def acquire(self):
@@ -40,7 +40,7 @@ class ObjectPool(ABC):
             return self._pool.get(block=False)
         except queue.Empty:
             logger.info("Object pool is empty")
-            self._expand_pool() # in case of an empty pool
+            self._expand_pool()  # in case of an empty pool
             logger.info("Object pool is expanded")
             return self._pool.get(block=False)
 
@@ -50,9 +50,9 @@ class ObjectPool(ABC):
             self._pool.put(obj, block=False)
         except queue.Full as e:
             raise Exception("Object pool is full, object release failed") from e
-        
+
     def _expand_pool(self):
-        for _ in range(self._pool_size): # expand by size
-            obj = self._create_object() 
-            self._reset_object(obj) # reset before adding to the pool
+        for _ in range(self._pool_size):  # expand by size
+            obj = self._create_object()
+            self._reset_object(obj)  # reset before adding to the pool
             self._pool.put(obj)

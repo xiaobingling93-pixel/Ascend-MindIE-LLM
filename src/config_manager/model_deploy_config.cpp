@@ -9,33 +9,34 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <set>
-#include <cctype>
-#include "safe_io.h"
-#include "safe_path.h"
+
+#include "base_config_manager.h"
 #include "check_utils.h"
 #include "common_util.h"
-#include "param_checker.h"
 #include "file_utils.h"
-#include "base_config_manager.h"
 #include "log.h"
+#include "param_checker.h"
 #include "safe_io.h"
+#include "safe_path.h"
 
 using mindie_llm::Json;
 using namespace nlohmann::literals;
 
 namespace mindie_llm {
-const uint32_t MAX_INPUT_LEN = 1024 * 1024 * 4; // 4M
+const uint32_t MAX_INPUT_LEN = 1024 * 1024 * 4;  // 4M
 const int32_t NPU_MEM_SZIE_LIMIT = -2;
 const size_t PYTHON_VERSION_LEN = 4;
 
 std::vector<std::string> g_checkEngineNameVec;
-static std::vector<ParamSpec> g_modelParentParamsConstraint = {
-    {"maxSeqLen", "uint32_t", true}, {"maxInputTokenLen", "uint32_t", true},
-    {"maxLoras", "uint32_t", false}, {"maxLoraRank", "uint32_t", false}};
+static std::vector<ParamSpec> g_modelParentParamsConstraint = {{"maxSeqLen", "uint32_t", true},
+                                                               {"maxInputTokenLen", "uint32_t", true},
+                                                               {"maxLoras", "uint32_t", false},
+                                                               {"maxLoraRank", "uint32_t", false}};
 
 static std::vector<ParamSpec> g_modelParamsConstraint = {
     {"cpuMemSize", "uint32_t", true},       {"modelWeightPath", "string", true}, {"modelName", "string", true},
@@ -44,16 +45,14 @@ static std::vector<ParamSpec> g_modelParamsConstraint = {
 
 static std::set<std::string> g_modelInstanceType = {"Standard", "StandardMock", "TargetModel", "AssistantModel"};
 
-void ModelDeployConfigManager::CheckTemplateConfig(const std::string &templateType, const uint32_t modelConfigNum)
-{
+void ModelDeployConfigManager::CheckTemplateConfig(const std::string &templateType, const uint32_t modelConfigNum) {
     if (templateType == "Standard" && modelConfigNum != 1U) {
         MINDIE_LLM_LOG_ERROR("There should be one modelParam for Standard templateType.");
         initFlag = false;
     }
 }
 
-void GetJsonModelConfig(struct ModelDeployConfig &modelConfig)
-{
+void GetJsonModelConfig(struct ModelDeployConfig &modelConfig) {
     std::string modelConfigPath = modelConfig.modelWeightPath + "/config.json";
     Json configJsonData;
     Result r = LoadJson(modelConfigPath, configJsonData);
@@ -90,25 +89,21 @@ void GetJsonModelConfig(struct ModelDeployConfig &modelConfig)
     }
 }
 
-static void CheckIfParallelInfoIsValid(const std::map<std::string, std::string> &modelConfig)
-{
-    auto checkParallelValue = [&](const std::string& parallelInfo) {
+static void CheckIfParallelInfoIsValid(const std::map<std::string, std::string> &modelConfig) {
+    auto checkParallelValue = [&](const std::string &parallelInfo) {
         int parallelSize = 1;
         auto it = modelConfig.find(parallelInfo);
         if (it != modelConfig.end()) {
             try {
                 parallelSize = std::stoi(it->second);
-                MINDIE_LLM_LOG_INFO("CheckIfParallelInfoIsValid: " <<
-                    parallelInfo << " is " << parallelSize);
-            } catch (const std::invalid_argument& e) {
-                MINDIE_LLM_LOG_ERROR("Invalid value for " << parallelInfo <<
-                    ", which is " << it->second);
+                MINDIE_LLM_LOG_INFO("CheckIfParallelInfoIsValid: " << parallelInfo << " is " << parallelSize);
+            } catch (const std::invalid_argument &e) {
+                MINDIE_LLM_LOG_ERROR("Invalid value for " << parallelInfo << ", which is " << it->second);
                 throw;
-            } catch (const std::out_of_range& e) {
-                MINDIE_LLM_LOG_ERROR("Value for " << parallelInfo <<
-                    " out of range, got " << it->second);
+            } catch (const std::out_of_range &e) {
+                MINDIE_LLM_LOG_ERROR("Value for " << parallelInfo << " out of range, got " << it->second);
                 throw;
-            } catch (const std::exception& e) {
+            } catch (const std::exception &e) {
                 MINDIE_LLM_LOG_ERROR("Invalid " << parallelInfo);
                 throw;
             }
@@ -124,8 +119,7 @@ static void CheckIfParallelInfoIsValid(const std::map<std::string, std::string> 
     checkParallelValue("cp");
 }
 
-static uint32_t GammaUpdate(ModelDeployConfig modelParam, uint32_t speculationGamma)
-{
+static uint32_t GammaUpdate(ModelDeployConfig modelParam, uint32_t speculationGamma) {
     // 查找 plugin_params 字段
     auto it = modelParam.modelConfig.find("plugin_params");
     if (it != modelParam.modelConfig.end()) {
@@ -135,7 +129,7 @@ static uint32_t GammaUpdate(ModelDeployConfig modelParam, uint32_t speculationGa
             nlohmann::json pluginConfig = nlohmann::json::parse(pluginParams, CheckJsonDepthCallbackNoLogger);
             // 检查 plugin_type 字段是否为 "mtp"
             if (!pluginConfig.contains("plugin_type") ||
-            std::string(pluginConfig["plugin_type"]).find("mtp") == std::string::npos) {
+                std::string(pluginConfig["plugin_type"]).find("mtp") == std::string::npos) {
                 return speculationGamma;
             }
             // 检查是否存在 num_speculative_tokens 字段
@@ -156,8 +150,7 @@ static uint32_t GammaUpdate(ModelDeployConfig modelParam, uint32_t speculationGa
     return speculationGamma;
 }
 
-static bool InitLoraConfig(const Json &loraJsonData, std::vector<LoraConfig> &loraModules)
-{
+static bool InitLoraConfig(const Json &loraJsonData, std::vector<LoraConfig> &loraModules) {
     LoraConfig tmpconfig;
     for (auto singleLoraJson : loraJsonData) {
         tmpconfig.loraName = GetStringParamValue(singleLoraJson, "name");
@@ -168,8 +161,7 @@ static bool InitLoraConfig(const Json &loraJsonData, std::vector<LoraConfig> &lo
     return true;
 }
 
-static bool InitLoraConfig(std::string modelName, std::string modelWeightPath, std::vector<LoraConfig> &loraModules)
-{
+static bool InitLoraConfig(std::string modelName, std::string modelWeightPath, std::vector<LoraConfig> &loraModules) {
     Json loraJsonData;
     if (!ParamChecker::CheckAndGetLoraJsonFile(modelWeightPath, loraJsonData)) {
         return false;
@@ -187,8 +179,7 @@ static bool InitLoraConfig(std::string modelName, std::string modelWeightPath, s
 }
 
 void ModelDeployConfigManager::InitModelConfigImpl(const Json &modelJsonData, uint32_t speculationGamma,
-                                                   const uint32_t maxSeqLength, int32_t truncation)
-{
+                                                   const uint32_t maxSeqLength, int32_t truncation) {
     std::vector<std::string> modelConfigList = {"modelInstanceType", "modelName",      "modelWeightPath",
                                                 "worldSize",         "cpuMemSize",     "npuMemSize",
                                                 "backendType",       "trustRemoteCode"};
@@ -222,7 +213,7 @@ void ModelDeployConfigManager::InitModelConfigImpl(const Json &modelJsonData, ui
         modelParam.modelInstanceType =
             ParamChecker::GetStringParamValue(singleModelData, "modelInstanceType", "Standard");
         if (g_modelInstanceType.count(modelParam.modelInstanceType) == 0) {
-            std::string supportedTypes {};
+            std::string supportedTypes{};
             for (const auto &type : g_modelInstanceType) {
                 supportedTypes += (supportedTypes.empty() ? "" : ",") + type;
             }
@@ -252,10 +243,9 @@ void ModelDeployConfigManager::InitModelConfigImpl(const Json &modelJsonData, ui
     InitLoraConfigImpl(modelJsonData);
 }
 
-static void InitLoraConfigFromJson(const Json &modelJsonData, std::vector<ModelDeployConfig> &modelParamVec)
-{
-    std::map<std::string, std::vector<std::string>> loraBaseCorrespondence; // key: base model, value: lora names
-    std::map<std::string, std::string> loraNamePaths;                       // key: lora_names, value: paths
+static void InitLoraConfigFromJson(const Json &modelJsonData, std::vector<ModelDeployConfig> &modelParamVec) {
+    std::map<std::string, std::vector<std::string>> loraBaseCorrespondence;  // key: base model, value: lora names
+    std::map<std::string, std::string> loraNamePaths;                        // key: lora_names, value: paths
     std::set<std::string> uniqueLoraNames;
     std::string loraName;
     std::string loraPath;
@@ -274,18 +264,18 @@ static void InitLoraConfigFromJson(const Json &modelJsonData, std::vector<ModelD
         loraBaseModel = singleLoraData.at("baseModelName");
         if (loraBaseCorrespondence.find(loraBaseModel) == loraBaseCorrespondence.end()) {
             MINDIE_LLM_LOG_WARN("`baseModelName` does not exist and corresponding lora adpater is ignored. "
-                      << "Please verify that `baseModelName` "
-                      << "is defined in $BackendConfig.ModelDeployConfig.ModelConfig.modelName, "
-                      << "which is loaded from $BackendConfig.ModelDeployConfig.LoraModules.baseModelName "
-                      << "in ${MINDIE_LLM_HOME_PATH}/conf/config.json.");
+                                << "Please verify that `baseModelName` "
+                                << "is defined in $BackendConfig.ModelDeployConfig.ModelConfig.modelName, "
+                                << "which is loaded from $BackendConfig.ModelDeployConfig.LoraModules.baseModelName "
+                                << "in ${MINDIE_LLM_HOME_PATH}/conf/config.json.");
         } else {
             loraBaseCorrespondence.at(loraBaseModel).push_back(loraName);
         }
 
         if (uniqueLoraNames.find(loraName) != uniqueLoraNames.end()) {
             MINDIE_LLM_LOG_WARN("The `name` in `LoraModules` is duplicated and `path` is set to the first one. "
-                      << "Please check $BackendConfig.ModelDeployConfig.LoraModules "
-                      << "in ${MINDIE_LLM_HOME_PATH}/conf/config.json.");
+                                << "Please check $BackendConfig.ModelDeployConfig.LoraModules "
+                                << "in ${MINDIE_LLM_HOME_PATH}/conf/config.json.");
         } else {
             uniqueLoraNames.insert(loraName);
             loraNamePaths.insert(std::make_pair(loraName, loraPath));
@@ -306,8 +296,7 @@ static void InitLoraConfigFromJson(const Json &modelJsonData, std::vector<ModelD
     }
 }
 
-static void InitLoraConfigFromFile(std::vector<ModelDeployConfig> &modelParamVec)
-{
+static void InitLoraConfigFromFile(std::vector<ModelDeployConfig> &modelParamVec) {
     std::set<std::string> uniqueLoraNames;
     std::string loraName;
     std::string loraPath;
@@ -328,7 +317,7 @@ static void InitLoraConfigFromFile(std::vector<ModelDeployConfig> &modelParamVec
             // service 初始化时已check json 是否key value全为string
             if (uniqueLoraNames.find(it.key()) != uniqueLoraNames.end()) {
                 MINDIE_LLM_LOG_WARN("The `name` in `LoraModules` is duplicated and `path` is set to the first one. "
-                          << "Please check lora_adapter.json under `modelWeightPath`.");
+                                    << "Please check lora_adapter.json under `modelWeightPath`.");
             } else {
                 uniqueLoraNames.insert(it.key());
                 singleModelParam.loraModules.insert(std::make_pair(it.key(), it.value()));
@@ -340,18 +329,16 @@ static void InitLoraConfigFromFile(std::vector<ModelDeployConfig> &modelParamVec
     }
 }
 
-void ModelDeployConfigManager::InitLoraConfigImpl(const Json &modelJsonData)
-{
+void ModelDeployConfigManager::InitLoraConfigImpl(const Json &modelJsonData) {
     if (modelJsonData.contains("LoraModules")) {
-        InitLoraConfigFromJson(modelJsonData, modelParamVec_); // 优先从config.json读取
+        InitLoraConfigFromJson(modelJsonData, modelParamVec_);  // 优先从config.json读取
     } else {
-        InitLoraConfigFromFile(modelParamVec_); // 旧的lora_adapter.json 方式
+        InitLoraConfigFromFile(modelParamVec_);  // 旧的lora_adapter.json 方式
     }
 }
 
 void ModelDeployConfigManager::InitModelConfig(const Json &modelJsonData, uint32_t speculationGamma,
-                                               const uint32_t maxSeqLength, const int32_t truncation)
-{
+                                               const uint32_t maxSeqLength, const int32_t truncation) {
     ModelDeployConfigManager::InitModelConfigImpl(modelJsonData, speculationGamma, maxSeqLength, truncation);
 
     if (modelJsonData.contains("LoraModules")) {
@@ -375,8 +362,7 @@ void ModelDeployConfigManager::InitModelConfig(const Json &modelJsonData, uint32
     }
 }
 
-bool ModelDeployConfigManager::InitFromJson()
-{
+bool ModelDeployConfigManager::InitFromJson() {
     Json backendJsonData;
     if (!CheckSystemConfig(jsonPath_, backendJsonData, "BackendConfig")) {
         initFlag = false;
@@ -401,7 +387,7 @@ bool ModelDeployConfigManager::InitFromJson()
     modelDeployConfig_.truncation = ParamChecker::GetTruncationParamDefaultValue(backendJsonData, "truncation", 0);
 
     // 校验并读取maxLoras和maxLoraRank,负数则取0(负数为异常值，一般不会为负)
-    const auto& modelDeployConfig = backendJsonData["ModelDeployConfig"];
+    const auto &modelDeployConfig = backendJsonData["ModelDeployConfig"];
     if (modelDeployConfig.contains("maxLoras") && modelDeployConfig["maxLoras"].is_number()) {
         MINDIE_LLM_LOG_INFO("maxLoras :" << modelDeployConfig["maxLoras"].get<int32_t>());
         modelDeployConfig_.maxLoras = static_cast<uint32_t>(std::max(modelDeployConfig["maxLoras"].get<int32_t>(), 0));
@@ -411,8 +397,8 @@ bool ModelDeployConfigManager::InitFromJson()
     }
     if (modelDeployConfig.contains("maxLoraRank") && modelDeployConfig["maxLoraRank"].is_number()) {
         MINDIE_LLM_LOG_INFO("maxLoraRank:" << modelDeployConfig["maxLoraRank"].get<int32_t>());
-        modelDeployConfig_.maxLoraRank = static_cast<uint32_t>(
-          std::max(modelDeployConfig["maxLoraRank"].get<int32_t>(), 0));
+        modelDeployConfig_.maxLoraRank =
+            static_cast<uint32_t>(std::max(modelDeployConfig["maxLoraRank"].get<int32_t>(), 0));
     } else {
         modelDeployConfig_.maxLoraRank = 0;
         MINDIE_LLM_LOG_WARN("maxLoraRank not found or invalid in ModelDeployConfig, using default 0");
@@ -426,7 +412,7 @@ bool ModelDeployConfigManager::InitFromJson()
     CheckTemplateConfig(backendJsonData["ScheduleConfig"]["templateType"],
                         backendJsonData["ModelDeployConfig"]["ModelConfig"].size());
     InitModelConfig(backendJsonData["ModelDeployConfig"], speculationGamma,
-        backendJsonData["ModelDeployConfig"]["maxSeqLen"], modelDeployConfig_.truncation);
+                    backendJsonData["ModelDeployConfig"]["maxSeqLen"], modelDeployConfig_.truncation);
     return initFlag;
 }
 
@@ -434,20 +420,19 @@ std::vector<ModelDeployConfig> &ModelDeployConfigManager::GetParam() { return mo
 
 std::vector<LoraConfig> &ModelDeployConfigManager::GetLoraConfig() { return loraModules_; }
 
-static bool CheckModelNameLength(std::string &name, std::string paramType)
-{
+static bool CheckModelNameLength(std::string &name, std::string paramType) {
     std::regex regexPattern("^[a-zA-Z0-9_.-]{1,256}$");
     if (!std::regex_match(name, regexPattern) || !isalnum(name[0]) || !isalnum(name[name.size() - 1])) {
-        MINDIE_LLM_LOG_ERROR("The value of " << paramType << " must meet the following rules: "
-                  << "The string length is [1, 256] and consists of a match of the type "
-                  << "[a-zA-Z0-9_.-]. The first and last characters must be characters or digits.");
+        MINDIE_LLM_LOG_ERROR("The value of "
+                             << paramType << " must meet the following rules: "
+                             << "The string length is [1, 256] and consists of a match of the type "
+                             << "[a-zA-Z0-9_.-]. The first and last characters must be characters or digits.");
         return false;
     }
     return true;
 }
 
-bool ModelDeployConfigManager::CheckParam()
-{
+bool ModelDeployConfigManager::CheckParam() {
     std::set<std::string> modelNames;
     for (auto &modelParam : modelParamVec_) {
         if (modelParam.modelName.empty()) {
@@ -473,10 +458,10 @@ bool ModelDeployConfigManager::CheckParam()
             initFlag = false;
         }
         if (modelParam.npuMemSize == 0 || modelParam.npuMemSize <= NPU_MEM_SZIE_LIMIT) {
-            MINDIE_LLM_LOG_ERROR("The value of 'npuMemSize' in ModelDeployConfig in config.json is " <<
-                modelParam.npuMemSize << " it should be within (0, 4294967295] or -1" <<
-                "please set 'npuMemSize' in config.json within (0, 4294967295] or -1",
-                LLM_MANAGER_CONFIG_FAILED);
+            MINDIE_LLM_LOG_ERROR("The value of 'npuMemSize' in ModelDeployConfig in config.json is "
+                                     << modelParam.npuMemSize << " it should be within (0, 4294967295] or -1"
+                                     << "please set 'npuMemSize' in config.json within (0, 4294967295] or -1",
+                                 LLM_MANAGER_CONFIG_FAILED);
             initFlag = false;
         }
         SafePath modelWeightPath(modelParam.modelWeightPath, PathType::DIR, "r", PERM_750);
@@ -507,8 +492,7 @@ bool ModelDeployConfigManager::CheckParam()
     return initFlag;
 }
 
-void ModelDeployConfigManager::SetMaxPositionEmbeddings(uint32_t maxPositionEmbeddings)
-{
+void ModelDeployConfigManager::SetMaxPositionEmbeddings(uint32_t maxPositionEmbeddings) {
     modelParamVec_[0].maxPositionEmbeddings = maxPositionEmbeddings;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

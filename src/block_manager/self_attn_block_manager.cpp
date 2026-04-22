@@ -14,19 +14,24 @@
 
 #include <numeric>
 
-#include "log.h"
 #include "cpu_npu_block_allocator.h"
-#include "msServiceProfiler/msServiceProfiler.h"
-#include "math_utils.h"
+#include "log.h"
 #include "lwd_self_attn_block_manager.h"
+#include "math_utils.h"
+#include "msServiceProfiler/msServiceProfiler.h"
 
 namespace mindie_llm {
 SelfAttnBlockManager::SelfAttnBlockManager(const BlockManagerConfig &config, size_t localDPRank)
-    : blockSize_(config.cacheBlockSize), cpuBlockNum_(config.cpuBlockNum), npuBlockNum_(config.npuBlockNum),
-      reservedBlockNum_(config.reservedBlockNum), speculativeSlots_(config.speculativeSlots),
-      enableCaching_(config.enableCaching), localDPRank_(localDPRank), rankSize_(config.rankSize),
-      hostSize_(config.hostSize), allocationMode_(config.allocationMode)
-{
+    : blockSize_(config.cacheBlockSize),
+      cpuBlockNum_(config.cpuBlockNum),
+      npuBlockNum_(config.npuBlockNum),
+      reservedBlockNum_(config.reservedBlockNum),
+      speculativeSlots_(config.speculativeSlots),
+      enableCaching_(config.enableCaching),
+      localDPRank_(localDPRank),
+      rankSize_(config.rankSize),
+      hostSize_(config.hostSize),
+      allocationMode_(config.allocationMode) {
     if (reservedBlockNum_ > npuBlockNum_) {
         throw std::invalid_argument("The num of reserved block is larger than npu block num");
     }
@@ -64,18 +69,19 @@ SelfAttnBlockManager::SelfAttnBlockManager(const BlockManagerConfig &config, siz
 }
 
 BlockSpaceManagerSPtr BlockManagerFactory::CreateBlockSpaceManager(BlockManagerType type,
-                                                                   const BlockManagerConfig &config, size_t localDPRank)
-{
+                                                                   const BlockManagerConfig &config,
+                                                                   size_t localDPRank) {
     switch (type) {
-        case BlockManagerType::SELFATTNBLOCKMANAGER: return std::make_shared<SelfAttnBlockManager>(config, localDPRank);
+        case BlockManagerType::SELFATTNBLOCKMANAGER:
+            return std::make_shared<SelfAttnBlockManager>(config, localDPRank);
         case BlockManagerType::LWDSELFATTNBLOCKMANAGER:
             return std::make_shared<LwdSelfAttnBlockManager>(config, localDPRank);
-        default: throw std::invalid_argument("Invalid block manager type");
+        default:
+            throw std::invalid_argument("Invalid block manager type");
     }
 }
 
-size_t SelfAttnBlockManager::GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const
-{
+size_t SelfAttnBlockManager::GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const {
     if (blockSize == 0) {
         throw std::runtime_error("the blockSize should not be zero");
     }
@@ -86,8 +92,7 @@ size_t SelfAttnBlockManager::GetNumRequiredBlocks(size_t seqLen, size_t blockSiz
     return num;
 }
 
-AllocStatus SelfAttnBlockManager::CanAllocate(const SequenceGroupSPtr &seqGroup) const
-{
+AllocStatus SelfAttnBlockManager::CanAllocate(const SequenceGroupSPtr &seqGroup) const {
     std::vector<SequenceSPtr> waitingSeqs = seqGroup->GetFirstSequence(SequenceStatus::WAITING);
     if (waitingSeqs.empty()) {
         return AllocStatus::NEVER;
@@ -109,8 +114,7 @@ AllocStatus SelfAttnBlockManager::CanAllocate(const SequenceGroupSPtr &seqGroup)
     return AllocStatus::LATER;
 }
 
-bool SelfAttnBlockManager::Allocate(const SequenceGroupSPtr &seqGroup)
-{
+bool SelfAttnBlockManager::Allocate(const SequenceGroupSPtr &seqGroup) {
     std::vector<SequenceSPtr> waitingSeqs = seqGroup->GetFirstSequence(SequenceStatus::WAITING);
 
     if (waitingSeqs.empty()) {
@@ -154,8 +158,7 @@ bool SelfAttnBlockManager::Allocate(const SequenceGroupSPtr &seqGroup)
 
 /// 确定NPU的KV缓存中是否有足够的空间为指定sequence group生成序列，
 /// 约定每个被Append slot的block都需要新分配。如果append的block数量少于空闲的block数量，则可以Append多个slot。
-bool SelfAttnBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup) const
-{
+bool SelfAttnBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup) const {
     size_t numRelatedBlocks = 0;
     std::vector<SequenceSPtr> runningSeqs = seqGroup->GetSequences(SequenceStatus::RUNNING);
     for (auto &sequence : runningSeqs) {
@@ -173,8 +176,7 @@ bool SelfAttnBlockManager::CanAppendSlot(const SequenceGroupSPtr &seqGroup) cons
     return numRelatedBlocks <= numFreeNpuBlocks;
 }
 
-std::vector<std::pair<BlockId, BlockId>> SelfAttnBlockManager::AppendSlot(const SequenceSPtr &sequence)
-{
+std::vector<std::pair<BlockId, BlockId>> SelfAttnBlockManager::AppendSlot(const SequenceSPtr &sequence) {
     if (rankSize_ > 1) {
         throw std::runtime_error("throw not supported exception.");
     }
@@ -187,8 +189,7 @@ std::vector<std::pair<BlockId, BlockId>> SelfAttnBlockManager::AppendSlot(const 
 }
 
 // CanAppendSlotNew和AppendSlotNew为sp专用接口，避免对现有流程影响
-bool SelfAttnBlockManager::CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) const
-{
+bool SelfAttnBlockManager::CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) const {
     std::vector<SequenceSPtr> runningSeqs = seqGroup->GetFirstSequence(SequenceStatus::RUNNING);
     if (runningSeqs.empty()) {
         return false;
@@ -202,8 +203,7 @@ bool SelfAttnBlockManager::CanAppendSlotNew(const SequenceGroupSPtr &seqGroup) c
     return blockTable.CanAppendNewTokens(appendTokenIds, speculativeSlots_);
 }
 
-void SelfAttnBlockManager::AppendSlotNew(const SequenceGroupSPtr &seqGroup)
-{
+void SelfAttnBlockManager::AppendSlotNew(const SequenceGroupSPtr &seqGroup) {
     std::vector<SequenceSPtr> runningSeqs = seqGroup->GetFirstSequence(SequenceStatus::RUNNING);
     if (runningSeqs.empty()) {
         return;
@@ -219,24 +219,21 @@ void SelfAttnBlockManager::AppendSlotNew(const SequenceGroupSPtr &seqGroup)
     blockTable.AppendNewTokens(appendTokenIds, sequence->GetExtraHash(), speculativeSlots_);
 }
 
-void SelfAttnBlockManager::AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId> &tokens)
-{
+void SelfAttnBlockManager::AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId> &tokens) {
     BlockTable &blockTable = seqId2BlockTable_[seqId];
 
     blockTable.AppendToSpRank(blockTable.GetLatestAppendedRankId(), tokens);
 }
 
-bool SelfAttnBlockManager::IsAppendBlock(SequenceId seqId)
-{
+bool SelfAttnBlockManager::IsAppendBlock(SequenceId seqId) {
     BlockTable &blockTable = seqId2BlockTable_[seqId];
     return blockTable.IsAppendBlock();
 }
 
-void SelfAttnBlockManager::Free(SequenceId seqId)
-{
+void SelfAttnBlockManager::Free(SequenceId seqId) {
     auto it = seqId2BlockTable_.find(seqId);
     if (it == seqId2BlockTable_.end()) {
-        return; // Already freed or haven't been scheduled yet.
+        return;  // Already freed or haven't been scheduled yet.
     }
 
     // 更新序列块最新访问时间
@@ -255,13 +252,11 @@ void SelfAttnBlockManager::Free(SequenceId seqId)
     seqId2BlockTable_.erase(it);
 }
 
-std::vector<BlockIds> SelfAttnBlockManager::GetBlockIds(SequenceId seqId) const
-{
+std::vector<BlockIds> SelfAttnBlockManager::GetBlockIds(SequenceId seqId) const {
     return {seqId2BlockTable_.at(seqId).GetBlockIds()};
 }
 
-void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const
-{
+void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<RankedBlockId> &rankedBlockIds) const {
     rankedBlockIds.clear();
     std::vector<BlockObjSPtr> blocks = seqId2BlockTable_.at(seqId).GetBlockObjs();
     for (const auto &block : blocks) {
@@ -271,8 +266,8 @@ void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<Ranke
 }
 
 // rankedBlockIds 第一维度是rank 第二维度是block id
-void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<std::vector<BlockId>> &rankedBlockIds) const
-{
+void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId,
+                                             std::vector<std::vector<BlockId>> &rankedBlockIds) const {
     rankedBlockIds.clear();
     rankedBlockIds.resize(rankSize_);
 
@@ -285,8 +280,7 @@ void SelfAttnBlockManager::GetRankedBlockIds(SequenceId seqId, std::vector<std::
 }
 
 // rankedHashValues 第一维度是rank 第二维度是block hashvalue
-std::vector<std::vector<HashValue>> SelfAttnBlockManager::GetRankedHashValues(SequenceId seqId) const
-{
+std::vector<std::vector<HashValue>> SelfAttnBlockManager::GetRankedHashValues(SequenceId seqId) const {
     std::vector<std::vector<HashValue>> rankedHashValues;
     rankedHashValues.resize(rankSize_);
     std::vector<BlockObjSPtr> blocks = seqId2BlockTable_.at(seqId).GetBlockObjs();
@@ -298,8 +292,7 @@ std::vector<std::vector<HashValue>> SelfAttnBlockManager::GetRankedHashValues(Se
     return rankedHashValues;
 }
 
-std::vector<HashValue> SelfAttnBlockManager::GetSeqHashValues(SequenceId seqId) const
-{
+std::vector<HashValue> SelfAttnBlockManager::GetSeqHashValues(SequenceId seqId) const {
     std::vector<HashValue> seqHashValues;
     std::vector<BlockObjSPtr> blocks = seqId2BlockTable_.at(seqId).GetBlockObjs();
     for (const auto &block : blocks) {
@@ -309,8 +302,7 @@ std::vector<HashValue> SelfAttnBlockManager::GetSeqHashValues(SequenceId seqId) 
     return seqHashValues;
 }
 
-void SelfAttnBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float accessTime)
-{
+void SelfAttnBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float accessTime) {
     if (enableCaching_) {
         seqsLastAccessBlocksTracker_.UpdateSeqLastAccess(seq->seqId_, accessTime);
     }
@@ -318,8 +310,7 @@ void SelfAttnBlockManager::AccessAllblocksInSeq(const SequenceSPtr &seq, float a
 
 void SelfAttnBlockManager::MarkBlocksAsComputed() { blockAllocator_->MarkBlocksAsComputed(); }
 
-std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs)
-{
+std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) {
     size_t maxCachedBlocksPreRank = 0;
     std::vector<std::vector<std::vector<BlockId>>> rankedComputedSeqBlockIds;  /// rank_size, seq_num, block_num
     for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
@@ -329,7 +320,8 @@ std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::
 
             std::vector<BlockId> allBlocks = seqId2BlockTable_.at(seq->seqId_).GetRankedBlockIds(rankIdx);
             size_t numCachedBlocks = seqsBlockComputedTracker_.GetCachedTokensNum(
-                seq, rankIdx, rankedHashValues[rankIdx], seq->IsPrefill()) / blockSize_;
+                                         seq, rankIdx, rankedHashValues[rankIdx], seq->IsPrefill()) /
+                                     blockSize_;
             std::vector<BlockId> computedBlockIds(allBlocks.begin(), allBlocks.begin() + numCachedBlocks);
             computedSeqBlockIds.push_back(computedBlockIds);
             maxCachedBlocksPreRank = std::max(maxCachedBlocksPreRank, allBlocks.size());
@@ -342,7 +334,7 @@ std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::
         maxCachedBlocksPreRank = std::min(maxCachedBlocksPreRank, computedBlockNum);
     }
     bool flag = true;
-    for (auto& computedBlockNum: allRankComputedBlockNum) {
+    for (auto &computedBlockNum : allRankComputedBlockNum) {
         if (flag && computedBlockNum > maxCachedBlocksPreRank) {
             computedBlockNum = maxCachedBlocksPreRank + 1;
         } else {
@@ -354,8 +346,7 @@ std::vector<size_t> SelfAttnBlockManager::GetAllrankComputedBlockNum(const std::
     return allRankComputedBlockNum;
 }
 
-std::vector<BlockId> SelfAttnBlockManager::GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs)
-{
+std::vector<BlockId> SelfAttnBlockManager::GetCommonComputedBlockIds(const std::vector<SequenceSPtr> &seqs) {
     std::vector<std::vector<BlockId>> computedSeqBlockIds;
     for (const auto &seq : seqs) {
         const std::vector<BlockId> &allBlocks = seqId2BlockTable_.at(seq->seqId_).GetBlockIds();
@@ -370,9 +361,9 @@ std::vector<BlockId> SelfAttnBlockManager::GetCommonComputedBlockIds(const std::
     return blockAllocator_->GetCommonComputedBlockIds(computedSeqBlockIds);
 }
 
-std::vector<BlockId> SelfAttnBlockManager::GetRemoteComputedBlockIds(
-    const std::vector<SequenceSPtr> &seqs, size_t computedLens, uint32_t tpSize, std::string modelName)
-{
+std::vector<BlockId> SelfAttnBlockManager::GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+                                                                     size_t computedLens, uint32_t tpSize,
+                                                                     std::string modelName) {
     std::vector<std::vector<BlockId>> remoteComputedSeqBlockIds;
     for (const auto &seq : seqs) {
         const std::vector<BlockId> &allBlocks = seqId2BlockTable_.at(seq->seqId_).GetBlockIds();
@@ -382,10 +373,8 @@ std::vector<BlockId> SelfAttnBlockManager::GetRemoteComputedBlockIds(
         for (size_t i = computedLens; i < hashValues.size(); i++) {
             HashValue hashValue = hashValues[i];
             for (uint32_t tpIds = 0; tpIds < tpSize; tpIds++) {
-                std::string key = std::to_string(hashValue) + "_"
-                                + std::to_string(tpIds) + "_"
-                                + std::to_string(tpSize) + "_"
-                                + modelName;
+                std::string key = std::to_string(hashValue) + "_" + std::to_string(tpIds) + "_" +
+                                  std::to_string(tpSize) + "_" + modelName;
                 allKeys.push_back(key);
             }
         }
@@ -404,9 +393,9 @@ std::vector<BlockId> SelfAttnBlockManager::GetRemoteComputedBlockIds(
     return blockAllocator_->GetCommonComputedBlockIds(remoteComputedSeqBlockIds);
 }
 
-std::vector<size_t> SelfAttnBlockManager::GetAllRankRemoteComputedBlockIds(
-    const std::vector<SequenceSPtr> &seqs, std::vector<size_t> &computedBlocksNum, std::string modelName)
-{
+std::vector<size_t> SelfAttnBlockManager::GetAllRankRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+                                                                           std::vector<size_t> &computedBlocksNum,
+                                                                           std::string modelName) {
     if (seqs.size() > 1) {
         throw std::runtime_error("`Kv pool` do not support `splitfuse`!");
     }
@@ -424,8 +413,8 @@ std::vector<size_t> SelfAttnBlockManager::GetAllRankRemoteComputedBlockIds(
         size_t curRankIdx = i == remoteComputedBlocksNum[rankIdx] ? rankIdx : 0;
         while (curRankIdx < rankSize_ && i < rankedHashValues[curRankIdx].size()) {
             HashValue hashValue = rankedHashValues[curRankIdx][i];
-            std::string key = std::to_string(hashValue) + "_" + std::to_string(curRankIdx) + "_"
-                            + std::to_string(rankSize_) + "_" + modelName;
+            std::string key = std::to_string(hashValue) + "_" + std::to_string(curRankIdx) + "_" +
+                              std::to_string(rankSize_) + "_" + modelName;
             allKeys.push_back(key);
             curRankIdx++;
         }
@@ -444,8 +433,7 @@ std::vector<size_t> SelfAttnBlockManager::GetAllRankRemoteComputedBlockIds(
     return remoteComputedBlocksNum;
 }
 
-void SelfAttnBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq)
-{
+void SelfAttnBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq) {
     auto it = seqId2BlockTable_.find(parentSeq->seqId_);
     if (it == seqId2BlockTable_.end()) {
         throw std::runtime_error("SequenceId not found in seqId2BlockTable_ When Fork sequence");
@@ -456,8 +444,7 @@ void SelfAttnBlockManager::Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq)
 }
 
 AllocStatus SelfAttnBlockManager::CanSwap(const SequenceGroupSPtr &seqGroup, DeviceType dstDeviceType,
-                                          SequenceStatus status, size_t numLookaheads)
-{
+                                          SequenceStatus status, size_t numLookaheads) {
     size_t numRelatedBlocks = 0;
     for (const auto &seq : seqGroup->GetFirstSequence(status)) {
         BlockTable &blockTable = seqId2BlockTable_.at(seq->seqId_);
@@ -474,13 +461,12 @@ AllocStatus SelfAttnBlockManager::CanSwap(const SequenceGroupSPtr &seqGroup, Dev
     return AllocStatus::LATER;
 }
 
-AllocStatus SelfAttnBlockManager::CanSwapIn(const SequenceGroupSPtr &seqGroup, size_t numLookheadSlots)
-{
+AllocStatus SelfAttnBlockManager::CanSwapIn(const SequenceGroupSPtr &seqGroup, size_t numLookheadSlots) {
     return CanSwap(seqGroup, DeviceType::NPU, SequenceStatus::SWAPPED, numLookheadSlots);
 }
 
-std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> SelfAttnBlockManager::SwapIn(const SequenceGroupSPtr &seqGroup)
-{
+std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> SelfAttnBlockManager::SwapIn(
+    const SequenceGroupSPtr &seqGroup) {
     std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> physicalBlockIdMapping;
     for (const auto &seq : seqGroup->GetFirstSequence(SequenceStatus::SWAPPED)) {
         std::vector<BlockObjSPtr> blocks = seqId2BlockTable_.at(seq->seqId_).GetBlockObjs();
@@ -495,8 +481,7 @@ std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> SelfAttnBlockManager::S
     return physicalBlockIdMapping;
 }
 
-bool SelfAttnBlockManager::CanSwapOut(const SequenceGroupSPtr &seqGroup)
-{
+bool SelfAttnBlockManager::CanSwapOut(const SequenceGroupSPtr &seqGroup) {
     AllocStatus status = CanSwap(seqGroup, DeviceType::CPU, SequenceStatus::RUNNING);
     return status == AllocStatus::OK;
 }
@@ -504,8 +489,7 @@ bool SelfAttnBlockManager::CanSwapOut(const SequenceGroupSPtr &seqGroup)
 /// 将给定的sequence group swap out后 返回BlockId的一个map（从NPU到CPU）
 /// \return: std::pair<PhysicalBlockId, PhysicalBlockId> {NPU BlockId, CPU BlockId}
 std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> SelfAttnBlockManager::SwapOut(
-    const SequenceGroupSPtr &seqGroup)
-{
+    const SequenceGroupSPtr &seqGroup) {
     std::vector<std::pair<PhysicalBlockId, PhysicalBlockId>> physicalBlockIdMapping;
 
     for (const auto &seq : seqGroup->GetFirstSequence(SequenceStatus::RUNNING)) {
@@ -531,19 +515,17 @@ float SelfAttnBlockManager::GetPrefixCacheHitRate() const { return blockAllocato
 
 bool SelfAttnBlockManager::ResetPrefixCache() const { return blockAllocator_->ResetPrefixCache(); }
 
-size_t SelfAttnBlockManager::GetNumCachedTokens(const SequenceSPtr &seq)
-{
+size_t SelfAttnBlockManager::GetNumCachedTokens(const SequenceSPtr &seq) {
     size_t numCachedTokens = 0;
     std::vector<std::vector<HashValue>> rankedHashValues = GetRankedHashValues(seq->seqId_);
     for (size_t rankIdx = 0; rankIdx < rankSize_; rankIdx++) {
-        numCachedTokens += seqsBlockComputedTracker_.GetCachedTokensNum(
-            seq, rankIdx, rankedHashValues[rankIdx], seq->IsPrefill());
+        numCachedTokens +=
+            seqsBlockComputedTracker_.GetCachedTokensNum(seq, rankIdx, rankedHashValues[rankIdx], seq->IsPrefill());
     }
     return numCachedTokens;
 }
 
-size_t SelfAttnBlockManager::GetSeqNumCachedTokens(const SequenceSPtr &seq)
-{
+size_t SelfAttnBlockManager::GetSeqNumCachedTokens(const SequenceSPtr &seq) {
     size_t numCachedTokens = 0;
     numCachedTokens += seqsBlockComputedTracker_.GetCachedTokensNum(seq);
     return numCachedTokens;
@@ -556,8 +538,7 @@ size_t SelfAttnBlockManager::GetSeqNumCachedTokens(const SequenceSPtr &seq)
  替换后：[x x x x  r] [ r -1]
 */
 void SelfAttnBlockManager::ReplaceTrailingPlaceHolder(const SequenceSPtr &seq, size_t trailingPlaceHolderNum,
-                                                      size_t replacedPlaceHolderNum)
-{
+                                                      size_t replacedPlaceHolderNum) {
     // sp并行场景下暂不支持prefix cache，所有不需要替换block中的place holder
     if (rankSize_ != 1) {
         return;
@@ -579,8 +560,7 @@ void SelfAttnBlockManager::ReplaceTrailingPlaceHolder(const SequenceSPtr &seq, s
 }
 size_t SelfAttnBlockManager::GetLocalDPRank() const { return localDPRank_; }
 
-std::vector<size_t> SelfAttnBlockManager::GetTokenCountPerRank(SequenceId seqId) const
-{
+std::vector<size_t> SelfAttnBlockManager::GetTokenCountPerRank(SequenceId seqId) const {
     const BlockTable &blockTable = seqId2BlockTable_.at(seqId);
     std::vector<size_t> tokenCounts(rankSize_, 0);
 
@@ -592,16 +572,14 @@ std::vector<size_t> SelfAttnBlockManager::GetTokenCountPerRank(SequenceId seqId)
     return tokenCounts;
 }
 
-size_t SelfAttnBlockManager::GetLatestAppendedRankId(SequenceId seqId) const
-{
+size_t SelfAttnBlockManager::GetLatestAppendedRankId(SequenceId seqId) const {
     const BlockTable &blockTable = seqId2BlockTable_.at(seqId);
     return blockTable.GetLatestAppendedRankId();
 }
 
-size_t SelfAttnBlockManager::GetAppendedBlockRankId(SequenceId seqId) const
-{
+size_t SelfAttnBlockManager::GetAppendedBlockRankId(SequenceId seqId) const {
     const BlockTable &blockTable = seqId2BlockTable_.at(seqId);
     return blockTable.GetAppendedBlockRankId();
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

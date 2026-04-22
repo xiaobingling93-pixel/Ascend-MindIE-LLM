@@ -24,13 +24,13 @@ class MemPool:
     @abstractmethod
     def exists(self, key: str, **kwargs) -> bool:
         raise NotImplementedError
-    
+
     @abstractmethod
     def put(
         self,
         keys: Union[str, List[str]],
         tensors: Union[torch.Tensor, List[torch.Tensor], List[List[torch.Tensor]]],
-        **kwargs
+        **kwargs,
     ) -> List[bool]:
         raise NotImplementedError
 
@@ -39,9 +39,9 @@ class MemPool:
         self,
         keys: Union[str, List[str]],
         tensors: Union[torch.Tensor, List[torch.Tensor], List[List[torch.Tensor]]],
-        **kwargs
+        **kwargs,
     ) -> List[bool]:
         raise NotImplementedError
-    
+
     def close(self) -> None:
         pass

@@ -17,19 +17,20 @@
 
 namespace mindie_llm {
 class GrpcHandler {
-public:
-    static GrpcHandler &GetInstance();
+   public:
+    static GrpcHandler& GetInstance();
     // 注册 dmi 业务回调到 grpc service
     bool InitDmiBusiness();
     // 启动服务
     bool InitGrpcService();
-private:
+
+   private:
     GrpcHandler() = default;
     ~GrpcHandler() = default;
     GrpcHandler(const GrpcHandler&) = delete;
-    GrpcHandler& operator = (const GrpcHandler&) = delete;
+    GrpcHandler& operator=(const GrpcHandler&) = delete;
     std::atomic<bool> isReady_{false};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // GRPC_HANDLER_H
+#endif  // GRPC_HANDLER_H

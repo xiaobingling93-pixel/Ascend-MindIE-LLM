@@ -10,9 +10,10 @@
  * See the Mulan PSL v2 for more details.
  */
 #include "endpoint.h"
+
+#include "config_dynamic_handler.h"
 #include "config_manager.h"
 #include "config_manager_impl.h"
-#include "config_dynamic_handler.h"
 #include "grpc_wrapper.h"
 #include "http_wrapper.h"
 #include "infer_instances.h"
@@ -23,8 +24,7 @@
 
 using namespace mindie_llm;
 
-int EndPoint::Start(std::unordered_map<std::string, std::string> args)
-{
+int EndPoint::Start(std::unordered_map<std::string, std::string> args) {
     std::string configFilePath = args["configFilePath"];
     mExpertParallel = (args.find("expertParallel") != args.end() && args["expertParallel"] == "true");
     std::lock_guard<std::mutex> guard(mMutex);
@@ -67,38 +67,31 @@ int EndPoint::Start(std::unordered_map<std::string, std::string> args)
     return 0;
 }
 
-bool EndPoint::StartDynamicConfigHandler() const
-{
+bool EndPoint::StartDynamicConfigHandler() const {
     auto &configManager = mindie_llm::ConfigManager::GetInstance();
     // 注册动态配置调整相关回调
     auto &dynamicConfigHandler = mindie_llm::DynamicConfigHandler::GetInstance();
     dynamicConfigHandler.RegisterCallBackFunction<mindie_llm::ConfigManager>(
-        "EnableDynamicAdjustTimeoutConfig",
-        &configManager,
-        &mindie_llm::ConfigManager::SetTokenTimeout,
-        3600); // 最大值 3600s
+        "EnableDynamicAdjustTimeoutConfig", &configManager, &mindie_llm::ConfigManager::SetTokenTimeout,
+        3600);  // 最大值 3600s
     dynamicConfigHandler.RegisterCallBackFunction<mindie_llm::ConfigManager>(
-        "EnableDynamicAdjustTimeoutConfig",
-        &configManager,
-        &mindie_llm::ConfigManager::SetE2eTimeout,
-        65535); // 最大值 65535s
+        "EnableDynamicAdjustTimeoutConfig", &configManager, &mindie_llm::ConfigManager::SetE2eTimeout,
+        65535);  // 最大值 65535s
     dynamicConfigHandler.Start();
     return true;
 }
 
-int EndPoint::StartEndpoint()
-{
+int EndPoint::StartEndpoint() {
     if (ConfigManager::GetInstance().IslayerwiseDisaggregated() &&
         GetServerConfig().layerwiseDisaggregatedRoleType == "slave") {
         std::cout << "LayerwiseDisaggregated infer slave instance need not init TokenizerProcessPool and HttpWrapper"
-            << std::endl;
+                  << std::endl;
     } else if (GetServerConfig().distDPServerEnabled || !ConfigManager::GetInstance().IsMultiNodeInfer() ||
-        !GetRanktableParam().IsSlave()) {
+               !GetRanktableParam().IsSlave()) {
         if (GetServerConfig().inferMode == INFER_MODE_DMI) {
             if (GrpcWrapper::GetInstance().Start() != 0) {
-                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT,
-                    GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                    "Failed to start grpc wrapper in DMI scene.");
+                ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
+                           "Failed to start grpc wrapper in DMI scene.");
                 ULOG_AUDIT("system", MINDIE_SERVER, "Start mindie server", "fail");
                 return -1;
             }
@@ -106,7 +99,7 @@ int EndPoint::StartEndpoint()
         // init tokenizer
         if (!TokenizerProcessPool::GetInstance().InitTokenizerPool()) {
             ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                "Init process tokenizer pool failed.");
+                       "Init process tokenizer pool failed.");
             ULOG_AUDIT("system", MINDIE_SERVER, "Start mindie server", "fail");
             Log::Flush();
             return -1;
@@ -120,7 +113,7 @@ int EndPoint::StartEndpoint()
         // init http
         if (!HttpWrapper::Instance().Start()) {
             ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-                "Failed to start http wrapper");
+                       "Failed to start http wrapper");
             ULOG_AUDIT("system", MINDIE_SERVER, "Start mindie server", "fail");
             return -1;
         }
@@ -131,21 +124,19 @@ int EndPoint::StartEndpoint()
         if (StartHealthChecker() != 0) {
             return -1;
         }
-        std::cout << "Multi Nodes infer slave instance need not init TokenizerProcessPool and HttpWrapper"
-            << std::endl;
+        std::cout << "Multi Nodes infer slave instance need not init TokenizerProcessPool and HttpWrapper" << std::endl;
         ULOG_INFO(SUBMODLE_NAME_ENDPOINT,
-            "Multi Nodes infer slave instance need not init TokenizerProcessPool and HttpWrapper.");
+                  "Multi Nodes infer slave instance need not init TokenizerProcessPool and HttpWrapper.");
     }
     ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "Start endpoint success");
     return 0;
 }
 
-int EndPoint::StartHealthChecker()
-{
+int EndPoint::StartHealthChecker() {
     ULOG_INFO(SUBMODLE_NAME_ENDPOINT, "healthchecker init and start");
     if (!HealthChecker::GetInstance().Start()) {
         ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_INIT, INIT_ERROR),
-            "Failed to start healtchecker wrapper");
+                   "Failed to start healtchecker wrapper");
         ULOG_AUDIT("system", MINDIE_SERVER, "Start mindie server", "fail");
         return -1;
     }
@@ -153,13 +144,9 @@ int EndPoint::StartHealthChecker()
     return 0;
 }
 
-HealthChecker& EndPoint::GetHealthcheckerInstance() const
-{
-    return HealthChecker::GetInstance();
-}
+HealthChecker &EndPoint::GetHealthcheckerInstance() const { return HealthChecker::GetInstance(); }
 
-void EndPoint::Stop()
-{
+void EndPoint::Stop() {
     std::lock_guard<std::mutex> guard(mMutex);
     if (mEngineStarted) {
         auto backendConfig = GetBackendConfig();

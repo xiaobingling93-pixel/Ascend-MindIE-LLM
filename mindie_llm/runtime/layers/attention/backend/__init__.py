@@ -15,8 +15,8 @@ from .sparse_attention import SfaBackend
 
 
 def get_attn_backend(
-    use_mla=False, # NOTE: Interfaces to be redesigned
-    use_sfa=False
+    use_mla=False,  # NOTE: Interfaces to be redesigned
+    use_sfa=False,
 ) -> type[AttentionBackend]:
     if use_mla:
         raise NotImplementedError("MLA is not implemented.")

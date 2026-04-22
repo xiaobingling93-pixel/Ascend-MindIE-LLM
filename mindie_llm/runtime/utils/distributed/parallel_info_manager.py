@@ -11,7 +11,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Callable, List
+from typing import Callable
 
 from enum import Enum, unique
 from threading import Lock
@@ -33,6 +33,7 @@ GLOO_BACKEND = "gloo"
 @unique
 class ParallelType(str, Enum):
     """Enumeration of supported parallelism types."""
+
     WORLD = "world"
     ATTN_TP = "attn_tp"
     ATTN_DP = "attn_dp"
@@ -76,6 +77,7 @@ class ParallelInfo:
         _pg_factory (Optional[Callable[[], ProcessGroup]]): Factory function to lazily create
             the  process group when first accessed.
     """
+
     buffer_size: int = DEFAULT_BUFFER_SIZE
     group_size: int = 1
     num_group: int | None = None
@@ -96,7 +98,7 @@ class ParallelInfo:
         rank_per_group: list[list[int]] = None,
         current_group_id: int = None,
         rank: int = None,
-        is_reusable: bool = True
+        is_reusable: bool = True,
     ):
         # initialize
         self.buffer_size = buffer_size
@@ -110,7 +112,7 @@ class ParallelInfo:
         self._pg_factory = None
         self._process_group = None
         self._cpu_process_group = None
-    
+
     @property
     def process_group(self) -> ProcessGroup | None:
         """Gets the HCCL-based NPU communication process group.
@@ -124,7 +126,7 @@ class ParallelInfo:
         if self._process_group is None and self._pg_factory is not None:
             self._process_group = self._pg_factory(HCCL_BACKEND)
         return self._process_group
-    
+
     @property
     def cpu_process_group(self) -> ProcessGroup | None:
         """Gets the Gloo-based CPU communication process group.
@@ -138,7 +140,7 @@ class ParallelInfo:
         if self._cpu_process_group is None and self._pg_factory is not None:
             self._cpu_process_group = self._pg_factory(GLOO_BACKEND)
         return self._cpu_process_group
-    
+
     def set_pg_factory(self, factory: Callable[[], ProcessGroup]) -> None:
         self._pg_factory = factory
 
@@ -150,14 +152,14 @@ class ParallelInfo:
                   `False` otherwise.
         """
         return self.group_size > 1
-    
-    
+
+
 class ParallelInfoManager:
     """Manages distributed parallel group configurations for LLM inference.
 
     This manager orchestrates the creation and caching of communication groups for various
     parallelism strategies used in large language model (LLM) inference, including:
-    
+
     - Tensor Parallelism (TP)
     - Data Parallelism (DP)
     - Context Parallelism (CP)
@@ -201,9 +203,9 @@ class ParallelInfoManager:
         self.attn_dp = self._init_dp_parallel_info(server_config.get("dp", -1))
         self.attn_cp = self._init_dp_parallel_info(server_config.get("cp", -1))
         # NOTE: buffer_size needs to be calculated by a formula
-        moe_tp_buffer_size = 64 # moe_tp uses 64M buffer, no matter how long the seq is.
+        moe_tp_buffer_size = 64  # moe_tp uses 64M buffer, no matter how long the seq is.
         self.moe_tp = self._init_tp_parallel_info(server_config.get("moe_tp", -1), moe_tp_buffer_size)
-        moe_ep_buffer_size = 256 # moe_ep uses 256M buffer, no matter how long the seq is.
+        moe_ep_buffer_size = 256  # moe_ep uses 256M buffer, no matter how long the seq is.
         self.moe_ep = self._init_dp_parallel_info(server_config.get("moe_ep", -1), moe_ep_buffer_size)
         if self.moe_tp.group_size * self.moe_ep.group_size != self.world_size:
             error_msg = (
@@ -213,8 +215,9 @@ class ParallelInfoManager:
             )
             raise ValueError(error_msg)
         moe_ep_mc2_buffer_size = int(os.getenv("HCCL_BUFFSIZE"))
-        self.moe_ep_mc2 = self._init_dp_parallel_info(server_config.get("moe_ep", -1), \
-                                                      moe_ep_mc2_buffer_size, is_reusable=False)
+        self.moe_ep_mc2 = self._init_dp_parallel_info(
+            server_config.get("moe_ep", -1), moe_ep_mc2_buffer_size, is_reusable=False
+        )
         # NOTE: --- Legacy convenience attributes (deprecated) end---
 
         group_size = server_config.get("sp", -1)
@@ -241,7 +244,7 @@ class ParallelInfoManager:
         }
 
     @staticmethod
-    def pp_layers(num_layers: int) -> list[int]: 
+    def pp_layers(num_layers: int) -> list[int]:
         # NOTE: Legacy convenience methods (deprecated)
         """Returns layer-to-stage mapping for pipeline parallelism.
 
@@ -257,7 +260,7 @@ class ParallelInfoManager:
         return False
 
     @staticmethod
-    def _get_current_group_id(rank_per_group: list[list[int]], target_rank_id: int) -> int: 
+    def _get_current_group_id(rank_per_group: list[list[int]], target_rank_id: int) -> int:
         """Finds the group index containing the target rank."""
         for idx, group in enumerate(rank_per_group):
             if target_rank_id in group:
@@ -271,10 +274,9 @@ class ParallelInfoManager:
         backend: str = HCCL_BACKEND,
         hccl_buffer_size: int | None = None,
         is_reusable: bool = True,
-        stream_id: int | None = None
+        stream_id: int | None = None,
     ):
-        '''create or return cached Process Group
-        '''
+        """create or return cached Process Group"""
         if not is_reusable:
             if backend == HCCL_BACKEND:
                 options = dist_c.ProcessGroupHCCL.Options()
@@ -285,9 +287,9 @@ class ParallelInfoManager:
                 return dist.new_group(ranks=ranks, backend=backend)
 
         if stream_id is None:
-            # cpu backend stream_id is set -1 as default 
+            # cpu backend stream_id is set -1 as default
             stream_id = torch_npu.npu.current_stream().stream_id if backend == HCCL_BACKEND else -1
-        
+
         sorted_ranks = tuple(sorted(ranks))
         key = (sorted_ranks, backend, hccl_buffer_size, stream_id)
 
@@ -340,80 +342,40 @@ class ParallelInfoManager:
         if parallel_type not in self._parallel_type_map:
             raise KeyError(f"Unsupported ParallelType: {parallel_type}")
         return self._parallel_type_map[parallel_type]
-    
-    def _make_process_group_factory(
-        self,
-        parallel_info: ParallelInfo
-    ) -> Callable[[], ProcessGroup]:
+
+    def _make_process_group_factory(self, parallel_info: ParallelInfo) -> Callable[[], ProcessGroup]:
         """
         Returns a closure that lazily creates the process group for the current rank's subgroup.
-        
+
         The closure captures `rank_per_group`, `backend`, etc., and returns the PG corresponding
         to the group containing `self.rank`.
         """
+
         def factory(backend: str) -> ProcessGroup:
             current_pg = None
             hccl_buffer_size = parallel_info.buffer_size if backend == HCCL_BACKEND else None
             is_reusable = parallel_info.is_reusable
             for group_ranks in parallel_info.rank_per_group:
                 pg = self._get_or_create_process_group(
-                    ranks=group_ranks,
-                    backend=backend,
-                    hccl_buffer_size=hccl_buffer_size,
-                    is_reusable=is_reusable
+                    ranks=group_ranks, backend=backend, hccl_buffer_size=hccl_buffer_size, is_reusable=is_reusable
                 )
                 if self.rank in group_ranks:
                     current_pg = pg
             return current_pg
+
         return factory
 
-
     def _init_tp_parallel_info(
-            self, 
-            group_size: int = None, 
-            hccl_buffersize: int = DEFAULT_BUFFER_SIZE,
-            is_reusable: bool = True
-        ) -> ParallelInfo:
-        """Initializes tensor-parallel-style groups (contiguous ranks)."""        
+        self, group_size: int = None, hccl_buffersize: int = DEFAULT_BUFFER_SIZE, is_reusable: bool = True
+    ) -> ParallelInfo:
+        """Initializes tensor-parallel-style groups (contiguous ranks)."""
         if group_size is None or group_size == -1:
             group_size = self.world_size
-        
+
         num_group = even_divide(self.world_size, group_size)
 
         rank_per_group = [
-        list(range(group_idx * group_size, (group_idx + 1) * group_size))
-        for group_idx in range(num_group)]
-
-        current_group_id = self._get_current_group_id(rank_per_group, self.rank)
-        local_rank = rank_per_group[current_group_id].index(self.rank)
-
-        parallel_info = ParallelInfo(
-            buffer_size=hccl_buffersize,
-            group_size=group_size,
-            num_group=num_group,
-            rank_per_group=rank_per_group,
-            current_group_id=current_group_id,
-            rank=local_rank,
-            is_reusable=is_reusable
-        )
-        pg_factory = self._make_process_group_factory(parallel_info)
-        parallel_info.set_pg_factory(pg_factory)
-        return parallel_info
-
-
-    def _init_dp_parallel_info(
-            self, 
-            group_size: int = None, 
-            hccl_buffersize: int = DEFAULT_BUFFER_SIZE,
-            is_reusable: bool = True
-        ) -> ParallelInfo:
-        """Initializes data-parallel-style groups (strided ranks)."""      
-        if group_size is not None and group_size == -1:
-            group_size = 1
-        num_group = even_divide(self.world_size, group_size)
-        rank_per_group = [
-        list(range(group_idx, self.world_size, num_group))
-        for group_idx in range(num_group)
+            list(range(group_idx * group_size, (group_idx + 1) * group_size)) for group_idx in range(num_group)
         ]
 
         current_group_id = self._get_current_group_id(rank_per_group, self.rank)
@@ -426,10 +388,33 @@ class ParallelInfoManager:
             rank_per_group=rank_per_group,
             current_group_id=current_group_id,
             rank=local_rank,
-            is_reusable=is_reusable
+            is_reusable=is_reusable,
         )
         pg_factory = self._make_process_group_factory(parallel_info)
         parallel_info.set_pg_factory(pg_factory)
         return parallel_info
-        
 
+    def _init_dp_parallel_info(
+        self, group_size: int = None, hccl_buffersize: int = DEFAULT_BUFFER_SIZE, is_reusable: bool = True
+    ) -> ParallelInfo:
+        """Initializes data-parallel-style groups (strided ranks)."""
+        if group_size is not None and group_size == -1:
+            group_size = 1
+        num_group = even_divide(self.world_size, group_size)
+        rank_per_group = [list(range(group_idx, self.world_size, num_group)) for group_idx in range(num_group)]
+
+        current_group_id = self._get_current_group_id(rank_per_group, self.rank)
+        local_rank = rank_per_group[current_group_id].index(self.rank)
+
+        parallel_info = ParallelInfo(
+            buffer_size=hccl_buffersize,
+            group_size=group_size,
+            num_group=num_group,
+            rank_per_group=rank_per_group,
+            current_group_id=current_group_id,
+            rank=local_rank,
+            is_reusable=is_reusable,
+        )
+        pg_factory = self._make_process_group_factory(parallel_info)
+        parallel_info.set_pg_factory(pg_factory)
+        return parallel_info

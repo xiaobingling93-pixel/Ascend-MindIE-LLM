@@ -11,7 +11,7 @@
 import re
 from typing import Pattern
 
-from ..base.tool_calls_processor import ToolCallsProcessorWithXml, ToolCallsProcessorManager 
+from ..base.tool_calls_processor import ToolCallsProcessorWithXml, ToolCallsProcessorManager
 
 
 @ToolCallsProcessorManager.register_module(["qwen3", "qwen3_moe", "hermes"])
@@ -21,6 +21,7 @@ class ToolCallsProcessorQwen3(ToolCallsProcessorWithXml):
     This processor handles tool calls enclosed between '<tool_call>' start and end tokens,
     which are specific to the Qwen3 model family.
     """
+
     def __init__(self, tokenizer=None):
         """Initializes the Qwen3 tool call processor.
 
@@ -28,27 +29,27 @@ class ToolCallsProcessorQwen3(ToolCallsProcessorWithXml):
             tokenizer: Optional tokenizer instance used for decoding token IDs.
         """
         super().__init__(tokenizer)
-        self._tool_calls_regex = re.compile(r'<tool_call>\s*({.*?})\s*</tool_call>', re.DOTALL)
+        self._tool_calls_regex = re.compile(r"<tool_call>\s*({.*?})\s*</tool_call>", re.DOTALL)
 
     @property
     def tool_call_start_token(self) -> str:
         """Returns the start token string for tool calls in Qwen3."""
-        return "<tool_call>"                    # start_token of qwen3
+        return "<tool_call>"  # start_token of qwen3
 
     @property
     def tool_call_end_token(self) -> str:
         """Returns the end token string for tool calls in Qwen3."""
-        return "</tool_call>"                   # end_token of qwen3
+        return "</tool_call>"  # end_token of qwen3
 
     @property
     def tool_call_start_token_id(self) -> int:
         """Returns the token ID for the tool call start token in Qwen3."""
-        return 151657                           # start_token_id of qwen3
+        return 151657  # start_token_id of qwen3
 
     @property
     def tool_call_end_token_id(self) -> int:
         """Returns the token ID for the tool call end token in Qwen3."""
-        return 151658                           # end_token_id of qwen3
+        return 151658  # end_token_id of qwen3
 
     @property
     def tool_call_regex(self) -> Pattern:

@@ -14,47 +14,48 @@
 #define IMODEL_WORKER_H
 
 #include <algorithm>
-#include <stdexcept>
-#include <memory>
-#include <map>
-#include <vector>
 #include <functional>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <stdexcept>
+#include <vector>
+
 #include "basic_types.h"
+#include "data_type.h"
+#include "model_execute_data.pb.h"
 #include "sequence_group.h"
 #include "sequence_group_meta_data.h"
-#include "model_execute_data.pb.h"
-#include "data_type.h"
 
 namespace mindie_llm {
 
-using model_execute_data::ExecuteRequest;
-using model_execute_data::PDLinkRequest;
-using model_execute_data::PDLinkStatusRequest;
-using model_execute_data::TGCleanupRequest;
-using model_execute_data::ExecuteResponse;
-using model_execute_data::ExecuteModelResponse;
-using model_execute_data::PDLinkStatusResponse;
-using model_execute_data::PullKVResponse;
-using model_execute_data::ExecuteType;
-using model_execute_data::MODEL_INIT;
-using model_execute_data::MODEL_INFER;
-using model_execute_data::MODEL_FINALIZE;
-using model_execute_data::REMOTE_MODEL_INIT;
-using model_execute_data::PD_LINK;
-using model_execute_data::PD_LINK_STATUS_QUERY;
-using model_execute_data::KV_TRANSFER;
-using model_execute_data::TEXT_GENERATOR_CLEANUP;
+using model_execute_data::CLEAR_COMMAND_EXEC;
 using model_execute_data::EOS_CLEANUP;
+using model_execute_data::EXECUTE_ERROR;
+using model_execute_data::ExecuteModelResponse;
+using model_execute_data::ExecuteRequest;
+using model_execute_data::ExecuteResponse;
+using model_execute_data::ExecuteType;
+using model_execute_data::KV_TRANSFER;
+using model_execute_data::LORA_OPERATION;
 using model_execute_data::LoraOperationRequest;
 using model_execute_data::LoraOperationResponse;
-using model_execute_data::LORA_OPERATION;
-using model_execute_data::RECOVER_COMMAND_EXEC;
+using model_execute_data::MODEL_FINALIZE;
+using model_execute_data::MODEL_INFER;
+using model_execute_data::MODEL_INIT;
 using model_execute_data::PAUSE_COMMAND_EXEC;
 using model_execute_data::PAUSE_COMMAND_EXEC_ROCE;
-using model_execute_data::CLEAR_COMMAND_EXEC;
+using model_execute_data::PD_LINK;
+using model_execute_data::PD_LINK_STATUS_QUERY;
+using model_execute_data::PDLinkRequest;
+using model_execute_data::PDLinkStatusRequest;
+using model_execute_data::PDLinkStatusResponse;
+using model_execute_data::PullKVResponse;
+using model_execute_data::RECOVER_COMMAND_EXEC;
+using model_execute_data::REMOTE_MODEL_INIT;
 using model_execute_data::START_COMMAND_EXEC;
-using model_execute_data::EXECUTE_ERROR;
+using model_execute_data::TEXT_GENERATOR_CLEANUP;
+using model_execute_data::TGCleanupRequest;
 
 // request
 using ExecuteModelRequestPtr = std::unique_ptr<model_execute_data::ExecuteModelRequest>;
@@ -84,8 +85,7 @@ struct KVCacheOverview {
         uint32_t compressionRatio{1};
         int32_t cacheType{0};
 
-        bool operator==(const KVCacheDesc &other) const
-        {
+        bool operator==(const KVCacheDesc &other) const {
             return npuBlockNum == other.npuBlockNum && blockSize == other.blockSize &&
                    compressionRatio == other.compressionRatio && cacheType == other.cacheType;
         }
@@ -96,18 +96,16 @@ struct KVCacheOverview {
     uint32_t maxPositionEmbeddings{0xFFFFFFFF};
     uint32_t lwdCloudNpuBlockNum{0xFFFFFFFF};
     std::vector<KVCacheDesc> kvCacheDescs{};
-    mutable std::mutex updateValueMutex; // Internal mutex to support thread-safe updates
+    mutable std::mutex updateValueMutex;  // Internal mutex to support thread-safe updates
 
-    void UpdateIfSmaller(uint32_t newCpuBlockNum, uint32_t newNpuBlockNum, uint32_t newMaxPositionEmbeddings)
-    {
+    void UpdateIfSmaller(uint32_t newCpuBlockNum, uint32_t newNpuBlockNum, uint32_t newMaxPositionEmbeddings) {
         std::lock_guard<std::mutex> lock(updateValueMutex);
         cpuBlockNum = std::min(cpuBlockNum, newCpuBlockNum);
         npuBlockNum = std::min(npuBlockNum, newNpuBlockNum);
         maxPositionEmbeddings = std::min(maxPositionEmbeddings, newMaxPositionEmbeddings);
     }
 
-    bool UpdateKvCacheDescsIfEmptyOrEqual(const std::vector<KVCacheDesc> &newDescs)
-    {
+    bool UpdateKvCacheDescsIfEmptyOrEqual(const std::vector<KVCacheDesc> &newDescs) {
         std::lock_guard<std::mutex> lock(updateValueMutex);
         if (newDescs.empty()) {
             return true;
@@ -143,7 +141,7 @@ struct ThinkingConfig {
  * SPMD process to handle model forward calculation)
  */
 class IExecutor {
-public:
+   public:
     IExecutor() = default;
     virtual ~IExecutor() = default;
 
@@ -193,7 +191,7 @@ public:
     virtual bool ExecutLoraRequest(LoraOperationRequest &loraOperationRequest) = 0;
 
     virtual void ExecuteRecoverCommand(RecoverCommandInfo &commandInfo) = 0;
-    
+
     virtual model_execute_data::LoraOperationResponse GetLoraOperationResponse() const = 0;
 };
 
@@ -201,6 +199,6 @@ using IExecutorSPtr = std::shared_ptr<IExecutor>;
 
 IExecutorSPtr CreateExecutor();
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

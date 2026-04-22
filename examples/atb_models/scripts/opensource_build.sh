@@ -36,8 +36,7 @@ export ATB_MODELS_DIR=$CODE_ROOT
 THIRD_PARTY_DIR=$CODE_ROOT/../../third_party
 DIST_DIR=$CODE_ROOT/dist
 EGG_INFO_DIR=$CODE_ROOT/atb_llm.egg-info
-PACKAGE_NAME="1.0.RC3"
-MINDIE_ATB_VERSION_FOR_CI="1.0.RC1.B062" # only for ci build
+PACKAGE_NAME=${MINDIE_LLM_VERSION_OVERRIDE:-1.0.0}
 MINDIE_ATB_TAG_BRANCH=master # current MindIE-ATB sourcecode tag/branch for ATB-Models
 ATB_MODELS_VERSION=""
 README_DIR=$ATB_MODELS_DIR
@@ -49,7 +48,7 @@ USE_VERBOSE=OFF
 IS_RELEASE=0
 BUILD_OPTION_LIST="third_party unittest unittest_and_run pythontest pythontest_and_run fuzztest debug release help python_unittest_and_run master clean"
 BUILD_CONFIGURE_LIST=("--output=.*" "--cache=.*" "--clean-first" "--skip_build" "--gcov" "--no_hostbin" "--no_devicebin" "--use_cxx11_abi=0"
-    "--use_cxx11_abi=1" "--build_config=.*" "--optimize_off" "--use_torch_runner" "--use_lccl_runner" "--use_hccl_runner" "--doxygen"  
+    "--use_cxx11_abi=1" "--build_config=.*" "--optimize_off" "--use_torch_runner" "--use_lccl_runner" "--use_hccl_runner" "--doxygen"
     "--atb_models_version=.*")
 
 function export_speed_env()
@@ -108,17 +107,6 @@ function fn_build_third_party_for_test()
     cd ..
 }
 
-function fn_build_atb()
-{
-    if [ $ATB_HOME_PATH ]; then
-        echo "NNAL ATB is ready"
-        return 0
-    else
-        echo "env ATB_HOME_PATH not exist, please source nnal atb's set_env.sh"
-        exit 1
-    fi
-}
-
 function fn_build_nlohmann_json()
 {
     cd $THIRD_PARTY_DIR/nlohmann && git submodule update --init --recursive && cd -
@@ -126,7 +114,6 @@ function fn_build_nlohmann_json()
 
 function fn_build_third_party()
 {
-    fn_build_atb
     fn_build_nlohmann_json
 }
 
@@ -161,7 +148,7 @@ function fn_init_pytorch_env()
 
     IS_HIGHER_PTA6=$(nm --dynamic ${PYTORCH_NPU_INSTALL_PATH}/lib/libtorch_npu.so | grep _ZN6at_npu6native17empty_with_formatEN3c108ArrayRefIlEERKNS1_13TensorOptionsElb | wc -l)
     if [ $IS_HIGHER_PTA6 -ge 1 ];then
-        echo "using pta verion after PTA6RC1B010 (6.0.RC1.B010)"
+        echo "using pta version after PTA6RC1B010 (6.0.RC1.B010)"
         COMPILE_OPTIONS="${COMPILE_OPTIONS} -DTORCH_HIGHER_THAN_PTA6=ON"
     else
         echo "using pta version below PTA6RC1B010 (6.0.RC1.B010)"
@@ -221,7 +208,7 @@ function fn_build_coverage()
 
     $LCOV_PATH -d $CACHE_DIR --zerocounters >> $GCOV_DIR/log.txt
     $LCOV_PATH -c -i -d $CACHE_DIR -o $GCOV_INFO_DIR/init.info >> $GCOV_DIR/log.txt
-    
+
     [[ "$COVERAGE_TYPE" == "unittest" ]] && fn_run_unittest
     [[ "$COVERAGE_TYPE" == "pythontest" ]] && fn_run_pythontest
     [[ "$COVERAGE_TYPE" == "fuzztest" ]] && fn_run_fuzztest
@@ -387,7 +374,7 @@ function fn_main()
         if [[ $cfg_flag == 1 ]];then
             arg1="master"
         else
-            echo "argument $1 is unknown, please type build.sh help for more imformation"
+            echo "argument $1 is unknown, please type build.sh help for more information"
             exit 1
         fi
     fi

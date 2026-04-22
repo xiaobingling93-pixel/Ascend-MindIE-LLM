@@ -19,26 +19,25 @@
 #include <mutex>
 
 namespace mindie_llm {
-    class HttpWrapper {
-    public:
-        static HttpWrapper& Instance()
-        {
-            static HttpWrapper instance;
-            return instance;
-        }
+class HttpWrapper {
+   public:
+    static HttpWrapper& Instance() {
+        static HttpWrapper instance;
+        return instance;
+    }
 
-        bool Start();
-        void Stop();
+    bool Start();
+    void Stop();
 
-    private:
-        HttpWrapper() = default;
-        ~HttpWrapper() = default;
-        HttpWrapper(const HttpWrapper&) = delete;
-        HttpWrapper& operator=(const HttpWrapper&) = delete;
+   private:
+    HttpWrapper() = default;
+    ~HttpWrapper() = default;
+    HttpWrapper(const HttpWrapper&) = delete;
+    HttpWrapper& operator=(const HttpWrapper&) = delete;
 
-        std::mutex mMutex;
-        bool mStarted{false};
-    };
-} // namespace mindie_llm
+    std::mutex mMutex;
+    bool mStarted{false};
+};
+}  // namespace mindie_llm
 
-#endif // OCK_ENDPOINT_HTTP_WRAPPER_H
+#endif  // OCK_ENDPOINT_HTTP_WRAPPER_H

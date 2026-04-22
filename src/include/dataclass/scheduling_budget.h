@@ -9,22 +9,22 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef SCHEDULING_BUDGET_H
 #define SCHEDULING_BUDGET_H
 
-#include <unordered_set>
-#include <memory>
 #include <deque>
+#include <memory>
+#include <unordered_set>
 
 #include "basic_types.h"
-#include "sequence_group.h"
 #include "config_info.h"
+#include "sequence_group.h"
 
 namespace mindie_llm {
 
 class Statistics4PartialPrefill {
-public:
+   public:
     Statistics4PartialPrefill(int numSchedulablePrefills, int numLongPrefills,
                               std::shared_ptr<SchedulerConfig> schedulerConfig);
 
@@ -33,14 +33,14 @@ public:
     // 当waiting队列中的seq_group是长序列是，longPrefills_会+1
     void MaybeIncrementPartialPrefills(const std::shared_ptr<SequenceGroup> &seqGroup);
 
-    static std::unique_ptr<Statistics4PartialPrefill> FromQueues(const std::deque<std::shared_ptr<SequenceGroup>> &running,
-                                                   const std::deque<std::shared_ptr<SequenceGroup>> &waiting,
-                                                   std::shared_ptr<SchedulerConfig> schedulerConfig);
+    static std::unique_ptr<Statistics4PartialPrefill> FromQueues(
+        const std::deque<std::shared_ptr<SequenceGroup>> &running,
+        const std::deque<std::shared_ptr<SequenceGroup>> &waiting, std::shared_ptr<SchedulerConfig> schedulerConfig);
 
     size_t SchedulablePrefills() const;
     size_t LongPrefills() const;
 
-private:
+   private:
     size_t numSchedulablePrefills_{0};
     size_t numLongPrefills_{};
     std::shared_ptr<SchedulerConfig> schedulerConfig_;
@@ -87,5 +87,5 @@ struct SchedulingBudget {
     void SubtractNumSeqs(const RequestId &reqId, const size_t numCurSeqs);
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

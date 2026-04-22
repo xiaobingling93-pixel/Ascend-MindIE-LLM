@@ -18,22 +18,22 @@ from functools import cached_property
 from mindie_llm.runtime.utils.helpers.safety.file import safe_open
 from mindie_llm.runtime.utils.helpers.safety.hf import safe_get_tokenizer_from_pretrained, safe_get_config_dict
 from mindie_llm.runtime.utils.helpers.parameter_validators import (
-    DictionaryParameterValidator, BooleanParameterValidator,
-    FileParameterValidator, StringParameterValidator, Field
+    DictionaryParameterValidator,
+    BooleanParameterValidator,
+    FileParameterValidator,
+    StringParameterValidator,
+    Field,
 )
 from mindie_llm.runtime.models.base.input_builder import InputBuilder
 from mindie_llm.runtime.models.base.reasoning_parser import CommonReasoningParser
-from mindie_llm.runtime.models.base.tool_calls_processor import ToolCallsProcessor, ToolCallsProcessorManager 
+from mindie_llm.runtime.models.base.tool_calls_processor import ToolCallsProcessor, ToolCallsProcessorManager
 from mindie_llm.runtime.config.configuration_utils import LLMConfig
 from mindie_llm.runtime.config.huggingface_config import GenerationConfig
 from mindie_llm.runtime.config.load_config import LoadConfig
 from mindie_llm.utils.log.logging import logger, message_filter
 
 
-
-DEFAULT_CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'conf', 'config.json'
-)
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "conf", "config.json")
 
 
 @dataclass
@@ -49,6 +49,7 @@ class BaseRouter:
     - Support for tool calling and reasoning capabilities
     - Integration with safety mechanisms for file operations
     """
+
     config_dict: dict | None = None
     load_config: LoadConfig | None = None
 
@@ -59,8 +60,8 @@ class BaseRouter:
         - Capitalizes model type for class naming
         - Processes tool call options
         """
-        self._model_type = self.config_dict['model_type']
-        self._model_type_cap = ''.join(part.capitalize() for part in self._model_type.split('_'))
+        self._model_type = self.config_dict["model_type"]
+        self._model_type_cap = "".join(part.capitalize() for part in self._model_type.split("_"))
 
     @classmethod
     def get_llm_config_validators(cls) -> DictionaryParameterValidator:
@@ -69,13 +70,17 @@ class BaseRouter:
         Returns:
             Dictionary of validators for LLMConfig parameters
         """
-        llm_validators = DictionaryParameterValidator({
-            "enable_reasoning": BooleanParameterValidator(),
-            "tool_call_options": DictionaryParameterValidator({
-                "tool_call_parser": StringParameterValidator(Field(max_length=1024), allow_none=True),
-            }),
-            "chat_template": FileParameterValidator(allow_none=True)
-        })
+        llm_validators = DictionaryParameterValidator(
+            {
+                "enable_reasoning": BooleanParameterValidator(),
+                "tool_call_options": DictionaryParameterValidator(
+                    {
+                        "tool_call_parser": StringParameterValidator(Field(max_length=1024), allow_none=True),
+                    }
+                ),
+                "chat_template": FileParameterValidator(allow_none=True),
+            }
+        )
 
         return llm_validators
 
@@ -100,7 +105,7 @@ class BaseRouter:
         self.config_dict.update(self._get_generation_config_dict())
         config_cls = self._get_config_cls()
         return config_cls.from_dict(self.config_dict)
-        
+
     @cached_property
     def generation_config(self):
         """The generation config property, which should not be overridden.
@@ -147,7 +152,6 @@ class BaseRouter:
         if self.load_config.load_tokenizer:
             tokenizer = self._get_tokenizer()
         return tokenizer
-
 
     @cached_property
     def tool_call_parser(self):
@@ -206,9 +210,10 @@ class BaseRouter:
         tool_call_parser_name = getattr(tool_call_options, "tool_call_parser", None)
         if tool_call_parser_name:
             if tool_call_parser_name not in valid_tool_call_processors:
-                warn_msg = \
-                    f"Invalid tool_call_parser: {tool_call_parser_name}. " \
+                warn_msg = (
+                    f"Invalid tool_call_parser: {tool_call_parser_name}. "
                     f"Please chose from {valid_tool_call_processors.keys()}"
+                )
                 logger.warning(message_filter(warn_msg))
                 logger.warning("Will use default tool_call_parser of model.")
                 return
@@ -217,7 +222,7 @@ class BaseRouter:
             logger.debug(message_filter(debug_msg))
             self.tool_call_parser = tool_call_parser_name
 
-    def _get_config_cls(self) -> "HuggingFaceConfig":
+    def _get_config_cls(self):
         """The default method to get config class.
 
         Dynamically imports the configuration class based on model type.
@@ -226,7 +231,7 @@ class BaseRouter:
             Configuration class for the specific model type
         """
         model_file_dir_name = f"mindie_llm.runtime.models.{self._model_type}."
-        config_file_name = f'config_{self._model_type}'
+        config_file_name = f"config_{self._model_type}"
         module_path = f"{model_file_dir_name}{config_file_name}"
         module = importlib.import_module(module_path)
         config_cls_name = f"{self._model_type_cap}Config"
@@ -267,7 +272,7 @@ class BaseRouter:
             kwargs["max_length"] = self.config.max_position_embeddings
         return InputBuilder(self.tokenizer, **kwargs)
 
-    def _get_model_cls(self) -> "BaseModelForCausalLM":
+    def _get_model_cls(self):
         """The default method to get model class.
 
         This is a basic router method to find model class, which is usually not necessary to be overridden.
@@ -281,11 +286,11 @@ class BaseRouter:
         model_cls_name = f"{self._model_type_cap}ForCausalLM"
         return getattr(module, model_cls_name)
 
-    def _get_draft_cls(self) -> "BaseModelForCausalLM":
+    def _get_draft_cls(self):
         """
         Dynamically imports and returns the draft model class for the specified model type.
 
-        This method constructs the module path based on the model type, imports the module, 
+        This method constructs the module path based on the model type, imports the module,
         and retrieves the corresponding draft model class.
 
         Returns:
@@ -297,7 +302,7 @@ class BaseRouter:
         model_cls_name = f"{self._model_type_cap}MTP"
         return getattr(module, model_cls_name)
 
-    def _get_tokenizer(self) -> "AutoTokenizer":
+    def _get_tokenizer(self):
         """The default method to get tokenizer.
 
         Uses safe_get_tokenizer_from_pretrained with security checks.
@@ -310,7 +315,7 @@ class BaseRouter:
             padding_side="left",
             truncation_side="left",
             trust_remote_code=self.load_config.trust_remote_code,
-            use_fast=True
+            use_fast=True,
         )
 
     def _get_reasoning_parser(self) -> CommonReasoningParser | None:
@@ -321,6 +326,7 @@ class BaseRouter:
         Returns:
             CommonReasoningParser instance or None
         """
+
         def check_token_exists(token) -> int | None:
             try:
                 token_id = self.tokenizer.convert_tokens_to_ids(token)
@@ -332,7 +338,7 @@ class BaseRouter:
 
         start_reasoning_token_id = check_token_exists("<think>")
         end_reasoning_token_id = check_token_exists("</think>")
-        if start_reasoning_token_id is None or end_reasoning_token_id is None: 
+        if start_reasoning_token_id is None or end_reasoning_token_id is None:
             return None
         return CommonReasoningParser(start_reasoning_token_id, end_reasoning_token_id)
 
@@ -353,12 +359,13 @@ class BaseRouter:
             ToolCallsProcessor instance or default processor
         """
         try:
-            tool_calls_processor = \
-                ToolCallsProcessorManager.get_tool_calls_processor(self.tool_call_parser)(self.tokenizer)
+            tool_calls_processor = ToolCallsProcessorManager.get_tool_calls_processor(self.tool_call_parser)(
+                self.tokenizer
+            )
         except KeyError as e:
-            warn_msg = \
-                f"Cannot use {self.tool_call_parser} ToolCallsProcessor: {e}. " \
-                f"Will use default ToolCallsProcessor."
+            warn_msg = (
+                f"Cannot use {self.tool_call_parser} ToolCallsProcessor: {e}. Will use default ToolCallsProcessor."
+            )
             logger.warning(message_filter(warn_msg))
             tool_calls_processor = ToolCallsProcessor("")
         return tool_calls_processor
@@ -379,15 +386,13 @@ class BaseRouter:
 
     def _get_llm_config(self) -> LLMConfig:
         """Load LLM configuration with validation.
-        
+
         Creates LLMConfig from specified or default path, parses models_dict
         if provided as JSON string, merges model-specific configuration,
         and validates with model-specific validators.
         """
         llm_config_path = (
-            self.load_config.llm_config_path 
-            if self.load_config.llm_config_path is not None 
-            else DEFAULT_CONFIG_PATH
+            self.load_config.llm_config_path if self.load_config.llm_config_path is not None else DEFAULT_CONFIG_PATH
         )
         llm_config = LLMConfig(llm_config_path)
 
@@ -396,7 +401,7 @@ class BaseRouter:
                 self.load_config.models_dict = json.loads(self.load_config.models_dict)
             except json.JSONDecodeError as e:
                 message = "The 'models' field does not conform to JSON format. Please check."
-                logger.warning(f'{message}, exception info: {e}')
+                logger.warning(f"{message}, exception info: {e}")
                 self.load_config.models_dict = None
         llm_config.update(self.load_config.models_dict, allow_new_keys=True)
         llm_config.merge_models_config(self._model_type)

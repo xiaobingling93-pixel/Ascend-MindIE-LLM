@@ -14,11 +14,13 @@
 #define SENSITIVE_INFO_MANAGER_H
 #include <unistd.h>
 
+#include <cstdint>
+
 namespace mindie_llm {
 class SensitiveInfoManager {
-public:
+   public:
     SensitiveInfoManager(char* content, uint32_t len, uint32_t maxLen, uint32_t minLen)
-        :content_(content), len_(len), maxLen_(maxLen), minLen_(minLen) {}
+        : content_(content), len_(len), maxLen_(maxLen), minLen_(minLen) {}
     ~SensitiveInfoManager();
 
     void Clear();
@@ -28,12 +30,12 @@ public:
     // 深拷贝
     bool CopySensitiveInfo(const char* content, size_t len);
 
-private:
+   private:
     char* content_{nullptr};
     uint32_t len_{0};
     uint32_t maxLen_{0};
     uint32_t minLen_{0};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // SENSITIVE_INFO_MANAGER_H
+#endif  // SENSITIVE_INFO_MANAGER_H

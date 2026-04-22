@@ -9,24 +9,24 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-#include "grpc_handler.h"
-#include "log.h"
 #include "grpc_wrapper.h"
 
+#include "grpc_handler.h"
+#include "log.h"
+
 namespace mindie_llm {
-int32_t GrpcWrapper::Start()
-{
+int32_t GrpcWrapper::Start() {
     if (started_) {
         return EP_OK;
     } else {
         if (!GrpcHandler::GetInstance().InitDmiBusiness()) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                INIT_ERROR), "Failed to register init dmi business");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, INIT_ERROR),
+                       "Failed to register init dmi business");
             return EP_ERROR;
         }
         if (!GrpcHandler::GetInstance().InitGrpcService()) {
-            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE,
-                INIT_ERROR), "Failed to register init grpc service");
+            ULOG_ERROR(SUBMODLE_NAME_ENDPOINT, GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, INIT_ERROR),
+                       "Failed to register init grpc service");
             return EP_ERROR;
         }
         started_.store(true);
@@ -34,11 +34,10 @@ int32_t GrpcWrapper::Start()
     }
 }
 
-void GrpcWrapper::Stop()
-{
+void GrpcWrapper::Stop() {
     if (!started_) {
         return;
     }
     started_.store(false);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

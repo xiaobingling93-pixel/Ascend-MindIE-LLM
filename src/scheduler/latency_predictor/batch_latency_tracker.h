@@ -9,31 +9,32 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef BATCH_LATENCY_TRACKER
 #define BATCH_LATENCY_TRACKER
 
-#include <set>
-#include <deque>
-#include <numeric>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <numeric>
+#include <set>
 #include <vector>
-#include <cmath>
 
 namespace mindie_llm {
 class BatchLatencyTracker {
-public:
-    explicit BatchLatencyTracker(size_t windowSize = 1e6): windowSize_(windowSize) { }
+   public:
+    explicit BatchLatencyTracker(size_t windowSize = 1e6) : windowSize_(windowSize) {}
 
     void AddDataPoint(uint64_t value);
 
     double GetRecentAvgLatency(size_t forwardNum);
-private:
+
+   private:
     size_t windowSize_;
 
     std::deque<uint64_t> queue_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif  // BATCH_LATENCY_TRACKER

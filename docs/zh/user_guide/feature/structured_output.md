@@ -17,7 +17,7 @@
 | 特性 | 说明 |
 |------|------|
 | 约束后端 | xgrammar（基于 FSM 的高性能 token 约束库） |
-| 支持格式类型 | `json_object`（通用 JSON 对象）、`json_schema`（用户指定 Schema） |
+| 支持格式类型 | `json_object`（通用 JSON 对象）、`json_schema`（用户指定 Schema）、`text`（不启用结构化输出，以自然语言返回） |
 
 ---
 

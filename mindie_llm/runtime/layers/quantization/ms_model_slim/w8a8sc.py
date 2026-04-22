@@ -26,9 +26,9 @@ from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 
 
 MAPPER_REGISTRY = {
-        'qwen2': 'mindie_llm.runtime.models.qwen2.config_qwen2.Qwen2Config',
-        'qwen3': 'mindie_llm.runtime.models.qwen3.config_qwen3.Qwen3Config',
-    }
+    "qwen2": "mindie_llm.runtime.models.qwen2.config_qwen2.Qwen2Config",
+    "qwen3": "mindie_llm.runtime.models.qwen3.config_qwen3.Qwen3Config",
+}
 
 
 def sparse_compressed_weight_loader(param: BaseParameter, loaded_weight: torch.Tensor) -> None:
@@ -68,22 +68,20 @@ def get_part_directory_for_rank(model_path: str):
     raise RuntimeError(f"Could not find part directory for TP rank {tp_rank}")
 
 
-
 def get_weight_mapper_cls(hf_config):
     """Get Config class from  model_type"""
-    model_type = getattr(hf_config, 'model_type', None)
-    
+    model_type = getattr(hf_config, "model_type", None)
 
     if model_type in MAPPER_REGISTRY:
-        module_path, class_name = MAPPER_REGISTRY[model_type].rsplit('.', 1)
+        module_path, class_name = MAPPER_REGISTRY[model_type].rsplit(".", 1)
         import importlib
+
         module = importlib.import_module(module_path)
         return getattr(module, class_name)
     return None
 
 
 class W8A8SCLinearMethod(LinearMethodBase):
-
     def create_weights(
         self,
         layer: torch.nn.Module,
@@ -94,15 +92,16 @@ class W8A8SCLinearMethod(LinearMethodBase):
         bias_dtype: torch.dtype,
         **extra_weight_attrs,
     ):
-
         weight = ModelWeightParameter(
             data=torch.empty(1, dtype=torch.int8),
         )
-        weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs,
-        })
+        weight.add_attrs(
+            {
+                self.INPUT_DIM: 1,
+                self.OUTPUT_DIM: 0,
+                **extra_weight_attrs,
+            }
+        )
         weight.weight_loader = sparse_compressed_weight_loader
 
         input_scale = ScalerParameter(data=torch.empty(1, dtype=weight_dtype))
@@ -148,12 +147,20 @@ class W8A8SCLinearMethod(LinearMethodBase):
         x: torch.Tensor,
     ) -> torch.Tensor:
         input_tensor_quant = torch_npu.npu_quantize(
-            input=x, scales=layer.input_scale.data,
+            input=x,
+            scales=layer.input_scale.data,
             zero_points=layer.input_offset.data,
-            dtype=torch.qint8, axis=-1, div_mode=False)
+            dtype=torch.qint8,
+            axis=-1,
+            div_mode=False,
+        )
         out = torch_npu.npu_quant_matmul(
-            input_tensor_quant, layer.weight.data, layer.deq_scale.data,
-            bias=layer.quant_bias.data, output_dtype=layer.weight_dtype)
+            input_tensor_quant,
+            layer.weight.data,
+            layer.deq_scale.data,
+            bias=layer.quant_bias.data,
+            output_dtype=layer.weight_dtype,
+        )
         return out
 
     def process_weights_after_loading(self, layer: nn.Module) -> None:

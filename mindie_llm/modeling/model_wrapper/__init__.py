@@ -18,27 +18,34 @@ def get_model_wrapper(model_config, backend_type):
     if backend_type == BackendType.TORCH:
         if ENV.model_runner_exp:
             from .aclgraph.aclgraph_model_wrapper_exp import AclGraphModelWrapperExp
+
             wrapper_cls = AclGraphModelWrapperExp
         else:
             from .aclgraph.aclgraph_model_wrapper import AclGraphModelWrapper
+
             wrapper_cls = AclGraphModelWrapper
     elif backend_type == BackendType.ATB:
         from .atb.atb_model_wrapper import ATBModelWrapper
+
         wrapper_cls = ATBModelWrapper
     else:
-        raise NotImplementedError(f'{backend_type} not implemented, '
-                                  f'supported backends `{BackendType.__members__.values()}`')
+        raise NotImplementedError(
+            f"{backend_type} not implemented, supported backends `{BackendType.__members__.values()}`"
+        )
     return wrapper_cls(**model_config)
 
 
 def get_tokenizer_wrapper(model_id: str, backend_type: str, **kwargs):
     if backend_type == BackendType.TORCH:
         from .aclgraph.aclgraph_tokenizer_wrapper import AclGraphTokenizerWrapper
+
         wrapper_cls = AclGraphTokenizerWrapper
     elif backend_type == BackendType.ATB:
         from .atb.atb_tokenizer_wrapper import ATBTokenizerWrapper
+
         wrapper_cls = ATBTokenizerWrapper
     else:
-        raise NotImplementedError(f'{backend_type} not implemented, '
-                                  f'supported backends `{BackendType.__members__.values()}`')
+        raise NotImplementedError(
+            f"{backend_type} not implemented, supported backends `{BackendType.__members__.values()}`"
+        )
     return wrapper_cls(model_id, **kwargs)

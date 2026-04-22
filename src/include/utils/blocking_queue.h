@@ -9,46 +9,42 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef BLOCKING_QUEUE_H
 #define BLOCKING_QUEUE_H
 
 #include <semaphore.h>
+
 #include <mutex>
-#include <shared_mutex>
 #include <queue>
+#include <shared_mutex>
+
 #include "log.h"
 
 namespace mindie_llm {
-template <typename T> class BlockingQueue {
-public:
-    BlockingQueue()
-    {
-        sem_init(&sem_, 0, 0);
-    }
+template <typename T>
+class BlockingQueue {
+   public:
+    BlockingQueue() { sem_init(&sem_, 0, 0); }
 
     ~BlockingQueue() = default;
 
-    int Push(T item)
-    {
+    int Push(T item) {
         std::unique_lock<std::shared_mutex> lock(queueMutex_);
         queue_.push(std::move(item));
         int result = sem_post(&sem_);
         if (result != 0) {
-            ULOG_ERROR("blocking_queue",
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
-                "sem_post failed when push a item");
+            ULOG_ERROR("blocking_queue", GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
+                       "sem_post failed when push a item");
             throw std::runtime_error("sem_post failed");
         }
         return result;
     }
 
-    T Take()
-    {
+    T Take() {
         if (sem_wait(&sem_) != 0) {
-            ULOG_ERROR("blocking_queue",
-                GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
-                "sem_wait failed when pop a item");
+            ULOG_ERROR("blocking_queue", GenerateEndpointErrCode(ERROR, SUBMODLE_FEATURE_SPLITWISE, CHECK_ERROR),
+                       "sem_wait failed when pop a item");
             throw std::runtime_error("sem_wait failed");
         }
         std::unique_lock<std::shared_mutex> lock(queueMutex_);
@@ -57,24 +53,22 @@ public:
         return value;
     }
 
-    size_t Size()
-    {
+    size_t Size() {
         std::shared_lock<std::shared_mutex> lock(queueMutex_);
         return queue_.size();
     }
 
-    bool Empty()
-    {
+    bool Empty() {
         std::shared_lock<std::shared_mutex> lock(queueMutex_);
         return queue_.empty();
     }
 
-private:
-    sem_t sem_ {};
+   private:
+    sem_t sem_{};
 
     std::queue<T> queue_;
 
     std::shared_mutex queueMutex_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

@@ -13,15 +13,15 @@
 #ifndef __I_LOAD_BALANCER_H__
 #define __I_LOAD_BALANCER_H__
 
-#include <vector>
 #include <cstddef>
 #include <memory>
+#include <vector>
 
 #include "sequence_group.h"
 
 namespace mindie_llm {
 class ILoadBalancer {
-public:
+   public:
     virtual ~ILoadBalancer() = default;
 
     virtual void AddSeqGroup(SequenceGroupSPtr &seqGroup) = 0;
@@ -34,5 +34,5 @@ using LoadBalancerPtr = std::unique_ptr<ILoadBalancer>;
 struct EnginePerDP;
 LoadBalancerPtr MakeLoadBalancer(const std::vector<std::shared_ptr<EnginePerDP>> &enginePerDPs,
                                  size_t waveNumPerDP = 256, size_t thresholdPerDP = 512, size_t intervalMs = 1);
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

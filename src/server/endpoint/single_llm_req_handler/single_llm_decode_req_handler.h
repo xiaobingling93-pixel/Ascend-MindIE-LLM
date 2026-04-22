@@ -13,38 +13,37 @@
 #ifndef DECODE_WRAPPER_H
 #define DECODE_WRAPPER_H
 
-#include <vector>
-#include <boost/thread/mutex.hpp>
+#include <boost/chrono.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/condition_variable.hpp>
-#include <boost/chrono.hpp>
+#include <boost/thread/mutex.hpp>
 #include <shared_mutex>
-#include "prefillAndDecodeCommunication.grpc.pb.h"
-#include "http_rest_resource.h"
+#include <vector>
+
 #include "dresult_event_dispatcher.h"
 #include "grpc_context.h"
+#include "http_rest_resource.h"
+#include "prefillAndDecodeCommunication.grpc.pb.h"
 #include "single_llm_req_handler_base.h"
 
 namespace mindie_llm {
 class SingleLLMDecodeReqHandler final : public SingleLLMReqHandlerBase,
                                         public std::enable_shared_from_this<SingleLLMDecodeReqHandler> {
-public:
+   public:
     using SingleLLMReqHandlerBase::GetContextJsonBody;
     SingleLLMDecodeReqHandler(ReqCtxPtr& ctx, std::shared_ptr<DResultEventDispatcher>& dResultDispatcher,
-        std::shared_ptr<GrpcContext>& grpcContext);
+                              std::shared_ptr<GrpcContext>& grpcContext);
     ~SingleLLMDecodeReqHandler() override;
 
-    void Process([[maybe_unused]] RequestSPtr request, [[maybe_unused]] const std::string &inputId,
-                 [[maybe_unused]] const uint64_t &timestamp = 0) override
-    {
-    }
-    void ProcessGrpcReq(RequestSPtr request, const std::string &inputId,
-                        prefillAndDecodeCommunication::DecodeRequestResponse &response) override;
-    bool GetContextJsonBody(InferParamSPtr param, RequestSPtr request, std::vector<int64_t> &reqTokens,
-                            std::vector<int64_t> &respTokens) override;
+    void Process([[maybe_unused]] RequestSPtr request, [[maybe_unused]] const std::string& inputId,
+                 [[maybe_unused]] const uint64_t& timestamp = 0) override {}
+    void ProcessGrpcReq(RequestSPtr request, const std::string& inputId,
+                        prefillAndDecodeCommunication::DecodeRequestResponse& response) override;
+    bool GetContextJsonBody(InferParamSPtr param, RequestSPtr request, std::vector<int64_t>& reqTokens,
+                            std::vector<int64_t>& respTokens) override;
     bool GetContextRequestId(std::string& requestId) override;
-    void UpdateInferRequest(const std::vector<int64_t> &reqTokens,
-                            const int64_t &oriReqTokenLen, RequestSPtr request) override;
+    void UpdateInferRequest(const std::vector<int64_t>& reqTokens, const int64_t& oriReqTokenLen,
+                            RequestSPtr request) override;
     void SetBackManagerCallBack(RequestSPtr request) override;
     void SendResponseInfo(int code, const std::string& responseStr, bool needMetricsCollect = true) override;
     void SendResponse(int code, const std::string& responseStr) override;
@@ -56,11 +55,11 @@ public:
     void GetContextMetrics();
     void FillRespTokensAndReplayIds(RequestSPtr request, std::vector<int64_t>& respTokens);
 
-private:
+   private:
     bool SendKvRelease(const std::string& reqId);
     void ResponseReCompute(const std::string& body);
-    void SendDResult(const std::string &msg, std::string reqId);
-    void SendDError(const std::string &errorMsg);
+    void SendDResult(const std::string& msg, std::string reqId);
+    void SendDError(const std::string& errorMsg);
 
     std::shared_ptr<DResultEventDispatcher> dResultDispatcher_{nullptr};
     std::string pNodeAddr_;
@@ -74,5 +73,5 @@ private:
     // 多个response并发call back使用；TBC_后续会做P/D分离Response处理优化
     std::shared_mutex decodeCbMutex;
 };
-} // namespace mindie_llm
-#endif // DECODE_WRAPPER_H
+}  // namespace mindie_llm
+#endif  // DECODE_WRAPPER_H

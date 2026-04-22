@@ -19,31 +19,30 @@ from mindie_llm.runtime.utils.helpers.safety.hf import safe_get_tokenizer_from_p
 class Qwen3MoeRouter(BaseRouter):
     """
     Router class for Qwen3Moe model configuration and initialization.
-    
+
     This class handles the specific configuration and setup for Qwen3Moe models,
     including configuration creation, tokenizer initialization, and input builder setup.
     """
+
     def _get_tokenizer(self):
         """
         Creates and returns the tokenizer for Qwen3Moe model.
-        
+
         Sets padding side to "left" and uses trust_remote_code flag.
-        
+
         Returns:
             Tokenizer: Tokenizer for Qwen3Moe model
         """
         return safe_get_tokenizer_from_pretrained(
-            self.load_config.tokenizer_path,
-            padding_side="left",
-            trust_remote_code=self.load_config.trust_remote_code
+            self.load_config.tokenizer_path, padding_side="left", trust_remote_code=self.load_config.trust_remote_code
         )
 
     def _get_input_builder(self):
         """
         Creates and returns the input builder for Qwen3Moe model.
-        
+
         Optionally accepts a custom chat template if provided.
-        
+
         Returns:
             Qwen3MoeInputBuilder: Input builder for Qwen3Moe model
         """
@@ -57,7 +56,7 @@ class Qwen3MoeRouter(BaseRouter):
     def _get_tool_calls_parser(self):
         """
         Returns the tool call parser identifier for Qwen3Moe.
-        
+
         Returns:
             str: Identifier for the tool call parser ("qwen3")
         """

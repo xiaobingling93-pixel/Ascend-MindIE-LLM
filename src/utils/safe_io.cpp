@@ -14,25 +14,18 @@
 #include <fstream>
 #include <iostream>
 
-#include "safe_path.h"
 #include "config_info.h"
+#include "safe_path.h"
 
 namespace mindie_llm {
 
-static int g_jsonDepthLimit = JSON_DEPTH_LIMIT_MIN; // 限制嵌套层次
+static int g_jsonDepthLimit = JSON_DEPTH_LIMIT_MIN;  // 限制嵌套层次
 
-void SetJsonDepthLimit(int depth)
-{
-    g_jsonDepthLimit = depth;
-}
+void SetJsonDepthLimit(int depth) { g_jsonDepthLimit = depth; }
 
-int GetJsonDepthLimit()
-{
-    return g_jsonDepthLimit;
-}
+int GetJsonDepthLimit() { return g_jsonDepthLimit; }
 
-Result LoadJson(const std::string& path, Json& json)
-{
+Result LoadJson(const std::string& path, Json& json) {
     std::string checkedPath;
     SafePath inFile(path, PathType::FILE, "r", PERM_640, SIZE_500MB, ".json");
     Result r = inFile.Check(checkedPath);
@@ -47,8 +40,7 @@ Result LoadJson(const std::string& path, Json& json)
     return Result::OK();
 }
 
-bool CheckJsonDepth(int depth, Json::parse_event_t ev)
-{
+bool CheckJsonDepth(int depth, Json::parse_event_t ev) {
     switch (ev) {
         case Json::parse_event_t::object_start:
         case Json::parse_event_t::array_start:
@@ -58,8 +50,7 @@ bool CheckJsonDepth(int depth, Json::parse_event_t ev)
     }
 }
 
-bool CheckJsonDepthWithLogger(int depth, Json::parse_event_t ev, std::function<void(void)> logger)
-{
+bool CheckJsonDepthWithLogger(int depth, Json::parse_event_t ev, std::function<void(void)> logger) {
     if (!CheckJsonDepth(depth, ev)) {
         if (logger) {
             logger();
@@ -69,11 +60,10 @@ bool CheckJsonDepthWithLogger(int depth, Json::parse_event_t ev, std::function<v
     return true;
 }
 
-bool CheckJsonDepthCallbackNoLogger(int depth, Json::parse_event_t ev, [[maybe_unused]] Json& obj)
-{
+bool CheckJsonDepthCallbackNoLogger(int depth, Json::parse_event_t ev, [[maybe_unused]] Json& obj) {
     return CheckJsonDepthWithLogger(depth, ev, [depth]() {
-        std::cerr << "Failed to parse json: depth is " << depth <<  ", limit is " << GetJsonDepthLimit();
+        std::cerr << "Failed to parse json: depth is " << depth << ", limit is " << GetJsonDepthLimit();
     });
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

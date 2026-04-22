@@ -21,7 +21,7 @@ from mindie_llm.runtime.layers.parameter import (
     ModelWeightParameter,
     BiasParameter,
     ColumnParameter,
-    RowParameter
+    RowParameter,
 )
 
 
@@ -46,12 +46,13 @@ class UnquantizedLinearMethod(LinearMethodBase):
         model_quant_type = get_model_quant_type(getattr(layer, "quant_config", None))
         if model_quant_type in [QuantType.W8A8SC]:
             from mindie_llm.runtime.layers.quantization.ms_model_slim.w8a8sc import sparse_compressed_weight_loader
+
             extra_weight_attrs["weight_loader"] = sparse_compressed_weight_loader
         weight.add_attrs({"input_dim": 1, "output_dim": 0, **extra_weight_attrs})
         layer.register_parameter("weight", weight)
 
         # Determine if the anti-outlier feature is active by checking whether "norm.bias" parameters are present
-        # in the weight files. If the bias tensor is added in the normalization module, it must be subtracted 
+        # in the weight files. If the bias tensor is added in the normalization module, it must be subtracted
         # from the subsequent linear module to ensure precision.
         if layer.quant_config is not None:
             enable_anti_outlier = True
@@ -103,11 +104,7 @@ class UnquantizedEmbeddingMethod(QuantizationMethodBase):
         weight.add_attrs({"input_dim": 1, "output_dim": 0, **extra_weight_attrs})
         layer.register_parameter("weight", weight)
 
-    def apply(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor
-    ) -> torch.Tensor:
+    def apply(self, layer: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.embedding(x, layer.weight.data)
 
 
@@ -153,67 +150,57 @@ class UnquantizedLayerNormBiasMethod(QuantizationMethodBase):
         bias.add_attrs(extra_weight_attrs)
         layer.register_parameter("bias", bias)
 
-    def apply(
-        self,
-        layer: torch.nn.Module,
-        x: torch.Tensor,
-        dim
-    ) -> torch.Tensor:
+    def apply(self, layer: torch.nn.Module, x: torch.Tensor, dim) -> torch.Tensor:
         return torch.nn.functional.layer_norm(x, (dim,), layer.weight.data, layer.bias.data, layer.variance_epsilon)
 
 
 class UnquantizedFusedMoEMethod(FusedMoEMethodBase):
     def create_weights(
-            self,
-            layer: torch.nn.Module,
-            num_experts: int,
-            hidden_size: int,
-            intermediate_size_per_partition: int,
-            weight_dtype: torch.dtype,
-            bias_dtype: torch.dtype,
-            **extra_weight_attrs,
+        self,
+        layer: torch.nn.Module,
+        num_experts: int,
+        hidden_size: int,
+        intermediate_size_per_partition: int,
+        weight_dtype: torch.dtype,
+        bias_dtype: torch.dtype,
+        **extra_weight_attrs,
     ):
         gate_up_weight = ColumnParameter(
-            torch.empty(num_experts,
-                        2 *
-                        intermediate_size_per_partition,
-                        hidden_size,
-                        dtype=weight_dtype,
-                        ),
+            torch.empty(
+                num_experts,
+                2 * intermediate_size_per_partition,
+                hidden_size,
+                dtype=weight_dtype,
+            ),
         )
-        gate_up_weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        gate_up_weight.add_attrs({self.INPUT_DIM: 1, self.OUTPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("gate_up_weight", gate_up_weight)
 
         down_weight = RowParameter(
-            torch.empty(num_experts,
-                        hidden_size,
-                        intermediate_size_per_partition,
-                        dtype=weight_dtype,
-                        ),
+            torch.empty(
+                num_experts,
+                hidden_size,
+                intermediate_size_per_partition,
+                dtype=weight_dtype,
+            ),
         )
-        down_weight.add_attrs({
-            self.INPUT_DIM: 1,
-            self.OUTPUT_DIM: 0,
-            **extra_weight_attrs
-        })
+        down_weight.add_attrs({self.INPUT_DIM: 1, self.OUTPUT_DIM: 0, **extra_weight_attrs})
         layer.register_parameter("down_weight", down_weight)
 
-    def apply(self,
-              layer: torch.nn.Module,
-              x: torch.Tensor,
-              group_list: torch.Tensor,
-              group_list_type: int = 1,
-              dynamic_scale: torch.Tensor = None) -> torch.Tensor:
+    def apply(
+        self,
+        layer: torch.nn.Module,
+        x: torch.Tensor,
+        group_list: torch.Tensor,
+        group_list_type: int = 1,
+        dynamic_scale: torch.Tensor = None,
+    ) -> torch.Tensor:
         gate_up_out = torch_npu.npu_grouped_matmul(
             x=[x],
             weight=[layer.gate_up_weight],
-            split_item=2,                     # output a single tensor
+            split_item=2,  # output a single tensor
             group_list_type=group_list_type,
-            group_type=0,                     # the axis to group
+            group_type=0,  # the axis to group
             group_list=group_list,
         )[0]
 

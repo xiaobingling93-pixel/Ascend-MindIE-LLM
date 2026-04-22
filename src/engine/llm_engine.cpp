@@ -13,35 +13,34 @@
 
 #include <unordered_set>
 
-#include "construct_execute_request.h"
-#include "live_infer_context.h"
-#include "id_utils.h"
-#include "log.h"
-#include "request_response/request_id.h"
-#include "msServiceProfiler/msServiceProfiler.h"
-#include "thread_group_cc.h"
-#include "process_group.h"
 #include "common_util.h"
-#include "post_scheduler.h"
-#include "policy/stage_policy/stage_policy.h"
-#include "policy/stage_policy/edge_cloud_policy.h"
-#include "policy/dynamic_batch_recorder.h"
+#include "construct_execute_request.h"
 #include "error_queue.h"
+#include "id_utils.h"
+#include "live_infer_context.h"
+#include "log.h"
+#include "msServiceProfiler/msServiceProfiler.h"
+#include "policy/dynamic_batch_recorder.h"
+#include "policy/stage_policy/edge_cloud_policy.h"
+#include "policy/stage_policy/stage_policy.h"
+#include "post_scheduler.h"
+#include "process_group.h"
+#include "request_response/request_id.h"
+#include "thread_group_cc.h"
 using namespace std;
 using namespace std::chrono;
 
 namespace mindie_llm {
 constexpr int LOG_TIME_THRESHOLD_MS = 1000;
 constexpr int LOG_CC_TIME_THRESHOLD_MS = 10;
-LlmEngine::LlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr> executors,
-                        ForwardRespToManagerCall cb, Role pdRole, std::atomic<bool> *engineReadyFlag)
-        : llmEngineReady_(engineReadyFlag)
-{
+LlmEngine::LlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr> executors, ForwardRespToManagerCall cb,
+                     Role pdRole, std::atomic<bool> *engineReadyFlag)
+    : llmEngineReady_(engineReadyFlag) {
     if (executors.empty()) {
         throw std::invalid_argument("At lease one executor is needed");
     }
     schedulerConfig_ = std::make_shared<SchedulerConfig>(schedulerConfig);
-    if (schedulerConfig_->distributedEnable) { // 只有多节点分布式才需要进程间通信，多dp集中式使用线程间通信
+    if (schedulerConfig_->distributedEnable) {  // 只有多节点分布式才需要进程间通信，多dp集中式使用线程间通信
         uint32_t numNpuPerDp = schedulerConfig_->globalWorldSize / schedulerConfig_->dpSize;
         if (numNpuPerDp == 0) {
             throw runtime_error("NumNpuPerDp should not be zero.");
@@ -50,7 +49,7 @@ LlmEngine::LlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr>
         // 每个P/D实例占用tpSize个device，globalRandIds是从0递增的，因此dpRankId=globalRankIds[0] / (tpSize * cpSize)
         dpRankId_ = static_cast<int>(std::stoull(schedulerConfig_->globalRankIds[0]) / numNpuPerDp);
     } else if (schedulerConfig_->worldSize != schedulerConfig_->globalWorldSize &&
-        schedulerConfig_->globalWorldSize > 0) {
+               schedulerConfig_->globalWorldSize > 0) {
         schedulerConfig_->tpSize = schedulerConfig_->globalWorldSize / schedulerConfig_->dpSize;
     } else {
         schedulerConfig_->tpSize = schedulerConfig_->worldSize / schedulerConfig_->dpSize;
@@ -100,8 +99,7 @@ LlmEngine::LlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr>
                                                     << "Need to call StartEngineThread to start Engine thread(s).");
 }
 
-LlmEngine::~LlmEngine()
-{
+LlmEngine::~LlmEngine() {
     Stop();
     for (std::shared_ptr<EnginePerDP> &enginePerDP : enginePerDPs_) {
         if (enginePerDP->schedulerThread.joinable()) {
@@ -110,18 +108,16 @@ LlmEngine::~LlmEngine()
     }
 }
 
-bool LlmEngine::AddRequest(RequestSPtr request)
-{
+bool LlmEngine::AddRequest(RequestSPtr request) {
     if (stop_.load(std::memory_order_relaxed)) {
-        MINDIE_LLM_LOG_DEBUG("[LlmEngine]Engine hasn't initialized. Cann't add request:" << request->requestId);
+        MINDIE_LLM_LOG_DEBUG("[LlmEngine]Engine hasn't initialized. Can't add request:" << request->requestId);
         return false;
     }
 
     // 存放映射，用于返回给manager层的Response构造
     static size_t rrIdx = 0;
     size_t rankId = (rrIdx++) % enginePerDPs_.size();
-    auto seqGroup =
-        SeqGroupBuilderFromInferReq::BuildSequenceGroup(request, schedulerConfig_, rankId);
+    auto seqGroup = SeqGroupBuilderFromInferReq::BuildSequenceGroup(request, schedulerConfig_, rankId);
     seqGroup->isDecode_ = request->reqType == InferReqType::REQ_DECODE;
     seqGroup->isFlexLocal_ = request->reqType == InferReqType::REQ_FLEX_LOCAL;
 
@@ -133,15 +129,15 @@ bool LlmEngine::AddRequest(RequestSPtr request)
         engine->scheduler->AddSeqGroup(seqGroup);
         engine->addedRequestNum++;
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine|Request-Enter Waiting] DP RankId: "
-                            << (dpRankId_ > 0 ? dpRankId_ : rankId) << ", Add request(requestId: " << request->requestId
-                            << ", seqId: " << seqGroup->firstSeq->seqId_ << ") successfully."
-                            << " Total added request num is:" << engine->addedRequestNum);
+                                    << (dpRankId_ > 0 ? dpRankId_ : rankId)
+                                    << ", Add request(requestId: " << request->requestId
+                                    << ", seqId: " << seqGroup->firstSeq->seqId_ << ") successfully."
+                                    << " Total added request num is:" << engine->addedRequestNum);
     }
     return true;
 }
 
-void LlmEngine::SendAbortResponse(SequenceGroupSPtr seqGroup, size_t localDPRank, InferStatusType flag) const
-{
+void LlmEngine::SendAbortResponse(SequenceGroupSPtr seqGroup, size_t localDPRank, InferStatusType flag) const {
     ResponseSPtr response = std::make_shared<Response>(seqGroup->metrics_.inferReqId_);
     response->isEos = true;
     response->inferStatusFlag = flag;
@@ -157,20 +153,18 @@ void LlmEngine::SendAbortResponse(SequenceGroupSPtr seqGroup, size_t localDPRank
     enginePerDPs_.at(localDPRank)->abortRespToManagerCall(response);
 }
 
-void LlmEngine::AbortParallelSeqGroups([[maybe_unused]] size_t localDPRank) const
-{
+void LlmEngine::AbortParallelSeqGroups([[maybe_unused]] size_t localDPRank) const {
     for (SequenceGroupSPtr &seqGroup : enginePerDPs_.at(localDPRank)->scheduler->GetAbortedParallelSeqGroups()) {
         SendAbortResponse(seqGroup, localDPRank, InferStatusType::ABORT);
     }
 }
 
-void LlmEngine::AbortRequests(std::unordered_set<RequestId> &requestIds)
-{
+void LlmEngine::AbortRequests(std::unordered_set<RequestId> &requestIds) {
     for (RequestId reqId : requestIds) {
         auto [localDPRank, seqGrpSptr] = LiveInferContext::FindSeqGroupInAllRank(reqId);
         if (seqGrpSptr == nullptr) {
             MINDIE_LLM_LOG_WARN_REQUEST("[LlmEngine]Abort request(requestId: "
-                                 << reqId << ") does not exist. This request may have been kv-released.");
+                                        << reqId << ") does not exist. This request may have been kv-released.");
             continue;
         }
 
@@ -179,43 +173,39 @@ void LlmEngine::AbortRequests(std::unordered_set<RequestId> &requestIds)
         enginePerDPs_.at(localDPRank)->abortedRequestIds.PushBack(reqId);
         enginePerDPs_.at(localDPRank)->abortedRequestNum++;
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine]Abort request(requestId: "
-                            << reqId << ") successfully."
-                            << " Total aborted request num is:" << enginePerDPs_.at(localDPRank)->abortedRequestNum);
+                                    << reqId << ") successfully."
+                                    << " Total aborted request num is:"
+                                    << enginePerDPs_.at(localDPRank)->abortedRequestNum);
     }
 }
 
-void LlmEngine::ReleaseKvCache(std::unordered_set<RequestId> &requestIds)
-{
+void LlmEngine::ReleaseKvCache(std::unordered_set<RequestId> &requestIds) {
     for (auto reqId : requestIds) {
         auto [localDPRank, seqGroup] = LiveInferContext::FindSeqGroupInAllRank(reqId);
         if (seqGroup == nullptr) {
-            MINDIE_LLM_LOG_WARN_REQUEST("[LlmEngine]Try to release kv.The request(" << reqId
-                                                                            << ") is not exist. Maybe been aborted");
+            MINDIE_LLM_LOG_WARN_REQUEST("[LlmEngine]Try to release kv.The request("
+                                        << reqId << ") is not exist. Maybe been aborted");
             continue;
         }
 
         SequenceId seqId = seqGroup->firstSeq->seqId_;
         enginePerDPs_[localDPRank]->scheduler->NotifyMeKvPulledSeqIds(seqId);
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine] DP RankId: " << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
-                                                      << ". Send Release KV response(requestId: " << reqId
-                                                      << ") successfully.");
+                                                              << ". Send Release KV response(requestId: " << reqId
+                                                              << ") successfully.");
     }
 }
 
-void LlmEngine::Stop()
-{
+void LlmEngine::Stop() {
     stop_.store(true, std::memory_order_relaxed);
     MINDIE_LLM_LOG_INFO("[LlmEngine]Engine stopped successfully.");
 }
 
-uint64_t LlmEngine::SteadyClockMsSinceEpoch()
-{
-    return static_cast<uint64_t>(
-        duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
+uint64_t LlmEngine::SteadyClockMsSinceEpoch() {
+    return static_cast<uint64_t>(duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
 }
 
-void LlmEngine::NotifySchedulerDidNonEmptySchedule(size_t localDPRank)
-{
+void LlmEngine::NotifySchedulerDidNonEmptySchedule(size_t localDPRank) {
     if (role_ != Role::P) {
         return;
     }
@@ -227,8 +217,7 @@ void LlmEngine::NotifySchedulerDidNonEmptySchedule(size_t localDPRank)
     llmEngineReady_->store(true, std::memory_order_release);
 }
 
-void LlmEngine::MaybeMarkEngineNotReadyIfAllSchedulersEmptyTooLong()
-{
+void LlmEngine::MaybeMarkEngineNotReadyIfAllSchedulersEmptyTooLong() {
     if (role_ != Role::P) {
         return;
     }
@@ -248,8 +237,7 @@ void LlmEngine::MaybeMarkEngineNotReadyIfAllSchedulersEmptyTooLong()
     llmEngineReady_->store(false, std::memory_order_release);
 }
 
-void LlmEngine::StartEngineThread()
-{
+void LlmEngine::StartEngineThread() {
     const uint64_t startMs = SteadyClockMsSinceEpoch();
     if (llmEngineReady_ != nullptr && role_ == Role::P) {
         for (const EnginePerDPSPtr &enginePerDP : enginePerDPs_) {
@@ -272,8 +260,7 @@ void LlmEngine::StartEngineThread()
 }
 
 void LlmEngine::InitProcessGroup(const std::vector<NodeInfo> &nodeInfos, std::string &processGroupMasterIP,
-                                 uint32_t processGroupMasterPort)
-{
+                                 uint32_t processGroupMasterPort) {
     MINDIE_LLM_LOG_INFO("Initialize Process Group: masterIP=" << processGroupMasterIP
                                                               << ", masterPort=" << processGroupMasterPort);
     // 根据infos信息创建ProcessGroup
@@ -284,7 +271,7 @@ void LlmEngine::InitProcessGroup(const std::vector<NodeInfo> &nodeInfos, std::st
         MINDIE_LLM_LOG_INFO("Initialize Process Group: worldSize=" << schedulerConfig_->dpSize
                                                                    << ", rank=" << dpRankId_);
         bool isMaster = std::find(hostIps.begin(), hostIps.end(), processGroupMasterIP) != hostIps.end();
-        isMaster = isMaster && (dpRankId_ == 0); // TBC，当前认为dpRank为0的一定是master节点
+        isMaster = isMaster && (dpRankId_ == 0);  // TBC，当前认为dpRank为0的一定是master节点
         ProcessGroup::GetInstance(processGroupMasterIP, processGroupMasterPort, hostIp, dpRankId_,
                                   schedulerConfig_->dpSize, isMaster);
         isProcessGroupInit = true;
@@ -302,8 +289,7 @@ void LlmEngine::InitProcessGroup(const std::vector<NodeInfo> &nodeInfos, std::st
 /**
  * 当前D节点返回recompute response在调度线程中，后续如果有性能问题，需要考虑使用其他线程。
  */
-void LlmEngine::SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, size_t localDPRank)
-{
+void LlmEngine::SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, size_t localDPRank) {
     if (role_ != Role::D) {
         return;
     }
@@ -311,8 +297,7 @@ void LlmEngine::SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, 
     for (SequenceId seqId : recomputeSeqIds) {
         SequenceGroupSPtr seqGroup = LiveInferContext::GetInstance(localDPRank)->GetSeqGroup(seqId);
         if (seqGroup == nullptr) {
-            MINDIE_LLM_LOG_INFO(
-                "Can not find sequence group when try to send recompute response, seqId :" << seqId);
+            MINDIE_LLM_LOG_INFO("Can not find sequence group when try to send recompute response, seqId :" << seqId);
             continue;
         }
 
@@ -322,9 +307,9 @@ void LlmEngine::SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, 
         response->transferStatusFlag = TransferStatusType::RECOMPUTED_TRIGGERED;
         enginePerDPs_.at(localDPRank)->abortRespToManagerCall(response);
         MINDIE_LLM_LOG_INFO_REQUEST("[LlmEngine] DP RankId: "
-                            << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
-                            << ". Engine(Decode Node) send recompute response successfully. seqId: " << seqId
-                            << ", requestId: " << seqGroup->metrics_.inferReqId_);
+                                    << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
+                                    << ". Engine(Decode Node) send recompute response successfully. seqId: " << seqId
+                                    << ", requestId: " << seqGroup->metrics_.inferReqId_);
 
         // recompute的请求不再进入waiting队列，不会再被轮询，需要结束清理资源
         enginePerDPs_.at(localDPRank)->scheduler->ClearSeqGrp(seqGroup, SequenceStatus::FINISH_RECOMPUTE);
@@ -332,8 +317,7 @@ void LlmEngine::SendRecomputeResponse(std::vector<SequenceId> &recomputeSeqIds, 
 }
 
 SchOutDataPair LlmEngine::PostScheduleSyncUp(bool needSync, SequenceGroupMetaDatas &metas, SchedulerOutputs &schOut,
-                                             size_t localDPRank)
-{
+                                             size_t localDPRank) {
     std::vector<std::vector<SequenceGroupMetaDatas>> allDpMetas;
     auto syncUpBegin = high_resolution_clock::now();
 
@@ -346,7 +330,7 @@ SchOutDataPair LlmEngine::PostScheduleSyncUp(bool needSync, SequenceGroupMetaDat
     }
     auto syncUpAfterBatchInfo = high_resolution_clock::now();
     // 进程（分布式）集合通信需要同步信息seqlen，做DP间的dummy和padding
-    if (isDistributedPNodeProcessCCReady_) { // 进程级通信修改metas，需要在赋值allDpMetas之前处理
+    if (isDistributedPNodeProcessCCReady_) {  // 进程级通信修改metas，需要在赋值allDpMetas之前处理
         PostScheduler::SyncSeqLenList(metas.seqLenList, batchInfo.batchSizeList_, batchInfo.maxBatchSize_, localDPRank,
                                       schedulerConfig_->distributedEnable);
     }
@@ -369,25 +353,23 @@ SchOutDataPair LlmEngine::PostScheduleSyncUp(bool needSync, SequenceGroupMetaDat
         auto syncFirstCost = duration_cast<milliseconds>(syncUpAfterBatchInfo - syncUpBegin).count();
         auto syncUpCost = duration_cast<milliseconds>(syncUpEnd - syncUpBegin).count();
         MINDIE_LLM_LOG_INFO_REQUEST("[Scheduler|Schedule-Sync up] PostSchedule sync too long :"
-                            << syncUpCost << ", DP RankId:" << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
-                            << ", maxBatchSize:" << metas.maxBatchSize << ", maxSeqLen:" << metas.maxSeqLen
-                            << ", syncFirstCost:" << syncFirstCost << ", syncSecondCost:" << syncSecondCost);
+                                    << syncUpCost << ", DP RankId:" << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
+                                    << ", maxBatchSize:" << metas.maxBatchSize << ", maxSeqLen:" << metas.maxSeqLen
+                                    << ", syncFirstCost:" << syncFirstCost << ", syncSecondCost:" << syncSecondCost);
     }
 
     return {allDpMetas, allDpOuts};
 }
 
-std::pair<SequenceGroupMetaDatas, SchedulerOutputs>
-LlmEngine::MakeDummySchedulerOutput(SequenceGroupMetaDatas seqGroupMetadata) const
-{
+std::pair<SequenceGroupMetaDatas, SchedulerOutputs> LlmEngine::MakeDummySchedulerOutput(
+    SequenceGroupMetaDatas seqGroupMetadata) const {
     SchedulerOutputs output;
     output.forwardMode_ = ForwardMode::DUMMY;
     return {seqGroupMetadata, output};
 }
 
 void LlmEngine::ExecuteDummy(EnginePerDPSPtr enginePerDP, SequenceGroupMetaDatas &seqGroupMetadata, size_t localDPRank,
-                             std::function<void(ModelBatchResultSPtr)> responseHandler) const
-{
+                             std::function<void(ModelBatchResultSPtr)> responseHandler) const {
     auto [dummyMetadata, dummpOut] = MakeDummySchedulerOutput(seqGroupMetadata);
     ExecuteModelRequestPtr dummyRequest = std::make_unique<model_execute_data::ExecuteModelRequest>();
     ConstructExecuteRequest::ConstructExecuteModelRequest(dummyRequest, dummyMetadata, dummpOut, localDPRank);
@@ -399,14 +381,12 @@ void LlmEngine::ExecuteDummy(EnginePerDPSPtr enginePerDP, SequenceGroupMetaDatas
     }
 }
 
-void LlmEngine::switchRole(size_t localDPRank)
-{
+void LlmEngine::switchRole(size_t localDPRank) {
     EnginePerDPSPtr enginePerDP = enginePerDPs_.at(localDPRank);
     role_ = enginePerDP->scheduler->SwitchRole();
 }
 
-bool LlmEngine::DistDecodeAcquireDummyQuota(bool isDummy, EnginePerDPSPtr enginePerDP) const
-{
+bool LlmEngine::DistDecodeAcquireDummyQuota(bool isDummy, EnginePerDPSPtr enginePerDP) const {
     if (!enginePerDP->dummyQuotaManagerSPtr_) {
         return false;
     }
@@ -420,21 +400,18 @@ bool LlmEngine::DistDecodeAcquireDummyQuota(bool isDummy, EnginePerDPSPtr engine
     return enginePerDP->dummyQuotaManagerSPtr_->AcquireQuota(false);
 }
 
-void LlmEngine::PauseScheduling()
-{
+void LlmEngine::PauseScheduling() {
     isPauseScheduling_.store(true, std::memory_order_relaxed);
     MINDIE_LLM_LOG_INFO("[LlmEngine]Scheduling paused.");
 }
 
-void LlmEngine::ResumeScheduling()
-{
+void LlmEngine::ResumeScheduling() {
     isPauseScheduling_.store(false, std::memory_order_relaxed);
     MINDIE_LLM_LOG_INFO("[LlmEngine]Scheduling resumed.");
 }
 
 void LlmEngine::LayerwiseEosClean(bool layerwiseDisaggregated, std::unordered_set<SequenceId> &eosCleanupSeqIds,
-                                  EnginePerDPSPtr enginePerDP) const
-{
+                                  EnginePerDPSPtr enginePerDP) const {
     if (!layerwiseDisaggregated) {
         return;
     }
@@ -442,22 +419,21 @@ void LlmEngine::LayerwiseEosClean(bool layerwiseDisaggregated, std::unordered_se
     const size_t eosCleanupThreshold = 10;
     if (eosCleanupSeqIds.size() > eosCleanupThreshold) {
         // 多dp扩展下是否要同步需分析
-        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:"
-            << "Clean EOS seqIds number is: " << eosCleanupSeqIds.size());
+        MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:" << "Clean EOS seqIds number is: "
+                                                                  << eosCleanupSeqIds.size());
         TGCleanupRequestPtr EOSCleanupRequest = BuildTGCleanupRequest(eosCleanupSeqIds);
         bool succ = enginePerDP->modelExecutor->AsyncEOSCleanup(EOSCleanupRequest);
         if (!succ) {
             MINDIE_LLM_LOG_ERROR("Call AsyncEOSCleanup failed.");
             throw runtime_error("The async eos clean up failed. Check logs.");
-        } // clear the container after send success
+        }  // clear the container after send success
         eosCleanupSeqIds.clear();
     }
 }
 
-void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
-{
+void LlmEngine::SchedulerThreadEntry(size_t localDPRank) {
     EnginePerDPSPtr enginePerDP = enginePerDPs_.at(localDPRank);
-    isCentralizedThreadCCReady_ = enginePerDPs_.size() > 1; // size大于1就表示集中式的主节点
+    isCentralizedThreadCCReady_ = enginePerDPs_.size() > 1;  // size大于1就表示集中式的主节点
     isDistributedPNodeProcessCCReady_ = schedulerConfig_->distributedEnable && isProcessGroupInit && role_ == Role::P;
     bool needSync = isDistributedPNodeProcessCCReady_ || isCentralizedThreadCCReady_;
     time_point<high_resolution_clock, high_resolution_clock::duration> asynExeBegin = high_resolution_clock::now();
@@ -491,8 +467,8 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         CheckAndPrintHeartbeat(heartbeatBegin, enginePerDP);
 
         // 2. 异步调度轮次控制
-        uint32_t asyncScheduleRound = schedulerConfig_->layerwiseDisaggregated ?
-                                 schedulerConfig_->maxDispatchBatchNum : MAX_ASYNC_SCHEDULE_TIMES;
+        uint32_t asyncScheduleRound =
+            schedulerConfig_->layerwiseDisaggregated ? schedulerConfig_->maxDispatchBatchNum : MAX_ASYNC_SCHEDULE_TIMES;
 
         if (enginePerDP->modelExecOutputHandler->GetAsyncBatchNum() >= asyncScheduleRound ||
             enginePerDP->lastScheduleEmpty) {
@@ -502,7 +478,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         }
 
         // 进入本轮调度时刻 - 上轮下发完成时刻 = 推理返回response时间
-        auto responseRet = high_resolution_clock::now(); // 进入本轮调度时刻
+        auto responseRet = high_resolution_clock::now();  // 进入本轮调度时刻
         auto responseCost = duration_cast<milliseconds>(responseRet - asynExeBegin).count();
         int64_t totalIterCost = scheduleCost + responseCost;
         if (totalIterCost > LOG_TIME_THRESHOLD_MS) {
@@ -520,7 +496,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         enginePerDP->scheduler->FetchSeqGeneratedTokens(
             enginePerDP->modelExecOutputHandler->GetSeqIdToOutputTokenQueue());
         std::unordered_set<SequenceId> finishedSeqIds =
-        enginePerDP->scheduler->FetchFinishedSeqIds(enginePerDP->modelExecOutputHandler->GetFinishedSeqIds());
+            enginePerDP->scheduler->FetchFinishedSeqIds(enginePerDP->modelExecOutputHandler->GetFinishedSeqIds());
         enginePerDP->scheduler->FetchExceptionSeqIds(enginePerDP->modelExecOutputHandler->GetExceptionSeqIds());
         enginePerDP->scheduler->FetchAbortedReqIds(enginePerDP->abortedRequestIds);
         enginePerDP->scheduler->CollectAndClearAbortedParallelSeqGroups();
@@ -547,11 +523,11 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
                         .Metric("num_scheduled_tokens", (*iter)->tokenChunkSize_);
                 }));
             PROF(spanSchedule.Attr("batchType", static_cast<int>(scheduleOut.forwardMode_)));
-        if (schedulerConfig_->layerwiseDisaggregated) {
-            MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:"
-                << "batchType is: " << static_cast<int>(scheduleOut.forwardMode_)
-                << ", batchsize is: " << scheduleOut.scheduledSeqGroups_.size());
-        }
+            if (schedulerConfig_->layerwiseDisaggregated) {
+                MINDIE_LLM_LOG_INFO("[layerwiseDisaggregated|Scheduler]:"
+                                    << "batchType is: " << static_cast<int>(scheduleOut.forwardMode_)
+                                    << ", batchsize is: " << scheduleOut.scheduledSeqGroups_.size());
+            }
             PROF(spanSchedule.SpanEnd());
         }
 
@@ -563,7 +539,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
             for (auto tmpOut : allDpOuts) {
                 for (auto scOut : tmpOut) {
                     if (scOut.forwardMode_ == ForwardMode::PREFILL) {
-                        scheduleOut.forwardMode_ = ForwardMode::PREFILL;    // 陪跑也需要改成和下发一致的类型, 默认decode
+                        scheduleOut.forwardMode_ = ForwardMode::PREFILL;  // 陪跑也需要改成和下发一致的类型, 默认decode
                         break;
                     }
                 }
@@ -583,12 +559,12 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         };
 
         if (!scheduleOut.IsEmpty() || (isCentralizedThreadCCReady_ && seqGroupMetadata.maxBatchSize > 0)) {
-            for (const auto& scheduledSeqGroup : scheduleOut.scheduledSeqGroups_) {
+            for (const auto &scheduledSeqGroup : scheduleOut.scheduledSeqGroups_) {
                 if (scheduledSeqGroup->seqGroup_->IsSimulateRequest()) {
                     MINDIE_LLM_LOG_DEBUG("[SimulateInference] Building ExecuteRequest, forwardMode="
-                                        << static_cast<int>(scheduleOut.forwardMode_)
-                                        << ", batchSize=" << scheduleOut.scheduledSeqGroups_.size()
-                                        << ", requestId=" << scheduledSeqGroup->seqGroup_->requestId);
+                                         << static_cast<int>(scheduleOut.forwardMode_)
+                                         << ", batchSize=" << scheduleOut.scheduledSeqGroups_.size()
+                                         << ", requestId=" << scheduledSeqGroup->seqGroup_->requestId);
                 }
             }
             ExecuteModelRequestPtr request =
@@ -626,7 +602,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
             // 边云协同场景，记录batch下发的类型
             layerwiseMixin_.LwdPrepareBatch(schedulerConfig_->layerwiseDisaggregated, scheduleOut);
             layerwiseMixin_.LwdEngineAddBatchCnt(schedulerConfig_->layerwiseDisaggregated,
-                enginePerDP->scheduler->GetStagePolicy(), scheduleOut);
+                                                 enginePerDP->scheduler->GetStagePolicy(), scheduleOut);
         } else {
             // 多dp下其他dp的batch不空(分布式)，需要陪跑
             if (seqGroupMetadata.maxBatchSize > 0 || DistDecodeAcquireDummyQuota(true, enginePerDP)) {
@@ -664,7 +640,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         std::unordered_set<SequenceId> abortedSeqIds = enginePerDP->scheduler->ClearAndReturnTerminatedSeqIds();
         enginePerDP->TGCleanupSeqIds_.insert(abortedSeqIds.begin(), abortedSeqIds.end());
         enginePerDP->TGCleanupSeqIds_.insert(scheduleOut.recomputeSeqIds_.begin(), scheduleOut.recomputeSeqIds_.end());
-        
+
         // 集中式场景下，所有DP的请求在每个DP的TG里都缓存了上下文cache，因此cache清理也需要gather后发送给所有dp
         std::unordered_set<SequenceId> allDPCleanSeqIds =
             (!isCentralizedThreadCCReady_)
@@ -677,7 +653,7 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
                 MINDIE_LLM_LOG_ERROR("Call AsyncTGCleanup failed.");
                 throw runtime_error("The async text generator clean up failed. Check logs.");
             }
-            enginePerDP->TGCleanupSeqIds_.clear(); // clear the container after send success
+            enginePerDP->TGCleanupSeqIds_.clear();  // clear the container after send success
         }
         // 边云协同场景，需要额外清理EOS
         LayerwiseEosClean(schedulerConfig_->layerwiseDisaggregated, eosCleanupSeqIds, enginePerDP);
@@ -686,18 +662,17 @@ void LlmEngine::SchedulerThreadEntry(size_t localDPRank)
         scheduleCost = duration_cast<milliseconds>(scheduleEnd - scheduleBegin).count();
         if (scheduleCost > LOG_TIME_THRESHOLD_MS) {
             MINDIE_LLM_LOG_INFO_REQUEST("[Scheduler|Schedule-Batch] Schedule too long :"
-                                << scheduleCost << ", DP RankId:" << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
-                                << ",cur dp batch size:" << scheduleOut.scheduledSeqGroups_.size()
-                                << ", all dp max batch size:" << seqGroupMetadata.maxBatchSize
-                                << ", forward mode:" << static_cast<int>(scheduleOut.forwardMode_)
-                                << ", schedulingRound:" << schedulingRound);
+                                        << scheduleCost << ", DP RankId:" << (dpRankId_ > 0 ? dpRankId_ : localDPRank)
+                                        << ",cur dp batch size:" << scheduleOut.scheduledSeqGroups_.size()
+                                        << ", all dp max batch size:" << seqGroupMetadata.maxBatchSize
+                                        << ", forward mode:" << static_cast<int>(scheduleOut.forwardMode_)
+                                        << ", schedulingRound:" << schedulingRound);
         }
     }
 }
 
 // release transferred kv blocks for P and schedule/execute kv pull for D
-void LlmEngine::ScheduleExecTransfer(std::shared_ptr<EnginePerDP> &engine) const
-{
+void LlmEngine::ScheduleExecTransfer(std::shared_ptr<EnginePerDP> &engine) const {
     if (role_ == Role::PnD || role_ == Role::FlexPnD) {
         return;
     }
@@ -736,8 +711,7 @@ void LlmEngine::ScheduleExecTransfer(std::shared_ptr<EnginePerDP> &engine) const
     PROF(spanCall.SpanEnd());
 }
 
-void LlmEngine::SyncBatchInfoAcrossNodes(SequenceGroupMetaDatas &metadata) const
-{
+void LlmEngine::SyncBatchInfoAcrossNodes(SequenceGroupMetaDatas &metadata) const {
     // 1. 集合通信获取各节点的batchInfo
     std::vector<torch::Tensor> batchInfo;
     batchInfo.emplace_back(
@@ -752,15 +726,14 @@ void LlmEngine::SyncBatchInfoAcrossNodes(SequenceGroupMetaDatas &metadata) const
             metadata.maxBatchSize = std::max(metadata.maxBatchSize, info[0].item<int64_t>());
             metadata.maxSeqLen = std::max(metadata.maxSeqLen, info[1].item<int64_t>());
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         MINDIE_LLM_LOG_ERROR("SyncBatchInfoAcrossNodes failed: batchInfos is invalid.");
     }
 }
 
 ExecuteModelRequestPtr LlmEngine::BuildExecuteModelRequest(std::vector<std::vector<SequenceGroupMetaDatas>> &metadatas,
                                                            std::vector<std::vector<SchedulerOutputs>> &schedulerOutputs,
-                                                           bool distributedEnable, int dpRankId)
-{
+                                                           bool distributedEnable, int dpRankId) {
     ExecuteModelRequestPtr request = std::make_unique<model_execute_data::ExecuteModelRequest>();
     for (size_t i = 0; i < metadatas.size(); i++) {
         SequenceGroupMetaDatas dpMetas = metadatas.at(i).at(0);
@@ -779,8 +752,7 @@ ExecuteModelRequestPtr LlmEngine::BuildExecuteModelRequest(std::vector<std::vect
 }
 
 // TG: TextGenerator
-TGCleanupRequestPtr LlmEngine::BuildTGCleanupRequest(std::unordered_set<SequenceId> &TGCleanupSeqIds)
-{
+TGCleanupRequestPtr LlmEngine::BuildTGCleanupRequest(std::unordered_set<SequenceId> &TGCleanupSeqIds) {
     TGCleanupRequestPtr request = std::make_unique<model_execute_data::TGCleanupRequest>();
     for (SequenceId seqId : TGCleanupSeqIds) {
         request->add_seq_ids(seqId);
@@ -790,8 +762,7 @@ TGCleanupRequestPtr LlmEngine::BuildTGCleanupRequest(std::unordered_set<Sequence
 }
 
 // 统计前一批的每毫秒执行的token数
-void LlmEngine::CalculateThroughput(std::shared_ptr<EnginePerDP> enginePerDP) const
-{
+void LlmEngine::CalculateThroughput(std::shared_ptr<EnginePerDP> enginePerDP) const {
     if (enginePerDP->lastExecuteStartTime_ != INVALID_TIME) {
         auto now = std::chrono::high_resolution_clock::now();
         auto lashBatchSpendTime =
@@ -809,8 +780,7 @@ void LlmEngine::CalculateThroughput(std::shared_ptr<EnginePerDP> enginePerDP) co
     }
 }
 
-void LlmEngine::RecordEngineMetrics(SchedulerOutputs &scOut, std::shared_ptr<EnginePerDP> enginePerDP)
-{
+void LlmEngine::RecordEngineMetrics(SchedulerOutputs &scOut, std::shared_ptr<EnginePerDP> enginePerDP) {
     size_t tokenCount = (scOut.forwardMode_ == ForwardMode::PREFILL)
                             ? 0
                             : scOut.scheduledSeqGroups_.size() * (1 + schedulerConfig_->speculationGamma);
@@ -837,13 +807,11 @@ void LlmEngine::RecordEngineMetrics(SchedulerOutputs &scOut, std::shared_ptr<Eng
 }
 
 LlmEnginePtr MakeLlmEngine(SchedulerConfig schedulerConfig, std::vector<IExecutorSPtr> executors,
-                            ForwardRespToManagerCall cb, Role pdRole, std::atomic<bool> *engineReadyFlag)
-{
+                           ForwardRespToManagerCall cb, Role pdRole, std::atomic<bool> *engineReadyFlag) {
     return std::make_unique<LlmEngine>(schedulerConfig, executors, cb, pdRole, engineReadyFlag);
 }
 
-EngineMetric LlmEngine::CollectEngineMetric(size_t localDPRank)
-{
+EngineMetric LlmEngine::CollectEngineMetric(size_t localDPRank) {
     EngineMetric engineMetric{};
 
     EnginePerDPSPtr &engine = enginePerDPs_.at(localDPRank);
@@ -854,42 +822,32 @@ EngineMetric LlmEngine::CollectEngineMetric(size_t localDPRank)
     return engineMetric;
 }
 
-void LlmEngine::AccumulateDpMetricInto(size_t dpIndex, EngineMetric &aggregatedMetric)
-{
+void LlmEngine::AccumulateDpMetricInto(size_t dpIndex, EngineMetric &aggregatedMetric) {
     EngineMetric metric = CollectEngineMetric(dpIndex);
     MINDIE_LLM_LOG_DEBUG("DP[" << dpIndex << "] metrics: "
-        << "freeNpuBlock=" << metric.schedulerInfo.blockInfo.freeNpuBlockNum_
-        << ", totalNpuBlock=" << metric.schedulerInfo.blockInfo.totalNpuBlockNum_
-        << ", freeCpuBlock=" << metric.schedulerInfo.blockInfo.freeCpuBlockNum_
-        << ", totalCpuBlock=" << metric.schedulerInfo.blockInfo.totalCpuBlockNum_
-        << ", waitingReq=" << metric.schedulerInfo.reqsInfo.waitingRequestNum_
-        << ", runningReq=" << metric.schedulerInfo.reqsInfo.runningRequestNum_
-        << ", swappedReq=" << metric.schedulerInfo.reqsInfo.swappedRequestNum_
-        << ", allRadixMatch=" << metric.schedulerInfo.reqsInfo.allRadixMatchNum_
-        << ", npuRadixHit=" << metric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_
-        << ", preemptCount=" << metric.schedulerInfo.reqsInfo.cumulativePreemptCount_
-        << ", prefillTput=" << metric.prefillThroughput_
-        << ", decodeTput=" << metric.decodeThroughput_);
+                               << "freeNpuBlock=" << metric.schedulerInfo.blockInfo.freeNpuBlockNum_
+                               << ", totalNpuBlock=" << metric.schedulerInfo.blockInfo.totalNpuBlockNum_
+                               << ", freeCpuBlock=" << metric.schedulerInfo.blockInfo.freeCpuBlockNum_
+                               << ", totalCpuBlock=" << metric.schedulerInfo.blockInfo.totalCpuBlockNum_
+                               << ", waitingReq=" << metric.schedulerInfo.reqsInfo.waitingRequestNum_
+                               << ", runningReq=" << metric.schedulerInfo.reqsInfo.runningRequestNum_
+                               << ", swappedReq=" << metric.schedulerInfo.reqsInfo.swappedRequestNum_
+                               << ", allRadixMatch=" << metric.schedulerInfo.reqsInfo.allRadixMatchNum_
+                               << ", npuRadixHit=" << metric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_
+                               << ", preemptCount=" << metric.schedulerInfo.reqsInfo.cumulativePreemptCount_
+                               << ", prefillTput=" << metric.prefillThroughput_
+                               << ", decodeTput=" << metric.decodeThroughput_);
 
-    aggregatedMetric.schedulerInfo.blockInfo.freeNpuBlockNum_ +=
-        metric.schedulerInfo.blockInfo.freeNpuBlockNum_;
-    aggregatedMetric.schedulerInfo.blockInfo.freeCpuBlockNum_ +=
-        metric.schedulerInfo.blockInfo.freeCpuBlockNum_;
-    aggregatedMetric.schedulerInfo.blockInfo.totalNpuBlockNum_ +=
-        metric.schedulerInfo.blockInfo.totalNpuBlockNum_;
-    aggregatedMetric.schedulerInfo.blockInfo.totalCpuBlockNum_ +=
-        metric.schedulerInfo.blockInfo.totalCpuBlockNum_;
+    aggregatedMetric.schedulerInfo.blockInfo.freeNpuBlockNum_ += metric.schedulerInfo.blockInfo.freeNpuBlockNum_;
+    aggregatedMetric.schedulerInfo.blockInfo.freeCpuBlockNum_ += metric.schedulerInfo.blockInfo.freeCpuBlockNum_;
+    aggregatedMetric.schedulerInfo.blockInfo.totalNpuBlockNum_ += metric.schedulerInfo.blockInfo.totalNpuBlockNum_;
+    aggregatedMetric.schedulerInfo.blockInfo.totalCpuBlockNum_ += metric.schedulerInfo.blockInfo.totalCpuBlockNum_;
 
-    aggregatedMetric.schedulerInfo.reqsInfo.waitingRequestNum_ +=
-        metric.schedulerInfo.reqsInfo.waitingRequestNum_;
-    aggregatedMetric.schedulerInfo.reqsInfo.runningRequestNum_ +=
-        metric.schedulerInfo.reqsInfo.runningRequestNum_;
-    aggregatedMetric.schedulerInfo.reqsInfo.swappedRequestNum_ +=
-        metric.schedulerInfo.reqsInfo.swappedRequestNum_;
-    aggregatedMetric.schedulerInfo.reqsInfo.allRadixMatchNum_ +=
-        metric.schedulerInfo.reqsInfo.allRadixMatchNum_;
-    aggregatedMetric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_ +=
-        metric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_;
+    aggregatedMetric.schedulerInfo.reqsInfo.waitingRequestNum_ += metric.schedulerInfo.reqsInfo.waitingRequestNum_;
+    aggregatedMetric.schedulerInfo.reqsInfo.runningRequestNum_ += metric.schedulerInfo.reqsInfo.runningRequestNum_;
+    aggregatedMetric.schedulerInfo.reqsInfo.swappedRequestNum_ += metric.schedulerInfo.reqsInfo.swappedRequestNum_;
+    aggregatedMetric.schedulerInfo.reqsInfo.allRadixMatchNum_ += metric.schedulerInfo.reqsInfo.allRadixMatchNum_;
+    aggregatedMetric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_ += metric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_;
     aggregatedMetric.schedulerInfo.reqsInfo.cumulativePreemptCount_ +=
         metric.schedulerInfo.reqsInfo.cumulativePreemptCount_;
 
@@ -897,8 +855,7 @@ void LlmEngine::AccumulateDpMetricInto(size_t dpIndex, EngineMetric &aggregatedM
     aggregatedMetric.decodeThroughput_ += metric.decodeThroughput_;
 }
 
-EngineMetric LlmEngine::CollectAllDpEngineMetric()
-{
+EngineMetric LlmEngine::CollectAllDpEngineMetric() {
     EngineMetric aggregatedMetric{};
     size_t dpSize = enginePerDPs_.size();
     if (dpSize == 0) {
@@ -914,24 +871,24 @@ EngineMetric LlmEngine::CollectAllDpEngineMetric()
     aggregatedMetric.prefillThroughput_ /= static_cast<float>(dpSize);
     aggregatedMetric.decodeThroughput_ /= static_cast<float>(dpSize);
 
-    MINDIE_LLM_LOG_DEBUG("Aggregated metrics from " << dpSize << " DP ranks: "
-        << "totalFreeNpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.freeNpuBlockNum_
-        << ", totalNpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.totalNpuBlockNum_
-        << ", totalFreeCpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.freeCpuBlockNum_
-        << ", totalCpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.totalCpuBlockNum_
-        << ", totalWaitingReq=" << aggregatedMetric.schedulerInfo.reqsInfo.waitingRequestNum_
-        << ", totalRunningReq=" << aggregatedMetric.schedulerInfo.reqsInfo.runningRequestNum_
-        << ", totalSwappedReq=" << aggregatedMetric.schedulerInfo.reqsInfo.swappedRequestNum_
-        << ", totalAllRadixMatch=" << aggregatedMetric.schedulerInfo.reqsInfo.allRadixMatchNum_
-        << ", totalNpuRadixHit=" << aggregatedMetric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_
-        << ", totalPreemptCount=" << aggregatedMetric.schedulerInfo.reqsInfo.cumulativePreemptCount_
-        << ", avgPrefillTput=" << aggregatedMetric.prefillThroughput_
-        << ", avgDecodeTput=" << aggregatedMetric.decodeThroughput_);
+    MINDIE_LLM_LOG_DEBUG("Aggregated metrics from "
+                         << dpSize << " DP ranks: "
+                         << "totalFreeNpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.freeNpuBlockNum_
+                         << ", totalNpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.totalNpuBlockNum_
+                         << ", totalFreeCpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.freeCpuBlockNum_
+                         << ", totalCpuBlock=" << aggregatedMetric.schedulerInfo.blockInfo.totalCpuBlockNum_
+                         << ", totalWaitingReq=" << aggregatedMetric.schedulerInfo.reqsInfo.waitingRequestNum_
+                         << ", totalRunningReq=" << aggregatedMetric.schedulerInfo.reqsInfo.runningRequestNum_
+                         << ", totalSwappedReq=" << aggregatedMetric.schedulerInfo.reqsInfo.swappedRequestNum_
+                         << ", totalAllRadixMatch=" << aggregatedMetric.schedulerInfo.reqsInfo.allRadixMatchNum_
+                         << ", totalNpuRadixHit=" << aggregatedMetric.schedulerInfo.reqsInfo.npuRadixMatchHitNum_
+                         << ", totalPreemptCount=" << aggregatedMetric.schedulerInfo.reqsInfo.cumulativePreemptCount_
+                         << ", avgPrefillTput=" << aggregatedMetric.prefillThroughput_
+                         << ", avgDecodeTput=" << aggregatedMetric.decodeThroughput_);
     return aggregatedMetric;
 }
 
-void LlmEngine::SetPrefillPercentage(uint32_t prefillPercentage)
-{
+void LlmEngine::SetPrefillPercentage(uint32_t prefillPercentage) {
     for (size_t i = 0; i < enginePerDPs_.size(); i++) {
         EnginePerDPSPtr enginePerDP = enginePerDPs_.at(i);
         if (enginePerDP != nullptr && enginePerDP->scheduler != nullptr) {
@@ -943,8 +900,7 @@ void LlmEngine::SetPrefillPercentage(uint32_t prefillPercentage)
     }
 }
 
-void LlmEngine::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
-{
+void LlmEngine::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo) {
     if (enginePerDPs_.empty()) {
         MINDIE_LLM_LOG_ERROR("No enginePerDp available to execute recover command.");
         return;
@@ -967,15 +923,13 @@ void LlmEngine::ExecuteRecoverCommand(RecoverCommandInfo &commandInfo)
     }
 }
 
-void LlmEngine::SetupLatencyPredictor(
-    const std::chrono::high_resolution_clock::time_point& batchExecuteStartTime,
-    int localDPRank)
-{
-    auto& recorder = DynamicBatchRecorder::GetInstance(static_cast<size_t>(localDPRank));
+void LlmEngine::SetupLatencyPredictor(const std::chrono::high_resolution_clock::time_point &batchExecuteStartTime,
+                                      int localDPRank) {
+    auto &recorder = DynamicBatchRecorder::GetInstance(static_cast<size_t>(localDPRank));
     auto predictor = recorder.GetLatencyPredictor();
     if (predictor != nullptr) {
         predictor->SetBatchExecuteStartTime(batchExecuteStartTime);
     }
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

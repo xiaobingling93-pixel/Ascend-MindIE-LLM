@@ -35,6 +35,7 @@ def make_mixed_eos(eos_token_id: List[Union[int, List[int]]]):
 
     def mixed_eos(output_ids_without_padding):
         return reduce(lambda acc, f: acc or f(output_ids_without_padding), eos_funcs, False)
+
     return mixed_eos
 
 

@@ -11,6 +11,7 @@
  */
 
 #include "simulate_request_executor.h"
+
 #include "infer_instances.h"
 #include "log.h"
 
@@ -18,25 +19,18 @@ namespace mindie_llm {
 
 constexpr uint32_t SIMULATE_WAIT_TIME_SECONDS = 5;
 
-SimulateRequestExecutor::SimulateRequestExecutor(ConstructTag, InferReqType reqType)
-    : reqType_(reqType)
-{
+SimulateRequestExecutor::SimulateRequestExecutor(ConstructTag, InferReqType reqType) : reqType_(reqType) {
     ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-        "SimulateRequestExecutor: Created with reqType=" << static_cast<int>(reqType));
+              "SimulateRequestExecutor: Created with reqType=" << static_cast<int>(reqType));
 }
 
-std::shared_ptr<SimulateRequestExecutor> SimulateRequestExecutor::Create(InferReqType reqType)
-{
+std::shared_ptr<SimulateRequestExecutor> SimulateRequestExecutor::Create(InferReqType reqType) {
     return std::make_shared<SimulateRequestExecutor>(ConstructTag{}, reqType);
 }
 
-SimulateResult SimulateRequestExecutor::RunSimulateOnce()
-{
-    return RunSimulateOnce(SIMULATE_WAIT_TIME_SECONDS);
-}
+SimulateResult SimulateRequestExecutor::RunSimulateOnce() { return RunSimulateOnce(SIMULATE_WAIT_TIME_SECONDS); }
 
-SimulateResult SimulateRequestExecutor::RunSimulateOnce(uint32_t waitTime)
-{
+SimulateResult SimulateRequestExecutor::RunSimulateOnce(uint32_t waitTime) {
     isFinish_.store(false);
     {
         std::unique_lock<std::mutex> locker(mutex_);
@@ -48,22 +42,22 @@ SimulateResult SimulateRequestExecutor::RunSimulateOnce(uint32_t waitTime)
     RequestSPtr request = CreateSimulateRequest();
     if (!request) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateRequestExecutor: Failed to create simulate request");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateRequestExecutor: Failed to create simulate request");
         return {SimulateResult::Status::ERROR, "Failed to create simulate request"};
     }
 
     std::string requestId = request->requestId;
     ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER,
-        "SimulateRequestExecutor: Running. requestId=" << requestId << ", waitTime=" << waitTime << "s");
+               "SimulateRequestExecutor: Running. requestId=" << requestId << ", waitTime=" << waitTime << "s");
 
     SetSimulateCallback(request);
 
     Status status = GetInferInstance()->Process(request);
     if (!status.IsOk()) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateRequestExecutor: Failed to submit. requestId=" << requestId);
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateRequestExecutor: Failed to submit. requestId=" << requestId);
         return {SimulateResult::Status::ERROR, "Failed to submit simulate request"};
     }
 
@@ -75,8 +69,7 @@ SimulateResult SimulateRequestExecutor::RunSimulateOnce(uint32_t waitTime)
     return result;
 }
 
-RequestSPtr SimulateRequestExecutor::CreateSimulateRequest()
-{
+RequestSPtr SimulateRequestExecutor::CreateSimulateRequest() {
     auto request = std::make_shared<Request>();
 
     // 使用正常方式生成 requestId，通过 isSimulateRequest 字段标识虚推
@@ -93,15 +86,14 @@ RequestSPtr SimulateRequestExecutor::CreateSimulateRequest()
     request->doSample = false;
     request->ignoreEos = false;
 
-    ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER,
-        "SimulateRequestExecutor: Created. requestId=" << request->requestId
-        << ", isSimulateRequest=true, reqType=" << static_cast<int>(reqType_));
+    ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER, "SimulateRequestExecutor: Created. requestId="
+                                                << request->requestId
+                                                << ", isSimulateRequest=true, reqType=" << static_cast<int>(reqType_));
 
     return request;
 }
 
-void SimulateRequestExecutor::SetSimulateCallback(RequestSPtr request)
-{
+void SimulateRequestExecutor::SetSimulateCallback(RequestSPtr request) {
     // 使用 weak_ptr 安全捕获，避免悬空指针
     std::weak_ptr<SimulateRequestExecutor> weakSelf = shared_from_this();
 
@@ -120,15 +112,14 @@ void SimulateRequestExecutor::SetSimulateCallback(RequestSPtr request)
 
         std::unique_lock<std::mutex> locker(self->mutex_);
         ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-            "SimulateRequestExecutor: Callback. requestId=" << response->reqId << ", isEos=" << response->isEos);
+                  "SimulateRequestExecutor: Callback. requestId=" << response->reqId << ", isEos=" << response->isEos);
 
         self->responseQueue_.push(response);
         self->cv_.notify_one();
     };
 }
 
-SimulateResult SimulateRequestExecutor::WaitForSimulateResult(const std::string& requestId, uint32_t waitTime)
-{
+SimulateResult SimulateRequestExecutor::WaitForSimulateResult(const std::string& requestId, uint32_t waitTime) {
     std::cv_status status = std::cv_status::no_timeout;
     auto lastTimePoint = std::chrono::steady_clock::now() + std::chrono::seconds(waitTime);
     ResponseSPtr response = nullptr;
@@ -147,45 +138,43 @@ SimulateResult SimulateRequestExecutor::WaitForSimulateResult(const std::string&
 
     if (response == nullptr) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateRequestExecutor: Timeout. requestId=" << requestId);
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateRequestExecutor: Timeout. requestId=" << requestId);
         return {SimulateResult::Status::TIMEOUT, "Engine callback timeout"};
     }
 
     if (!HealthManager::GetHealth()) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateRequestExecutor: Health status changed. requestId=" << requestId);
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateRequestExecutor: Health status changed. requestId=" << requestId);
         return {SimulateResult::Status::ERROR, "Health status changed during health detector"};
     }
 
     if (!ParseTokensFromResponse(response)) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateRequestExecutor: Failed to parse tokens. requestId=" << requestId);
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateRequestExecutor: Failed to parse tokens. requestId=" << requestId);
         return {SimulateResult::Status::ERROR, "Failed to get engine response"};
     }
 
-    ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER,
-        "SimulateRequestExecutor: Success. requestId=" << requestId);
+    ULOG_DEBUG(SUBMODLE_NAME_HEALTHCHECKER, "SimulateRequestExecutor: Success. requestId=" << requestId);
     return {SimulateResult::Status::SUCCESS, "healthy"};
 }
 
-bool SimulateRequestExecutor::ParseTokensFromResponse(const ResponseSPtr& response)
-{
+bool SimulateRequestExecutor::ParseTokensFromResponse(const ResponseSPtr& response) {
     if (response->responseContents.empty()) {
         ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-            "SimulateRequestExecutor: Response contents is empty");
+                   GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                   "SimulateRequestExecutor: Response contents is empty");
         return false;
     }
 
     for (const auto& content : response->responseContents) {
         if (content.seqId == 0 || content.outTokenIds.empty()) {
             ULOG_ERROR(SUBMODLE_NAME_HEALTHCHECKER,
-                GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
-                "SimulateRequestExecutor: Invalid response content, seqId=" << content.seqId
-                << ", outTokenIds.size=" << content.outTokenIds.size());
+                       GenerateHealthCheckerErrCode(ERROR, SUBMODLE_FEATURE_SECURE, CHECK_ERROR),
+                       "SimulateRequestExecutor: Invalid response content, seqId="
+                           << content.seqId << ", outTokenIds.size=" << content.outTokenIds.size());
             return false;
         }
     }
@@ -193,19 +182,17 @@ bool SimulateRequestExecutor::ParseTokensFromResponse(const ResponseSPtr& respon
     return true;
 }
 
-void SimulateRequestExecutor::OnSimulateTimeout(const std::string& requestId)
-{
+void SimulateRequestExecutor::OnSimulateTimeout(const std::string& requestId) {
     RequestIdNew reqId{requestId};
     Status stopResult = GetInferInstance()->ControlRequest(reqId, OperationV2::STOP);
     if (stopResult.StatusCode() != Error::Code::OK) {
         ULOG_WARN(SUBMODLE_NAME_HEALTHCHECKER,
-            GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
-            "SimulateRequestExecutor: Failed to stop simulate inference. requestId=" << requestId);
+                  GenerateHealthCheckerErrCode(WARNING, SUBMODLE_FEATURE_SECURE, CHECK_WARNING),
+                  "SimulateRequestExecutor: Failed to stop simulate inference. requestId=" << requestId);
     } else {
         ULOG_INFO(SUBMODLE_NAME_HEALTHCHECKER,
-            "SimulateRequestExecutor: Stopped simulate inference. requestId=" << requestId);
+                  "SimulateRequestExecutor: Stopped simulate inference. requestId=" << requestId);
     }
 }
 
-} // namespace mindie_llm
-
+}  // namespace mindie_llm

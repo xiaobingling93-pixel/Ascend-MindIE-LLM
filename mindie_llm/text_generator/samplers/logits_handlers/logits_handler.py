@@ -16,11 +16,7 @@ class LogitsHandler:
     def __init__(self, params: HandlerParams):
         self.params = params
 
-    def __call__(
-        self,
-        logits: backend.Tensor,
-        metadata: SamplingMetadata
-    ) -> backend.Tensor:
+    def __call__(self, logits: backend.Tensor, metadata: SamplingMetadata) -> backend.Tensor:
         raise NotImplementedError(f"{self.__class__} is abstract, needed to be implemented.")
 
 
@@ -28,11 +24,7 @@ class LogitsHandlerList(list):
     def __init__(self):
         super().__init__()
 
-    def __call__(
-        self,
-        logits: backend.Tensor,
-        metadata: SamplingMetadata
-    ) -> backend.Tensor:
+    def __call__(self, logits: backend.Tensor, metadata: SamplingMetadata) -> backend.Tensor:
         for handler in self:
             logits = handler(logits, metadata)
         return logits

@@ -14,7 +14,7 @@ from mindie_llm.runtime.utils.npu.device_utils import DeviceType
 from mindie_llm.runtime.model_runner.forward_context_exp import get_mc2_token_capacity
 from mindie_llm.utils.log.logging import logger
 
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info
@@ -31,10 +31,7 @@ def cal_num_tokens_per_device(parallel_mgr, forward_ctx):
     else:
         num_tokens_per_device = forward_ctx.dp_metadata.max_tokens_across_dp_cpu
     # TP + flash_comm
-    if (
-        parallel_mgr.get(ParallelType.ATTN_TP).is_enabled()
-        and forward_ctx.batch_descriptor.is_flash_comm_enabled
-    ):
+    if parallel_mgr.get(ParallelType.ATTN_TP).is_enabled() and forward_ctx.batch_descriptor.is_flash_comm_enabled:
         tp_size = parallel_mgr.get(ParallelType.ATTN_TP).group_size
         num_tokens_per_device = (num_tokens_per_device + tp_size - 1) // tp_size
     return num_tokens_per_device
@@ -134,10 +131,7 @@ class MC2Strategy(MoECommStrategyBase):
 
         elif device_type == DeviceType.ASCEND_910_93:
             # 910C: strict capacity check
-            if (
-                num_tokens_per_device > get_mc2_token_capacity()
-                or num_experts_per_ep_rank > 24
-            ):
+            if num_tokens_per_device > get_mc2_token_capacity() or num_experts_per_ep_rank > 24:
                 return False
         else:
             return False
@@ -208,6 +202,7 @@ class AllGatherStrategy(MoECommStrategyBase):
 
 # Strategy selection order: first applicable strategy is used
 MOE_COMM_STRATEGIES = [
+    FusedMC2Strategy,  # P0: Optimal (910C Fused MC2)
     MC2Strategy,  # P1: High perf (large cluster/decode)
     All2AllStrategy,  # P2: Fallback for prefill/specific cases
     AllGatherStrategy,  # P3: Universal fallback

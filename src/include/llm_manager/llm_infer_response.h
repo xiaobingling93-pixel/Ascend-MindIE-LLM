@@ -14,15 +14,16 @@
 #define MIES_LLM_INFER_RESPONSE_H
 
 #include <shared_mutex>
-#include "infer_response.h"
-#include "infer_request_id.h"
+
 #include "infer_callback.h"
-#include "status.h"
+#include "infer_request_id.h"
+#include "infer_response.h"
 #include "infer_tensor.h"
+#include "status.h"
 namespace mindie_llm {
 class LlmInferResponse : public mindie_llm::InferResponse {
-public:
-    explicit LlmInferResponse(const mindie_llm::InferRequestId &reqId) noexcept : requestId_{ reqId } {}
+   public:
+    explicit LlmInferResponse(const mindie_llm::InferRequestId &reqId) noexcept : requestId_{reqId} {}
 
     const mindie_llm::InferRequestId &GetRequestId() const override;
 
@@ -47,18 +48,19 @@ public:
     Status AddMetrics(const std::vector<uint64_t> &metrics) noexcept;
 
     uint32_t GetIterTimes() const override;
- 
+
     void SetIterTimes(uint32_t iterTimes);
 
     uint32_t GetTransferFlag() const override;
 
     void SetTransferFlag(uint32_t flag);
-private:
+
+   private:
     std::unordered_map<std::string, std::shared_ptr<mindie_llm::InferTensor>> outputs_;
-    bool isEos_{ false };
+    bool isEos_{false};
     mindie_llm::InferRequestId requestId_;
     mindie_llm::SendResponseCallback4Request callback_;
-    uint32_t iterTimes_{ 0U };
+    uint32_t iterTimes_{0U};
 
     // flags_ = 1, 请求正常结束
     // flags_ = 2, 请求被主动CANCEL或STOP，用户不感知，丢弃响应
@@ -66,11 +68,11 @@ private:
     // flags_ = 4, 请求输入校验异常，响应输出为空，err_msg非空
     // flags_ = 5, 请求因达到最大序列长度而结束，响应为最后一轮迭代输出
     // flags_ = 6, 请求因达到最大输出长度（包括请求和模型粒度）而结束，响应为最后一轮迭代输出
-    uint32_t flags_{ 0U };
+    uint32_t flags_{0U};
 
     // 传输状态
-    uint32_t transferFlag_{ 0U };
+    uint32_t transferFlag_{0U};
     mutable std::shared_mutex mutex_;
 };
-}
-#endif // MIES_LLM_INFER_RESPONSE_H
+}  // namespace mindie_llm
+#endif  // MIES_LLM_INFER_RESPONSE_H

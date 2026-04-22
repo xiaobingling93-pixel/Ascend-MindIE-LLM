@@ -21,7 +21,6 @@ from mindie_llm.text_generator.samplers.token_selectors import get_selector_regi
 from mindie_llm.text_generator.utils.config import SamplerConfig, HandlingBackend
 from mindie_llm.text_generator.utils.sampling_output import SamplingOutput
 from mindie_llm.text_generator.utils.sampling_metadata import SamplingMetadata
-from mindie_llm.utils.log.logging import logger, print_log
 
 
 class SelectorType(IntEnum):
@@ -52,9 +51,9 @@ class Sampler:
         self.handlers = LogitsHandlerList()
         self.metadata_cache = None
         self.need_configuring = False
-        self.selector_params = SelectorParams(npu_id=self.npu_id,
-                                              num_threads=self.num_threads,
-                                              splitfuse_enabled=self.splitfuse_enabled)
+        self.selector_params = SelectorParams(
+            npu_id=self.npu_id, num_threads=self.num_threads, splitfuse_enabled=self.splitfuse_enabled
+        )
 
         # There will be greedy_search_selector, sampling_selector and beam_search_selector
         # in selectors after initialisation.
@@ -62,17 +61,14 @@ class Sampler:
         self.selector = None
         self.fusion_sampling = True
 
-    def __call__(
-        self,
-        batch_logits: Any,
-        sampling_metadata: SamplingMetadata
-    ) -> SamplingOutput:
+    def __call__(self, batch_logits: Any, sampling_metadata: SamplingMetadata) -> SamplingOutput:
         """
         The shape of two key outputs in SamplingOutput:
             token_ids: [num_seqs, num_new_tokens]
             top_token_ids: [num_seqs, num_new_tokens, num_top_tokens]
         """
         from mindie_llm.utils.prof.profiler import span_start, span_end, tensor_attr, span_attr, Level
+
         prof = span_start(name="Sampler", level=Level.DETAILED)
         prof = span_attr(prof, "batch_logits", lambda: tensor_attr(batch_logits))
         prof = span_attr(prof, "sampling_metadata", lambda: str(sampling_metadata))
@@ -112,7 +108,7 @@ class Sampler:
             cumulative_logprobs=torch.zeros(batch_size, dtype=torch.float32),
             num_new_tokens=torch.ones(batch_size, dtype=torch.int64, device="npu"),
             num_new_tokens_numpy=np.ones(batch_size, dtype=np.int64),
-            num_top_tokens=metadata.num_top_tokens if metadata is not None else None
+            num_top_tokens=metadata.num_top_tokens if metadata is not None else None,
         )
         return sampling_output
 
@@ -121,10 +117,10 @@ class Sampler:
         sampling_metadata: SamplingMetadata,
         first_output: SamplingOutput,
         second_output: SamplingOutput,
-        first_indices: List[int]
+        first_indices: List[int],
     ):
         if len(first_output.group_indices) != len(first_indices):
-            raise RuntimeError('The length of sampling indices does not match the length of sampling output.')
+            raise RuntimeError("The length of sampling indices does not match the length of sampling output.")
 
         group_indices = []
         sequence_ids = []
@@ -196,7 +192,7 @@ class Sampler:
             cumulative_logprobs=np.concatenate(cumulative_logprobs),
             num_new_tokens=np.concatenate(num_new_tokens),
             num_top_tokens=np.concatenate(num_top_tokens) if num_top_tokens else None,
-            seeds=np.concatenate(seeds) if seeds else None
+            seeds=np.concatenate(seeds) if seeds else None,
         )
         return sampling_output
 
@@ -234,7 +230,7 @@ class Sampler:
             all_sequence_ids=sampling_metadata.all_sequence_ids[split_mask],
             parent_sequence_ids=sampling_metadata.parent_sequence_ids[split_mask],
             group_indices=retained_group_indices,
-            to_tensor=sampling_metadata.to_tensor
+            to_tensor=sampling_metadata.to_tensor,
         )
         discarded_sampling_metadata = SamplingMetadata(
             batch_sequence_ids=discarded_batch_sequence_ids,
@@ -244,22 +240,44 @@ class Sampler:
             all_sequence_ids=sampling_metadata.all_sequence_ids[~split_mask],
             parent_sequence_ids=sampling_metadata.parent_sequence_ids[~split_mask],
             group_indices=discarded_group_indices,
-            to_tensor=sampling_metadata.to_tensor
+            to_tensor=sampling_metadata.to_tensor,
         )
 
-        attribute_keys = ['repetition_penalty', 'frequency_penalty', 'presence_penalty', 'temperature', 'top_k_array',
-                          'top_k_idx', 'top_k_disabled_mask', 'top_p_array', 'top_p', 'do_sample_array',
-                          'do_sample_tensor', 'top_logprobs_array', 'seed_array', 'num_top_tokens', 'beam_width_array',
-                          'best_of_array', 'use_beam_search_array', 'output_lengths', 'cumulative_logprobs',
-                          'all_token_ids', 'output_token_ids', 'is_seq_prefill']
+        attribute_keys = [
+            "repetition_penalty",
+            "frequency_penalty",
+            "presence_penalty",
+            "temperature",
+            "top_k_array",
+            "top_k_idx",
+            "top_k_disabled_mask",
+            "top_p_array",
+            "top_p",
+            "do_sample_array",
+            "do_sample_tensor",
+            "top_logprobs_array",
+            "seed_array",
+            "num_top_tokens",
+            "beam_width_array",
+            "best_of_array",
+            "use_beam_search_array",
+            "output_lengths",
+            "cumulative_logprobs",
+            "all_token_ids",
+            "output_token_ids",
+            "is_seq_prefill",
+        ]
         for attribute_key in attribute_keys:
             attribute = getattr(sampling_metadata, attribute_key)
             if attribute is not None:
                 setattr(retained_sampling_metadata, attribute_key, attribute[split_mask])
                 setattr(discarded_sampling_metadata, attribute_key, attribute[~split_mask])
 
-        attribute_keys_with_max = [('max_top_k', 'top_k_array'), ('max_logprobs', 'top_logprobs_array'),
-                                   ('max_beam_width', 'beam_width_array')]
+        attribute_keys_with_max = [
+            ("max_top_k", "top_k_array"),
+            ("max_logprobs", "top_logprobs_array"),
+            ("max_beam_width", "beam_width_array"),
+        ]
         for attribute_key, associated_key in attribute_keys_with_max:
             associated_attribute = getattr(retained_sampling_metadata, associated_key)
             if associated_attribute is not None:
@@ -312,7 +330,7 @@ class Sampler:
             indices_to_remove = probs < top_p_probs
             logits.masked_fill_(indices_to_remove, masked_value)
         return logits
-    
+
     def random_select_on_device(self, logits: torch.Tensor, metadata: SamplingMetadata):
         batch_size = len(logits)
         logits = self.apply_top_k_top_p(logits, metadata)
@@ -325,11 +343,7 @@ class Sampler:
 
         sampled_token_ids = self.exponential_sample(logits, metadata)
         argmax_token_ids = logits.argmax(dim=-1)
-        token_ids = torch.where(
-            metadata.do_sample_tensor > 0,
-            sampled_token_ids,
-            argmax_token_ids
-        )
+        token_ids = torch.where(metadata.do_sample_tensor > 0, sampled_token_ids, argmax_token_ids)
         logprobs = torch.gather(logprobs, dim=-1, index=token_ids.unsqueeze(-1)).squeeze(1)
 
         sampling_output = SamplingOutput(
@@ -344,7 +358,7 @@ class Sampler:
             cumulative_logprobs=torch.zeros(batch_size, dtype=torch.float32),
             num_new_tokens=torch.ones(batch_size, dtype=torch.int64, device="npu"),
             num_new_tokens_numpy=np.ones(batch_size, dtype=np.int64),
-            num_top_tokens=metadata.num_top_tokens
+            num_top_tokens=metadata.num_top_tokens,
         )
 
         return sampling_output
@@ -367,14 +381,14 @@ class Sampler:
             self.handlers.clear()
         else:
             self.handlers.clear()
-            self.__check_and_append(sampling_metadata.repetition_penalty, 'repetition_penalty')
-            self.__check_and_append(sampling_metadata.frequency_penalty, 'frequency_penalty')
-            self.__check_and_append(sampling_metadata.presence_penalty, 'presence_penalty')
+            self.__check_and_append(sampling_metadata.repetition_penalty, "repetition_penalty")
+            self.__check_and_append(sampling_metadata.frequency_penalty, "frequency_penalty")
+            self.__check_and_append(sampling_metadata.presence_penalty, "presence_penalty")
             if sampling_metadata.do_sample_tensor is not None:
-                self.__check_and_append(sampling_metadata.temperature, 'temperature')
+                self.__check_and_append(sampling_metadata.temperature, "temperature")
                 if not self.fusion_sampling:
-                    self.__check_and_append(sampling_metadata.top_k_idx, 'top_k')
-                    self.__check_and_append(sampling_metadata.top_p, 'top_p')
+                    self.__check_and_append(sampling_metadata.top_k_idx, "top_k")
+                    self.__check_and_append(sampling_metadata.top_p, "top_p")
 
     def switch_selector(self, sampling_metadata):
         if sampling_metadata is not None:
@@ -390,27 +404,28 @@ class Sampler:
         else:
             self.selector = self.selectors[SelectorType.GREEDY_SEARCH]
 
-    def __split_and_select(
-        self,
-        batch_logits: Any,
-        sampling_metadata: SamplingMetadata
-    ) -> SamplingOutput:
+    def __split_and_select(self, batch_logits: Any, sampling_metadata: SamplingMetadata) -> SamplingOutput:
         # slice batch-logits into two parts: `greedy+sampling` and `beam`
-        beam_metadata, greedy_sampling_metadata, beam_search_indices = (
-            self.split_sampling_metadata(sampling_metadata, sampling_metadata.use_beam_search_array))
+        beam_metadata, greedy_sampling_metadata, beam_search_indices = self.split_sampling_metadata(
+            sampling_metadata, sampling_metadata.use_beam_search_array
+        )
 
         beam_search_output = self.selectors[SelectorType.BEAM_SEARCH](
-            batch_logits[sampling_metadata.use_beam_search_array], beam_metadata)
+            batch_logits[sampling_metadata.use_beam_search_array], beam_metadata
+        )
 
         if sampling_metadata.do_sample_tensor is None:
             greedy_sampling_output = self.selectors[SelectorType.GREEDY_SEARCH](
-                batch_logits[~sampling_metadata.use_beam_search_array], greedy_sampling_metadata)
+                batch_logits[~sampling_metadata.use_beam_search_array], greedy_sampling_metadata
+            )
         else:
             greedy_sampling_output = self.selectors[SelectorType.RANDOM_SAMPLING](
-                batch_logits[~sampling_metadata.use_beam_search_array], greedy_sampling_metadata)
+                batch_logits[~sampling_metadata.use_beam_search_array], greedy_sampling_metadata
+            )
 
-        output = self.merge_sampling_output(sampling_metadata, beam_search_output,
-                                            greedy_sampling_output, beam_search_indices)
+        output = self.merge_sampling_output(
+            sampling_metadata, beam_search_output, greedy_sampling_output, beam_search_indices
+        )
         return output
 
     def __check_and_append(self, parameter, parameter_name):
@@ -420,44 +435,44 @@ class Sampler:
     def __find_handler(self, parameter_name):
         handling_backend = self.handling_policy.get(parameter_name)
         if not handling_backend:
-            raise ValueError(f'The current handling policy config does not support this parameter: {parameter_name}!')
+            raise ValueError(f"The current handling policy config does not support this parameter: {parameter_name}!")
         backend_registry = get_handler_registry(handling_backend)
         if not backend_registry:
-            raise ValueError(f'No such handler backend: {handling_backend}!')
+            raise ValueError(f"No such handler backend: {handling_backend}!")
         parameter_handler_cls = backend_registry.get(parameter_name)
         if not parameter_handler_cls:
-            raise ValueError(f'The backend {handling_backend} does not have such handler: {parameter_name}!')
+            raise ValueError(f"The backend {handling_backend} does not have such handler: {parameter_name}!")
         return parameter_handler_cls
 
     def __find_selector(self, parameter_name):
         selection_backend = self.selection_policy.get(parameter_name)
         if not selection_backend:
-            raise ValueError(f'The current selection policy config does not support this parameter: {parameter_name}!')
+            raise ValueError(f"The current selection policy config does not support this parameter: {parameter_name}!")
         backend_registry = get_selector_registry(selection_backend)
         if not backend_registry:
-            raise ValueError(f'No such selector backend: {selection_backend}!')
+            raise ValueError(f"No such selector backend: {selection_backend}!")
         parameter_selector_cls = backend_registry.get(parameter_name)
         if not parameter_selector_cls:
-            raise ValueError(f'The backend {selection_backend} does not have such selector: {parameter_name}!')
+            raise ValueError(f"The backend {selection_backend} does not have such selector: {parameter_name}!")
         return parameter_selector_cls
 
     def __initialize_handlers_and_selectors(self):
-        handling_params = ['repetition_penalty', 'frequency_penalty', 'presence_penalty', 'temperature']
-        selection_params = ['greedy_search']
-        fusion_sampling_key = 'top_k_top_p_sampling'
+        handling_params = ["repetition_penalty", "frequency_penalty", "presence_penalty", "temperature"]
+        selection_params = ["greedy_search"]
+        fusion_sampling_key = "top_k_top_p_sampling"
         sampling_backend = self.selection_policy.get(fusion_sampling_key)
         self.fusion_sampling = True
         if sampling_backend == HandlingBackend.PTA:
-            handling_params.append('top_k')
-            handling_params.append('top_p')
-            selection_params.append('sampling')
+            handling_params.append("top_k")
+            handling_params.append("top_p")
+            selection_params.append("sampling")
             self.fusion_sampling = False
         elif sampling_backend == HandlingBackend.ATB:
             selection_params.append(fusion_sampling_key)
         else:
             selection_params.append(fusion_sampling_key)
             self.need_configuring = True
-        selection_params.append('beam_search')
+        selection_params.append("beam_search")
         for param_name in handling_params:
             parameter_handler_cls = self.__find_handler(param_name)
             self.handler_mapping[param_name] = parameter_handler_cls(self.handler_params)

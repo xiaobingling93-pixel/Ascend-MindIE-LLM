@@ -24,7 +24,7 @@ class Plugin(ABC):
         self,
         sampling_output: SamplingOutput,
         next_tokens_indices: List[List[int]],
-        num_new_tokens: Optional[List[int]] = None
+        num_new_tokens: Optional[List[int]] = None,
     ) -> None:
         if num_new_tokens is None:
             num_new_tokens = [len(indices) for indices in next_tokens_indices]
@@ -41,19 +41,28 @@ class Plugin(ABC):
                 sequence_ids.append(sampling_output.sequence_ids[indices[0]])
                 parent_sequence_ids.append(sampling_output.parent_sequence_ids[indices[0]])
             group_indices.append((i, i + 1))
-            padded_array = np.pad(sampling_output.token_ids[indices], pad_width=(0, max_num_tokens - len(indices)),
-                                  constant_values=self.pad_token_id)
+            padded_array = np.pad(
+                sampling_output.token_ids[indices],
+                pad_width=(0, max_num_tokens - len(indices)),
+                constant_values=self.pad_token_id,
+            )
             token_ids.append(padded_array)
-            padded_array = np.pad(sampling_output.logprobs[indices], pad_width=(0, max_num_tokens - len(indices)),
-                                  constant_values=-9999.0)
+            padded_array = np.pad(
+                sampling_output.logprobs[indices], pad_width=(0, max_num_tokens - len(indices)), constant_values=-9999.0
+            )
             logprobs.append(padded_array)
             if 0 not in sampling_output.top_token_ids.shape:
-                padded_array = np.pad(sampling_output.top_token_ids[indices],
-                                      pad_width=((0, max_num_tokens - len(indices)), (0, 0)),
-                                      constant_values=self.pad_token_id)
+                padded_array = np.pad(
+                    sampling_output.top_token_ids[indices],
+                    pad_width=((0, max_num_tokens - len(indices)), (0, 0)),
+                    constant_values=self.pad_token_id,
+                )
                 top_token_ids.append(padded_array)
-                padded_array = np.pad(sampling_output.top_logprobs[indices],
-                                      pad_width=((0, max_num_tokens - len(indices)), (0, 0)), constant_values=-9999.0)
+                padded_array = np.pad(
+                    sampling_output.top_logprobs[indices],
+                    pad_width=((0, max_num_tokens - len(indices)), (0, 0)),
+                    constant_values=-9999.0,
+                )
                 top_logprobs.append(padded_array)
             else:
                 top_token_ids.append(np.zeros((max_num_tokens, 0), dtype=np.int64))

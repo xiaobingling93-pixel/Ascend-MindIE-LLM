@@ -12,12 +12,13 @@
 
 #include "file_system.h"
 
-#include <fstream>
 #include <dirent.h>
-#include <cstdint>
-#include <cstring>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <cstdint>
+#include <cstring>
+#include <fstream>
 
 namespace mindie_llm {
 
@@ -25,8 +26,7 @@ using FileStat = struct stat;
 
 constexpr size_t MAX_PATH_LEN = 256;
 
-bool FileSystem::Exists(const std::string &path)
-{
+bool FileSystem::Exists(const std::string &path) {
     FileStat st;
     if (stat(path.c_str(), &st) < 0) {
         return false;
@@ -34,14 +34,12 @@ bool FileSystem::Exists(const std::string &path)
     return true;
 }
 
-bool FileSystem::MakeDir(const std::string &dirPath, int mode)
-{
+bool FileSystem::MakeDir(const std::string &dirPath, int mode) {
     int ret = mkdir(dirPath.c_str(), mode);
     return ret == 0;
 }
 
-bool FileSystem::Makedirs(const std::string &dirPath, const mode_t mode)
-{
+bool FileSystem::Makedirs(const std::string &dirPath, const mode_t mode) {
     uint32_t offset = 0;
     uint32_t pathLen = dirPath.size();
     do {
@@ -56,4 +54,4 @@ bool FileSystem::Makedirs(const std::string &dirPath, const mode_t mode)
     } while (offset != pathLen);
     return true;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

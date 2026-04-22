@@ -16,20 +16,17 @@
 
 namespace mindie_llm {
 
-RefCounterProtocolSPtr MakeRefCounterProtocol(const std::vector<BlockId> &allBlockIndices)
-{
+RefCounterProtocolSPtr MakeRefCounterProtocol(const std::vector<BlockId> &allBlockIndices) {
     return std::make_shared<RefCounter>(allBlockIndices);
 }
 
-RefCounter::RefCounter(const std::vector<BlockId> &allBlockIndices)
-{
+RefCounter::RefCounter(const std::vector<BlockId> &allBlockIndices) {
     for (BlockId id : allBlockIndices) {
         refCounts_[id] = 0;
     }
 }
 
-RefCount RefCounter::Increase(BlockId blockId)
-{
+RefCount RefCounter::Increase(BlockId blockId) {
     if (refCounts_.count(blockId) == 0 || refCounts_[blockId] < 0) {
         throw std::runtime_error("the blockId's information invalid.");
     }
@@ -37,8 +34,7 @@ RefCount RefCounter::Increase(BlockId blockId)
     return ++refCounts_[blockId];
 }
 
-RefCount RefCounter::Decrease(BlockId blockId)
-{
+RefCount RefCounter::Decrease(BlockId blockId) {
     if (refCounts_.count(blockId) == 0 || refCounts_[blockId] <= 0) {
         throw std::runtime_error("the blockId's information invalid.");
     }
@@ -46,12 +42,11 @@ RefCount RefCounter::Decrease(BlockId blockId)
     return --refCounts_[blockId];
 }
 
-RefCount RefCounter::GetRefCount(BlockId blockId) const
-{
+RefCount RefCounter::GetRefCount(BlockId blockId) const {
     if (refCounts_.count(blockId) == 0) {
         throw std::runtime_error("the blockId's information invalid.");
     }
 
     return refCounts_.at(blockId);
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -20,11 +20,7 @@ from torch.nn import Parameter
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info, DeviceType
 from mindie_llm.runtime.layers.custom_layer import CustomLayer
 from mindie_llm.runtime.config.mindie_llm_config import LoraModelConfig
-from mindie_llm.runtime.layers.linear.linear import (
-    LinearBase,
-    ColumnParallelLinear,
-    RowParallelLinear
-)
+from mindie_llm.runtime.layers.linear.linear import LinearBase, ColumnParallelLinear, RowParallelLinear
 
 
 class BaseLayerWithLoRA(CustomLayer, ABC):
@@ -47,8 +43,9 @@ class BaseLayerWithLoRA(CustomLayer, ABC):
         ...
 
     @abstractmethod
-    def slice_lora_b(self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]) \
-        -> torch.Tensor:
+    def slice_lora_b(
+        self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]
+    ) -> torch.Tensor:
         """Slice lora b weight for TP and return lora b weight"""
         ...
 
@@ -64,12 +61,12 @@ class BaseLayerWithLoRA(CustomLayer, ABC):
 
 
 class ParallelLinearWithLoRA(BaseLayerWithLoRA):
-
     def __init__(self, base_layer: LinearBase):
         super().__init__()
         self.base_layer = base_layer
-        self.base_layer_prefixes = [self.base_layer.prefix] if isinstance(self.base_layer.prefix, str) \
-            else self.base_layer.prefix
+        self.base_layer_prefixes = (
+            [self.base_layer.prefix] if isinstance(self.base_layer.prefix, str) else self.base_layer.prefix
+        )
         self.pack_num = len(self.base_layer_prefixes)
         self.base_weight_shape = self.get_base_weight_shape(base_layer)
         self.need_nz = False
@@ -94,9 +91,9 @@ class ParallelLinearWithLoRA(BaseLayerWithLoRA):
     def get_padding_size(x: int, need_nz: bool = False):
         """Align up num to 16 or 64 according the soc version"""
         if need_nz:
-            padding_size = math.ceil(x / 16) * 16 # Align up 16
+            padding_size = math.ceil(x / 16) * 16  # Align up 16
         else:
-            padding_size = math.ceil(x / 64) * 64 # Align up 64
+            padding_size = math.ceil(x / 64) * 64  # Align up 64
         return padding_size
 
     @staticmethod
@@ -118,8 +115,8 @@ class ParallelLinearWithLoRA(BaseLayerWithLoRA):
         padding_size = self.get_padding_size(max_lora_rank * self.pack_num, self.need_nz)
         n, k = self.base_weight_shape
         # GroupedMatMulOperation and LinearOperation need lora_A of shape [r, k] and lora_B of shape [r, n]
-        lora_a = torch.zeros(max_loras + 1, padding_size, k, dtype=self.dtype, device=self.device) # Num of LoRA, r, k
-        lora_b = torch.zeros(max_loras + 1, padding_size, n, dtype=self.dtype, device=self.device) # Num of LoRA, r, n
+        lora_a = torch.zeros(max_loras + 1, padding_size, k, dtype=self.dtype, device=self.device)  # Num of LoRA, r, k
+        lora_b = torch.zeros(max_loras + 1, padding_size, n, dtype=self.dtype, device=self.device)  # Num of LoRA, r, n
         self.lora_a_stacked.data = self.weight_format_cast(lora_a) if self.need_nz else lora_a
         self.lora_b_stacked.data = self.weight_format_cast(lora_b) if self.need_nz else lora_b
 
@@ -140,7 +137,6 @@ class ParallelLinearWithLoRA(BaseLayerWithLoRA):
 
 
 class ColumnParallelLinearWithLoRA(ParallelLinearWithLoRA):
-
     def __init__(self, base_layer: ColumnParallelLinear):
         super().__init__(base_layer)
 
@@ -158,15 +154,16 @@ class ColumnParallelLinearWithLoRA(ParallelLinearWithLoRA):
             weight_tensors = [torch.cat(weight_tensors)]
         return weight_tensors[0].to(self.dtype)
 
-    def slice_lora_b(self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]) \
-        -> torch.Tensor:
+    def slice_lora_b(
+        self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]
+    ) -> torch.Tensor:
         # only perform n-dim TP on LoRA_B weight
         weight_tensors = []
         for p, partition_size in zip(prefixes, self.base_output_partition_sizes):
             start_idx = self.tp_rank * partition_size
             end_idx = (self.tp_rank + 1) * partition_size
             weight_tensors.append(lora_tensors_dic[f"{p}.weight"][start_idx:end_idx, :])
-            
+
         if len(weight_tensors) == 1:
             weight_tensors = [(weight_tensors[0] * scales[0])]
         if len(weight_tensors) > 1:
@@ -179,7 +176,6 @@ class ColumnParallelLinearWithLoRA(ParallelLinearWithLoRA):
 
 
 class RowParallelLinearWithLoRA(ParallelLinearWithLoRA):
-
     def __init__(self, base_layer: RowParallelLinear):
         super().__init__(base_layer)
 
@@ -198,8 +194,9 @@ class RowParallelLinearWithLoRA(ParallelLinearWithLoRA):
         weight_tensors = weight_tensors[0][:, start_idx:end_idx]
         return weight_tensors.to(self.dtype)
 
-    def slice_lora_b(self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]) \
-        -> torch.Tensor:
+    def slice_lora_b(
+        self, lora_tensors_dic: dict[str, torch.Tensor], prefixes: List[str], scales: List[int]
+    ) -> torch.Tensor:
         # not TP on LoRA_B weight
         weight_tensors = [lora_tensors_dic[f"{p}.weight"] for p in prefixes]
         weight_tensors = weight_tensors[0] * scales[0]

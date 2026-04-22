@@ -17,13 +17,13 @@
 
 namespace mindie_llm {
 class SpinLockGuard {
-public:
+   public:
     explicit SpinLockGuard(pthread_spinlock_t &lock) : spinlock_(lock) { pthread_spin_lock(&spinlock_); }
     ~SpinLockGuard() { pthread_spin_unlock(&spinlock_); }
 
-private:
+   private:
     pthread_spinlock_t &spinlock_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

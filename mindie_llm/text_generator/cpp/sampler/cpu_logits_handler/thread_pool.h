@@ -9,7 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_THREAD_POOL_H
 #define MINDIE_LLM_THREAD_POOL_H
 
@@ -18,22 +18,22 @@
 namespace mindie_llm {
 namespace cpu_logits_handler {
 class ThreadPool {
-public:
+   public:
     explicit ThreadPool(int threadNum) : m_threadNum(threadNum), m_taskNum(0) {};
     void Init();
     ~ThreadPool();
 
-    ThreadPool(const ThreadPool&) = delete;
-    ThreadPool& operator=(const ThreadPool&) = delete;
+    ThreadPool(const ThreadPool &) = delete;
+    ThreadPool &operator=(const ThreadPool &) = delete;
 
     void AddTask(Task task);
     void Join();
 
-private:
+   private:
     static void *Worker(void *arg);
     void ThreadExit();
 
-private:
+   private:
     pthread_mutex_t m_lock;
     pthread_mutex_t m_taskLock;
     pthread_cond_t m_notEmpty;
@@ -44,7 +44,7 @@ private:
     int m_taskNum;
     bool m_shutdown = false;
 };
-}
-}
+}  // namespace cpu_logits_handler
+}  // namespace mindie_llm
 
 #endif  // THREAD_POOL_H

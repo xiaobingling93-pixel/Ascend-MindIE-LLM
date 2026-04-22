@@ -11,7 +11,6 @@
 from typing import Any
 
 import torch
-import torch_npu
 from torch import nn
 
 from mindie_llm.runtime.layers.embedding.embedding import VocabParallelEmbedding, ParallelLMHead
@@ -21,7 +20,7 @@ from mindie_llm.runtime.models.base.model import BaseModelForCausalLM
 from mindie_llm.runtime.models.qwen3.qwen3 import Qwen3Attention
 from mindie_llm.runtime.layers.fused_moe.experts_selector import select_experts
 from mindie_llm.runtime.layers.fused_moe.fused_moe import FusedMoE
-from mindie_llm.runtime.model_runner.forward_context import get_forward_context
+from mindie_llm.runtime.model_runner.forward_context_exp import get_forward_context
 from mindie_llm.runtime.utils.distributed import get_parallel_info_manager
 from mindie_llm.runtime.layers.quantization.quantization_config_base import QuantizationConfigBase
 
@@ -49,11 +48,12 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         gate: ReplicatedLinear layer for computing expert router logits
         experts: FusedMoE module encapsulating all expert feed-forward layers
     """
+
     def __init__(
-            self,
-            config,
-            prefix,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config,
+        prefix,
+        quant_config: QuantizationConfigBase = None,
     ) -> None:
         """
         Initialize the Qwen3 sparse MoE block module.
@@ -76,13 +76,15 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
             quant_config=quant_config,
             prefix=f"{prefix}.gate",
         )
-        self.experts = FusedMoE(num_experts=self.expert_num,
-                                topk_num=self.topk_num,
-                                hidden_size=config.hidden_size,
-                                intermediate_size=config.moe_intermediate_size,
-                                quant_config=quant_config,
-                                prefix=f"{prefix}.experts",
-                                suffix=["gate_proj", "down_proj", "up_proj"])
+        self.experts = FusedMoE(
+            num_experts=self.expert_num,
+            topk_num=self.topk_num,
+            hidden_size=config.hidden_size,
+            intermediate_size=config.moe_intermediate_size,
+            quant_config=quant_config,
+            prefix=f"{prefix}.experts",
+            suffix=["gate_proj", "down_proj", "up_proj"],
+        )
 
     def forward(self, hidden_states):
         """
@@ -96,17 +98,19 @@ class Qwen3MoeSparseMoeBlock(nn.Module):
         """
         router_logits = self.gate(hidden_states)
         # topk
-        topk_weights, topk_ids = select_experts(hidden_states=hidden_states,
-                                                router_logits=router_logits,
-                                                top_k=self.topk_num,
-                                                use_grouped_topk=False,
-                                                renormalize=True,
-                                                topk_group=1,
-                                                num_expert_group=1,
-                                                scoring_func="softmax",
-                                                routed_scaling_factor=1.0,
-                                                e_score_correction_bias=None,
-                                                global_num_experts=self.expert_num)
+        topk_weights, topk_ids = select_experts(
+            hidden_states=hidden_states,
+            router_logits=router_logits,
+            top_k=self.topk_num,
+            use_grouped_topk=False,
+            renormalize=True,
+            topk_group=1,
+            num_expert_group=1,
+            scoring_func="softmax",
+            routed_scaling_factor=1.0,
+            e_score_correction_bias=None,
+            global_num_experts=self.expert_num,
+        )
         final_hidden_states = self.experts(hidden_states, topk_weights, topk_ids)
         return final_hidden_states
 
@@ -137,12 +141,13 @@ class Qwen3MoeLayer(nn.Module):
         input_layernorm: RMSNorm for attention input normalization
         post_attention_layernorm: RMSNorm for MoE input normalization
     """
+
     def __init__(
-            self,
-            config,
-            prefix: str,
-            layer_idx: int,
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config,
+        prefix: str,
+        layer_idx: int,
+        quant_config: QuantizationConfigBase = None,
     ) -> None:
         """
         Initialize the Qwen3 MoE transformer layer module.
@@ -154,7 +159,7 @@ class Qwen3MoeLayer(nn.Module):
             quant_config: Quantization configuration (optional)
         """
         super().__init__()
-        
+
         self.config = config
         self.prefix = f"{prefix}.layers.{layer_idx}"
         self.layer_idx = layer_idx
@@ -165,12 +170,15 @@ class Qwen3MoeLayer(nn.Module):
         self.mlp = Qwen3MoeSparseMoeBlock(config, f"{self.prefix}.mlp", quant_config=quant_config)
 
         self.input_layernorm = RMSNorm(
-            config.hidden_size, config.rms_norm_eps,
-            quant_config=quant_config, prefix=f"{self.prefix}.input_layernorm")
+            config.hidden_size, config.rms_norm_eps, quant_config=quant_config, prefix=f"{self.prefix}.input_layernorm"
+        )
         self.post_attention_layernorm = RMSNorm(
-            config.hidden_size, config.rms_norm_eps,
-            quant_config=quant_config, prefix=f"{self.prefix}.post_attention_layernorm")
-    
+            config.hidden_size,
+            config.rms_norm_eps,
+            quant_config=quant_config,
+            prefix=f"{self.prefix}.post_attention_layernorm",
+        )
+
     def forward(
         self,
         positions: torch.Tensor,
@@ -202,7 +210,7 @@ class Qwen3MoeLayer(nn.Module):
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
         hidden_states = self.mlp(hidden_states)
         return hidden_states, residual
-    
+
 
 class Qwen3MoeModel(nn.Module):
     """
@@ -228,11 +236,12 @@ class Qwen3MoeModel(nn.Module):
         layers: ModuleList of Qwen3MoeLayer transformer layers
         norm: RMSNorm final output normalization layer
     """
+
     def __init__(
-            self,
-            config: Any,
-            prefix: str = "model",
-            quant_config: QuantizationConfigBase = None,
+        self,
+        config: Any,
+        prefix: str = "model",
+        quant_config: QuantizationConfigBase = None,
     ) -> None:
         """
         Initialize the Qwen3 MoE base transformer model.
@@ -243,7 +252,7 @@ class Qwen3MoeModel(nn.Module):
             quant_config: Quantization configuration (optional)
         """
         super().__init__()
-        
+
         self.config = config
         self.prefix = prefix
         self.quant_config = quant_config
@@ -278,7 +287,7 @@ class Qwen3MoeModel(nn.Module):
         hidden_states = self.embed_tokens(input_ids)
         for layer in self.layers:
             hidden_states, residual = layer(positions, hidden_states, residual)
-        
+
         hidden_states, _ = self.norm(hidden_states, residual)
 
         return hidden_states
@@ -305,6 +314,7 @@ class Qwen3MoeForCausalLM(BaseModelForCausalLM):
         model: Base Qwen3 model
         lm_head: Language modeling head
     """
+
     def __init__(self, mindie_llm_config):
         """
         Initialize the Qwen3-MoE causal language model.
@@ -330,7 +340,7 @@ class Qwen3MoeForCausalLM(BaseModelForCausalLM):
             self.hf_config.hidden_size,
             bias=False,
             quant_config=self.quant_config,
-            prefix=f"lm_head",
+            prefix="lm_head",
         )
 
     def forward(self, input_ids, positions):

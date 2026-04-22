@@ -21,8 +21,13 @@ from mindie_llm.runtime.utils.helpers.env import ENV
 from mindie_llm.runtime.utils.cpu.affinity import bind_cpus
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_hbm_info
 from mindie_llm.runtime.models import get_router_ins
-from mindie_llm.runtime.model_runner.forward_context import create_forward_context, set_forward_context, \
-    get_forward_context, AttentionMetadata, BatchDescriptor
+from mindie_llm.runtime.model_runner.forward_context_exp import (
+    create_forward_context,
+    set_forward_context,
+    get_forward_context,
+    AttentionMetadata,
+    BatchDescriptor,
+)
 from mindie_llm.runtime.utils.npu.device_utils import get_npu_node_info
 from mindie_llm.runtime.utils.torch_utils import set_default_torch_dtype
 from mindie_llm.runtime.utils.loader.default_model_loader import DefaultModelLoader
@@ -30,34 +35,39 @@ from mindie_llm.runtime.utils.distributed import get_parallel_info_manager, init
 from mindie_llm.runtime.utils.distributed.parallel_info_manager import ParallelType
 from mindie_llm.runtime.utils.distributed.utils import set_device
 from mindie_llm.runtime.layers.attention import get_global_attn_dict, clear_global_attn_dict, flush_global_attn_dict
-from mindie_llm.runtime.compilation.aclgraph_backend import set_aclgraph_capturing_enabled, AclGraphBackend, \
-    set_global_graph_memory_pool
+from mindie_llm.runtime.compilation.aclgraph_backend import (
+    set_aclgraph_capturing_enabled,
+    AclGraphBackend,
+    set_global_graph_memory_pool,
+)
 from mindie_llm.runtime.config.mindie_llm_config import MindIELLMConfig, SpeculativeConfig
 from mindie_llm.runtime.config.load_config import LoadConfig
 from mindie_llm.utils.log.logging import logger, print_log
 from mindie_llm.runtime.layers.attention.sparse_attention_layer import SFA
 from .spec_worker import auto_speculative_method_router, speculative_worker_selector
+
 # Allow tensor initialization and casting with internal format(e.g., NZ)
 torch.npu.config.allow_internal_format = True
 
 
 @auto_speculative_method_router(selector_fn=speculative_worker_selector)
 class ModelRunner:
-
     input_metadata: dict = None
 
-    def __init__(self,
-                 model_name_or_path: str,
-                 rank: int,
-                 world_size: int,
-                 npu_id: Optional[int] = None,
-                 local_rank: Optional[int] = None,
-                 load_tokenizer: bool = True,
-                 max_position_embeddings: Optional[int] = None,
-                 tokenizer_path: Optional[str] = None,
-                 llm_config_path: str = None,
-                 models_dict: dict = None,
-                 **kwargs):
+    def __init__(
+        self,
+        model_name_or_path: str,
+        rank: int,
+        world_size: int,
+        npu_id: Optional[int] = None,
+        local_rank: Optional[int] = None,
+        load_tokenizer: bool = True,
+        max_position_embeddings: Optional[int] = None,
+        tokenizer_path: Optional[str] = None,
+        llm_config_path: str = None,
+        models_dict: dict = None,
+        **kwargs,
+    ):
         # parse configs
         self.model_name_or_path = model_name_or_path
         self.rank = rank
@@ -67,7 +77,7 @@ class ModelRunner:
         self.inference_mode = kwargs.get("inference_mode")
         self.plugin_params = kwargs.get("plugin_params", None)
         self.trust_remote_code = kwargs.get("trust_remote_code", False)
-        self.num_speculative_tokens = kwargs.get('num_speculative_tokens', 0)
+        self.num_speculative_tokens = kwargs.get("num_speculative_tokens", 0)
         self.distributed_enable = kwargs.get("distributed_enable", False)
         self.max_batch_size = kwargs.get("max_batch_size", -1)
         self.model_role = kwargs.get("model_role", "standard")
@@ -85,7 +95,7 @@ class ModelRunner:
             except ValueError as e:
                 print_log(rank, logger.info, e)
             except Exception as _:
-                print_log(rank, logger.info, 'Skip binding cpu.')
+                print_log(rank, logger.info, "Skip binding cpu.")
 
         load_config_dict = {
             "model_name_or_path": model_name_or_path,
@@ -99,12 +109,12 @@ class ModelRunner:
             "enable_edge": False,
             "llm_config_path": llm_config_path,
             "models_dict": models_dict,
-            "sub_model_path": f'part{self.local_rank}-of-{self.world_size}'
+            "sub_model_path": f"part{self.local_rank}-of-{self.world_size}",
         }
         load_config = LoadConfig.from_dict(load_config_dict)
         router_ins = get_router_ins(load_config)
 
-        #NOTE: to be refactored to enum values for better extensibility across model types
+        # NOTE: to be refactored to enum values for better extensibility across model types
         self.is_draft_model = kwargs.get("is_draft_model", False)
         self.model_cls = router_ins.draft_cls if self.is_draft_model else router_ins.model_cls
 
@@ -124,7 +134,7 @@ class ModelRunner:
 
         self.enable_nz = self.llm_config.llm.kv_cache_options.enable_nz
 
-        print_log(rank, logger.info, f'model_runner.dtype: {self.dtype}', need_filter=True)
+        print_log(rank, logger.info, f"model_runner.dtype: {self.dtype}", need_filter=True)
 
         # NOTE: we will discuss lora later.
 
@@ -139,15 +149,15 @@ class ModelRunner:
             self.config,
             self.llm_config,
             router_ins.generation_config,
-            speculative_config=SpeculativeConfig(self.num_speculative_tokens)
+            speculative_config=SpeculativeConfig(self.num_speculative_tokens),
         )
-        quant_config = getattr(self.mindie_llm_config, 'quant_config', None)
-        if quant_config and getattr(quant_config, 'kv_quant_type', None) is not None:
+        quant_config = getattr(self.mindie_llm_config, "quant_config", None)
+        if quant_config and getattr(quant_config, "kv_quant_type", None) is not None:
             self.kv_cache_dtype = torch.int8
         else:
             self.kv_cache_dtype = self.dtype
         self.mask = None
-        
+
         self.head_size = None
         self.num_heads = None
         self.num_kv_heads = None
@@ -164,14 +174,15 @@ class ModelRunner:
         # All attention layers in model
         self.attn_layers = None
 
-        # False: eager mode, True: AclGraph mode; 
+        # False: eager mode, True: AclGraph mode;
         # prefill node in pd disaggregated mode do not need acl graph currently.
         self.enable_acl_graph = not self.model_role == "prefill"
-        
+
         # we store tensors here, decide not to use auto padding now.
         if self.enable_acl_graph:
-            max_graph_batch_size = self.max_batch_size * \
-                (self.num_speculative_tokens + 1) if self.max_batch_size > 0 else 128 
+            max_graph_batch_size = (
+                self.max_batch_size * (self.num_speculative_tokens + 1) if self.max_batch_size > 0 else 128
+            )
             self.graph_batch_sizes = [1, 2, 4] + list(range(8, max_graph_batch_size + 8, 8))
             max_num_token = self.graph_batch_sizes[-1]
             self.input_ids = torch.zeros(max_num_token, dtype=torch.int32, device=self.device)
@@ -189,9 +200,9 @@ class ModelRunner:
             self.mc2_mask = torch.zeros(max_num_token, dtype=torch.bool, device=self.device)
             # MTP
             self.hidden_states_mtp = torch.zeros(
-                (max_num_token, self.mindie_llm_config.hf_config.hidden_size), 
-                dtype=self.mindie_llm_config.hf_config.torch_dtype, 
-                device=self.device
+                (max_num_token, self.mindie_llm_config.hf_config.hidden_size),
+                dtype=self.mindie_llm_config.hf_config.torch_dtype,
+                device=self.device,
             )
             logger.info(f"AclGraph enabled. Graph batch sizes contains {self.graph_batch_sizes}.")
 
@@ -203,16 +214,18 @@ class ModelRunner:
 
         # load model
         if self.max_seq_len > self.mindie_llm_config.hf_config.rope_scaling.max_position_embeddings:
-            _msg = (f"`max_seq_len` cannot be larger than `max_position_embeddings` "
-                    f"or `original_max_position_embeddings`*`scaling_factor` when scaling.")
+            _msg = (
+                "`max_seq_len` cannot be larger than `max_position_embeddings` "
+                "or `original_max_position_embeddings`*`scaling_factor` when scaling."
+            )
             logger.error(_msg)
             raise ValueError(_msg)
         with set_default_torch_dtype(self.config.torch_dtype):
             with self.device:
                 self.model = self.model_cls(self.mindie_llm_config)
-        print_log(self.rank, logger.info, f"initialize model cls done")
+        print_log(self.rank, logger.info, "initialize model cls done")
         DefaultModelLoader().load_weights(self.model, self.model_name_or_path)
-        print_log(self.rank, logger.info, f"load weight done")
+        print_log(self.rank, logger.info, "load weight done")
 
         self.mask = torch.triu(torch.ones(2048, 2048), diagonal=1).to(torch.int8).npu()
         if self.world_size > 1:
@@ -228,7 +241,7 @@ class ModelRunner:
         clear_global_attn_dict()
 
         # not equal k v length for mla
-        if hasattr(self.model, 'kv_lora_rank') and hasattr(self.model, 'qk_rope_head_dim'):   # deepseekv2/v3/r1
+        if hasattr(self.model, "kv_lora_rank") and hasattr(self.model, "qk_rope_head_dim"):  # deepseekv2/v3/r1
             self.num_kv_heads = 1
             if self.index_head_dim is not None:
                 self.num_index_heads = 1
@@ -237,8 +250,8 @@ class ModelRunner:
         else:
             self.k_head_size = self.head_size
             self.v_head_size = self.head_size
-        
-        print_log(self.rank, logger.info, f'model:\n {self.model}')
+
+        print_log(self.rank, logger.info, f"model:\n {self.model}")
 
         if self.enable_acl_graph:
             # NOTE: `model_runner.py` and `model_runner_exp.py` share the same `AclGraphBackend` class.
@@ -251,31 +264,27 @@ class ModelRunner:
             return
 
         max_memory = get_npu_hbm_info().get_hbm_capacity()
-        current_memory = int(max_memory * get_npu_hbm_info().get_hbm_usage()) / (1024 ** 3)
+        current_memory = int(max_memory * get_npu_hbm_info().get_hbm_usage()) / (1024**3)
         logger.info(f"Before capturing, {current_memory=}")
 
         set_aclgraph_capturing_enabled(True)
         set_global_graph_memory_pool(None)
         self.model.graphs.clear()
-        for num_tokens in tqdm(
-            list(reversed(self.graph_batch_sizes)),
-            desc="Capturing acl graph",
-            disable=self.rank
-        ):
+        for num_tokens in tqdm(list(reversed(self.graph_batch_sizes)), desc="Capturing acl graph", disable=self.rank):
             self._dummy_run(num_tokens)
         set_aclgraph_capturing_enabled(False)
 
-        current_memory = int(max_memory * get_npu_hbm_info().get_hbm_usage()) / (1024 ** 3)
+        current_memory = int(max_memory * get_npu_hbm_info().get_hbm_usage()) / (1024**3)
         logger.info(f"After capturing, {current_memory=}")
 
         output_buffer_hbm = 0
         for k in self.model.output_buffer:
             v = self.model.output_buffer[k]
             if torch.is_tensor(v):
-                tmp = v.numel() * v.element_size() / (1024 ** 2)
+                tmp = v.numel() * v.element_size() / (1024**2)
                 output_buffer_hbm += tmp
         logger.info(f"After capturing, {output_buffer_hbm=} MB")
-    
+
     def generate_position_ids(self, input_ids: np.ndarray) -> Iterable:
         """Generate position ids."""
         position_ids = self.input_builder.generate_position_ids(input_ids)
@@ -298,13 +307,15 @@ class ModelRunner:
             ModelRunner.input_metadata = input_metadata
             if self.is_draft_model:
                 self.mtp_count += 1
-    
+
         attn_metadata_dict = build_layerwise_attn_metadata(input_metadata, self.attn_layers)
         forward_context = create_forward_context(input_metadata)
         forward_context.attn_metadata_dict = attn_metadata_dict
         # NOTE: this flag will be update to FlashCommMetaData()
-        forward_context.batch_descriptor = BatchDescriptor(forward_context.batch_descriptor.num_tokens,
-            get_parallel_info_manager().get(ParallelType.ATTN_DP).is_enabled())
+        forward_context.batch_descriptor = BatchDescriptor(
+            forward_context.batch_descriptor.num_tokens,
+            get_parallel_info_manager().get(ParallelType.ATTN_DP).is_enabled(),
+        )
         set_forward_context(forward_context)
         hidden_states = self.model(input_ids, position_ids)
         hidden_states = maybe_gather_and_unpad_for_flashcomm(hidden_states)
@@ -322,7 +333,7 @@ class ModelRunner:
 
     def clear_internal_tensors(self):
         # NOTE: need to delete after TG is refactored
-        pass   
+        pass
 
     def _prepare_inputs(self, **kwargs) -> dict:
         is_prefill = kwargs.get("is_prefill", True)
@@ -346,8 +357,7 @@ class ModelRunner:
 
             lm_head_indices = kwargs.get("lm_head_indices", None)
             if lm_head_indices is None:
-                lm_head_indices = torch.tensor(range(input_ids.shape[0]),
-                                            dtype=torch.int64, device=input_ids.device)
+                lm_head_indices = torch.tensor(range(input_ids.shape[0]), dtype=torch.int64, device=input_ids.device)
             lm_head_indices = lm_head_indices.to(torch.int64)
         else:
             seq_lens = ModelRunner.input_metadata["seq_lens"]
@@ -365,9 +375,11 @@ class ModelRunner:
                 if is_prefill:
                     actual_seq_lengths_kv = seq_lens
                 else:
-                    actual_seq_lengths_kv = torch.tensor(q_lens, dtype=torch.int32).npu() \
-                        if self.num_speculative_tokens \
-                            else torch.tensor([1] * block_tables.shape[0], dtype=torch.int32).npu()
+                    actual_seq_lengths_kv = (
+                        torch.tensor(q_lens, dtype=torch.int32).npu()
+                        if self.num_speculative_tokens
+                        else torch.tensor([1] * block_tables.shape[0], dtype=torch.int32).npu()
+                    )
                 actual_seq_lengths_query = torch.cumsum(actual_seq_lengths_kv, dim=0, dtype=torch.int32).npu()
 
             num_tokens_across_dp_cpu = get_num_tokens_across_dp_npu(input_ids.shape[0])
@@ -376,7 +388,7 @@ class ModelRunner:
             actual_seq_lengths_kv = ModelRunner.input_metadata["actual_seq_lengths_kv"]
             actual_seq_lengths_query = ModelRunner.input_metadata["actual_seq_lengths_query"]
             num_tokens_across_dp_cpu = ModelRunner.input_metadata["num_tokens_across_dp_cpu"]
-        
+
         # MTP
         hidden_states_mtp = kwargs.get("last_hidden_states", None)
 
@@ -394,12 +406,12 @@ class ModelRunner:
             "actual_seq_lengths_kv": actual_seq_lengths_kv,
             "actual_seq_lengths_query": actual_seq_lengths_query,
             "num_tokens_across_dp_cpu": num_tokens_across_dp_cpu,
-            "last_hidden_states": hidden_states_mtp, # MTP
+            "last_hidden_states": hidden_states_mtp,  # MTP
         }
         if self.enable_acl_graph and not is_prefill:
             return self._prepare_graph_inputs(input_metadata)
         return input_ids, position_ids, input_metadata
-    
+
     def _prepare_graph_inputs(self, input_metadata):
         input_ids = input_metadata["input_ids"]
         position_ids = input_metadata["position_ids"]
@@ -412,18 +424,18 @@ class ModelRunner:
         actual_seq_lengths_query = input_metadata["actual_seq_lengths_query"]
 
         mc2_mask = ModelRunner.input_metadata["mc2_mask"] if ModelRunner.input_metadata is not None else None
-        
+
         is_mtp_0 = self.is_draft_model and self.mtp_count % self.num_speculative_tokens == 0
         is_mtp_0_or_main = not self.is_draft_model or is_mtp_0
 
         num_actual_tokens = input_ids.shape[0]
-        num_tokens = self.model.get_padded_graph_size(
-            input_metadata['num_tokens_across_dp_cpu'].max().item())
-            
+        num_tokens = self.model.get_padded_graph_size(input_metadata["num_tokens_across_dp_cpu"].max().item())
+
         if num_tokens > self.graph_batch_sizes[-1]:
             input_metadata["num_tokens"] = num_tokens
-            logger.info(f"Current batch size {num_tokens} is larger than {self.graph_batch_sizes[-1]},"
-                        " using eager mode.")
+            logger.info(
+                f"Current batch size {num_tokens} is larger than {self.graph_batch_sizes[-1]}, using eager mode."
+            )
             return input_ids, position_ids, input_metadata
 
         num_reqs = num_actual_tokens // (self.num_speculative_tokens + 1)
@@ -441,17 +453,15 @@ class ModelRunner:
             max_seq_pages = (max_len + self.block_size - 1) // self.block_size
             seq_lens = self.seq_lens[:num_tokens]
 
-            self.block_tables[:num_reqs, :block_tables.shape[-1]].copy_(block_tables)
+            self.block_tables[:num_reqs, : block_tables.shape[-1]].copy_(block_tables)
             self.block_tables[:num_reqs, max_seq_pages:].fill_(0)
             self.block_tables[num_reqs:, :].fill_(0)
             block_tables = self.block_tables[:num_tokens, :]
 
             if actual_seq_lengths_kv is not None:
-                actual_len, _ = \
-                    get_speculative_reqs_padding_length(
-                        num_tokens=num_tokens,
-                        num_actual_tokens=self.num_speculative_tokens + 1
-                    )
+                actual_len, _ = get_speculative_reqs_padding_length(
+                    num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+                )
                 reqs_padding_length = actual_len - actual_seq_lengths_kv.shape[0]
                 seq_lens_pad = torch.tensor([0] * reqs_padding_length, dtype=torch.int32).npu()
                 seq_lens = torch.cat([seq_lens, seq_lens_pad])
@@ -466,18 +476,17 @@ class ModelRunner:
         tp_rank = self.mapping.attn_tp.rank
         num_padded_tokens = num_tokens + (tp_size - num_tokens % tp_size) % tp_size
         unit_size = num_padded_tokens // tp_size
-    
+
         if ModelRunner.input_metadata is None or self.num_speculative_tokens == 0 or is_mtp_0:
             if actual_seq_lengths_kv is not None:
-                actual_len, last_req_tokens = \
-                    get_speculative_reqs_padding_length(
-                        num_tokens=num_tokens,
-                        num_actual_tokens=self.num_speculative_tokens + 1
-                    )
+                actual_len, last_req_tokens = get_speculative_reqs_padding_length(
+                    num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+                )
 
                 reqs_padding_length = actual_len - actual_seq_lengths_kv.shape[0]
-                actual_seq_lengths_kv_pad = \
-                    torch.tensor([self.num_speculative_tokens + 1] * reqs_padding_length, dtype=torch.int32).npu()
+                actual_seq_lengths_kv_pad = torch.tensor(
+                    [self.num_speculative_tokens + 1] * reqs_padding_length, dtype=torch.int32
+                ).npu()
                 actual_seq_lengths_kv = torch.cat([actual_seq_lengths_kv, actual_seq_lengths_kv_pad])
                 if last_req_tokens > 0:
                     actual_seq_lengths_kv[-1] = last_req_tokens
@@ -487,12 +496,12 @@ class ModelRunner:
                 self.actual_seq_lengths_query[:actual_len].copy_(actual_seq_lengths_query[:actual_len])
                 actual_seq_lengths_kv = self.actual_seq_lengths_kv[:actual_len]
                 actual_seq_lengths_query = self.actual_seq_lengths_query[:actual_len]
-            
+
             all_mask = [1] * num_actual_tokens + [0] * (num_padded_tokens - num_actual_tokens)
-            mc2_mask = torch.tensor(all_mask[unit_size * tp_rank:unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
+            mc2_mask = torch.tensor(all_mask[unit_size * tp_rank : unit_size * (tp_rank + 1)], dtype=torch.bool).npu()
             self.mc2_mask[:unit_size].copy_(mc2_mask)
             mc2_mask = self.mc2_mask[:unit_size]
-            
+
         elif not self.is_draft_model:
             if actual_seq_lengths_kv is not None:
                 actual_len = len(actual_seq_lengths_kv)
@@ -500,15 +509,14 @@ class ModelRunner:
                 self.actual_seq_lengths_query[:actual_len].copy_(actual_seq_lengths_query[:actual_len])
                 actual_seq_lengths_kv = self.actual_seq_lengths_kv[:actual_len]
                 actual_seq_lengths_query = self.actual_seq_lengths_query[:actual_len]
-            
+
             self.mc2_mask[:unit_size].copy_(mc2_mask)
             mc2_mask = self.mc2_mask[:unit_size]
-        
+
         # MTP
         hidden_states_mtp = input_metadata["last_hidden_states"]
         if hidden_states_mtp is not None:
-            self.hidden_states_mtp[:num_actual_tokens, :].copy_(
-                hidden_states_mtp[:num_actual_tokens, :])
+            self.hidden_states_mtp[:num_actual_tokens, :].copy_(hidden_states_mtp[:num_actual_tokens, :])
             hidden_states_mtp = self.hidden_states_mtp[:num_tokens, :]
 
         input_metadata["input_ids"] = input_ids
@@ -535,14 +543,14 @@ class ModelRunner:
         input_ids, position_ids, input_metadata = self._generate_dummy_inputs(num_tokens)
 
         attn_metadata_dict = build_layerwise_attn_metadata(input_metadata, self.attn_layers)
-        forward_context = create_forward_context(input_metadata=input_metadata,
-                                                 capturing=True)
+        forward_context = create_forward_context(input_metadata=input_metadata, capturing=True)
         forward_context.attn_metadata_dict = attn_metadata_dict
-        forward_context.batch_descriptor = BatchDescriptor(num_tokens,
-            get_parallel_info_manager().get(ParallelType.ATTN_DP).is_enabled())
+        forward_context.batch_descriptor = BatchDescriptor(
+            num_tokens, get_parallel_info_manager().get(ParallelType.ATTN_DP).is_enabled()
+        )
         set_forward_context(forward_context)
         _ = self.model(input_ids, position_ids)
-    
+
     def _generate_dummy_inputs(self, num_tokens):
         is_prefill = False
         input_ids = self.input_ids[:num_tokens]
@@ -551,9 +559,10 @@ class ModelRunner:
         slot_mapping = self.slot_mapping[:num_tokens]
         lm_head_indices = self.lmhead_indices[:num_tokens]
         num_tokens_across_dp_cpu = get_num_tokens_across_dp_npu(input_ids.shape[0])
-        
-        reqs_padding_length, _ = get_speculative_reqs_padding_length(num_tokens=num_tokens,
-                                                                    num_actual_tokens=self.num_speculative_tokens + 1)
+
+        reqs_padding_length, _ = get_speculative_reqs_padding_length(
+            num_tokens=num_tokens, num_actual_tokens=self.num_speculative_tokens + 1
+        )
 
         seq_lens = self.seq_lens[:reqs_padding_length]
         block_tables = self.block_tables[:reqs_padding_length, :]
@@ -569,7 +578,7 @@ class ModelRunner:
             "is_prefill": is_prefill,
             "attn_mask": mask,
             "slot_mapping": slot_mapping,
-            "q_lens": seq_lens, 
+            "q_lens": seq_lens,
             "seq_lens": seq_lens,
             "seq_lens_list": seq_lens.cpu().tolist(),
             "block_tables": block_tables,
@@ -579,7 +588,7 @@ class ModelRunner:
             "num_tokens_across_dp_cpu": num_tokens_across_dp_cpu,
             "actual_seq_lengths_kv": actual_seq_lengths_kv,
             "actual_seq_lengths_query": actual_seq_lengths_query,
-            "last_hidden_states": hidden_states_mtp if self.is_draft_model else None
+            "last_hidden_states": hidden_states_mtp if self.is_draft_model else None,
         }
 
         return input_ids, position_ids, input_metadata
@@ -608,9 +617,11 @@ def build_layerwise_attn_metadata(input_metadata, attns):
 
 def get_num_tokens_across_dp_cpu(num_token_cur_dp):
     dp_para_info = get_parallel_info_manager().get(ParallelType.ATTN_DP)
-    num_token_tensor = torch.tensor([
-    num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)
-    ], dtype=torch.int32, device="cpu")
+    num_token_tensor = torch.tensor(
+        [num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)],
+        dtype=torch.int32,
+        device="cpu",
+    )
     if dp_para_info.is_enabled():
         torch_dist.all_reduce(num_token_tensor, group=dp_para_info.cpu_process_group)
     return num_token_tensor
@@ -618,9 +629,9 @@ def get_num_tokens_across_dp_cpu(num_token_cur_dp):
 
 def get_num_tokens_across_dp_npu(num_token_cur_dp):
     dp_para_info = get_parallel_info_manager().get(ParallelType.ATTN_DP)
-    num_token_tensor = torch.tensor([
-    num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)
-    ], dtype=torch.int32).npu()
+    num_token_tensor = torch.tensor(
+        [num_token_cur_dp if i == dp_para_info.rank else 0 for i in range(dp_para_info.group_size)], dtype=torch.int32
+    ).npu()
     if dp_para_info.is_enabled():
         torch_dist.all_reduce(num_token_tensor, group=dp_para_info.process_group)
     return num_token_tensor.cpu()
@@ -640,9 +651,9 @@ def maybe_gather_and_unpad_for_flashcomm(hidden_states):
         return hidden_states
 
     from mindie_llm.runtime.layers.linear.linear_op import maybe_all_gather_and_maybe_unpad
+
     hidden_states = maybe_all_gather_and_maybe_unpad(
-        hidden_states,
-        get_parallel_info_manager().get(ParallelType.ATTN_TP)
+        hidden_states, get_parallel_info_manager().get(ParallelType.ATTN_TP)
     )
     return hidden_states
 
@@ -654,8 +665,7 @@ def maybe_allgather_cp(hidden_states):
 
     group_size = cp.group_size
     hidden_states_out = torch.zeros_like(hidden_states).repeat(group_size, *(1,) * (hidden_states.dim() - 1))
-    torch.distributed.all_gather_into_tensor(hidden_states_out, hidden_states,
-                                    group=cp.process_group)
+    torch.distributed.all_gather_into_tensor(hidden_states_out, hidden_states, group=cp.process_group)
     return hidden_states_out
 
 
@@ -665,10 +675,10 @@ def maybe_pad_cross_dp(hidden_states):
         forward_context = get_forward_context()
     except AssertionError:
         return hidden_states
-    
+
     num_tokens_across_dp_cpu = forward_context.num_tokens_across_dp_cpu
     pad_size = max(num_tokens_across_dp_cpu) - hidden_states.shape[0]
-        
+
     if pad_size > 0:
         hidden_states = F.pad(hidden_states, (0, 0, 0, pad_size))
 
@@ -681,33 +691,34 @@ def maybe_unpad_cross_dp(hidden_states):
         forward_context = get_forward_context()
     except AssertionError:
         return hidden_states
-    
+
     dp = get_parallel_info_manager().get(ParallelType.ATTN_DP)
     dp_world_size = dp.group_size
     num_tokens_across_dp_cpu = forward_context.num_tokens_across_dp_cpu
     result = torch.empty(
         (num_tokens_across_dp_cpu.sum(), *hidden_states.shape[1:]),
         device=hidden_states.device,
-        dtype=hidden_states.dtype)
-        
+        dtype=hidden_states.dtype,
+    )
+
     hidden_states = hidden_states.view(dp.group_size, -1, *hidden_states.shape[1:])
     offset = 0
     for idx in range(dp_world_size):
         num_tokens_dp = num_tokens_across_dp_cpu[idx]
-        result[offset:offset + num_tokens_dp] = hidden_states[idx, :num_tokens_dp]
+        result[offset : offset + num_tokens_dp] = hidden_states[idx, :num_tokens_dp]
         offset += num_tokens_dp
     hidden_states = result
     return hidden_states
 
 
 def maybe_pad_and_gather_cross_dp_and_unpad(hidden_states):
-    # NOTE: Temporary support for DP for PDmix, will be removed after server support dp in and out.  
+    # NOTE: Temporary support for DP for PDmix, will be removed after server support dp in and out.
     dp = get_parallel_info_manager().get(ParallelType.ATTN_DP)
     if not dp.is_enabled():
         return hidden_states
-    
+
     hidden_states = maybe_pad_cross_dp(hidden_states)
-    
+
     # create output tensor
     gather_list = [torch.empty_like(hidden_states) for _ in range(dp.group_size)]
 

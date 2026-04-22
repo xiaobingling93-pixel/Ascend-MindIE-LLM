@@ -16,22 +16,19 @@
 
 #include "math_utils.h"
 
-
 using namespace std;
 
 namespace mindie_llm {
 
 void PrefixCachingBlockObj::InitBlockObj(const BlockObjSPtr prevBlock, const std::vector<TokenId> &tokenIds,
-                                         BlockSharedAttr blockSharedAttr, BlockId blockId, HashValue extraHash)
-{
+                                         BlockSharedAttr blockSharedAttr, BlockId blockId, HashValue extraHash) {
     HashLessBlockObj::InitBlockObj(prevBlock, tokenIds, blockSharedAttr, blockId, 0);
     blockSize_ = blockSharedAttr.blockSize;
     extraHash_ = extraHash;
     UpdateNumTokensTotal();
 }
 
-void PrefixCachingBlockObj::ResetBlockObj()
-{
+void PrefixCachingBlockObj::ResetBlockObj() {
     blockSize_ = 0;
     cachedPrefixHash_ = INVALID_HASH_VALUE;
     extraHash_ = INVALID_HASH_VALUE;
@@ -39,8 +36,7 @@ void PrefixCachingBlockObj::ResetBlockObj()
 }
 
 // Append可能会引起BlockId变化,也可能引起引用计数变化
-void PrefixCachingBlockObj::AppendTokenIds(const vector<TokenId> &tokenIds)
-{
+void PrefixCachingBlockObj::AppendTokenIds(const vector<TokenId> &tokenIds) {
     if (PrefixHash() != INVALID_HASH_VALUE) {
         throw runtime_error("AllocateBLockId Error:block is cached!");
     }
@@ -57,23 +53,18 @@ void PrefixCachingBlockObj::AppendTokenIds(const vector<TokenId> &tokenIds)
 
 HashValue PrefixCachingBlockObj::ExtraHash() { return extraHash_; }
 
-bool PrefixCachingBlockObj::IsLastTokenPlaceholder() const
-{
+bool PrefixCachingBlockObj::IsLastTokenPlaceholder() const {
     if (GetTokenIds().empty()) {
         return false;
     }
     return GetTokenIds().back() == PLACEHOLDER_TOKEN;
 }
 
-bool PrefixCachingBlockObj::IsFull() const
-{
-    return GetNumEmptySlots() == 0;
-}
+bool PrefixCachingBlockObj::IsFull() const { return GetNumEmptySlots() == 0; }
 
 HashValue PrefixCachingBlockObj::GetHashValue() { return cachedPrefixHash_; }
 
-bool PrefixCachingBlockObj::IsReadyToCalcPrefixHash() const
-{
+bool PrefixCachingBlockObj::IsReadyToCalcPrefixHash() const {
     // 只有token存满才计算hash
     if (!IsFull()) {
         return false;
@@ -87,8 +78,7 @@ bool PrefixCachingBlockObj::IsReadyToCalcPrefixHash() const
     return true;
 }
 
-HashValue PrefixCachingBlockObj::PrefixHash()
-{
+HashValue PrefixCachingBlockObj::PrefixHash() {
     // 避免重复计算
     if (cachedPrefixHash_ != INVALID_HASH_VALUE) {
         return cachedPrefixHash_;
@@ -122,8 +112,7 @@ HashValue PrefixCachingBlockObj::PrefixHash()
 
 size_t PrefixCachingBlockObj::GetNumTokensTotal() const { return numTokensTotal_; }
 
-void PrefixCachingBlockObj::UpdateNumTokensTotal()
-{
+void PrefixCachingBlockObj::UpdateNumTokensTotal() {
     numTokensTotal_ = 0;
 
     auto prevBLock = GetPrevBlock();
@@ -133,4 +122,4 @@ void PrefixCachingBlockObj::UpdateNumTokensTotal()
     numTokensTotal_ += GetTokenIds().size();
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

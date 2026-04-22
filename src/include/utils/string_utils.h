@@ -9,19 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MINDIE_LLM_STRING_UTILS_H
 #define MINDIE_LLM_STRING_UTILS_H
 
-#include <string>
-#include <vector>
 #include <map>
 #include <sstream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "safe_result.h"
-
 
 namespace mindie_llm {
 void Split(const std::string& text, char delimiter, std::vector<std::string>& tokens);
@@ -33,27 +32,25 @@ void TrimSpaces(std::string& text);
 bool IsSuffix(const std::string& str, const std::string& suffix);
 void ToLower(std::string& str);
 void ToUpper(std::string& str);
-std::unordered_map<std::string, std::string> ParseKeyValueString(
-    const std::string& input,
-    const std::unordered_set<std::string>& validValues, const std::string& defaultKey,
-    char pairDelimiter, char kvDelimiter
-);
+std::unordered_map<std::string, std::string> ParseKeyValueString(const std::string& input,
+                                                                 const std::unordered_set<std::string>& validValues,
+                                                                 const std::string& defaultKey, char pairDelimiter,
+                                                                 char kvDelimiter);
 std::unordered_map<std::string, std::string> ParseArgs(const std::string& str);
 void SplitTokensToVec(const std::string& text, char delimiter, std::vector<long>& tokens);
 
-template<typename T>
-Result Str2Int(const std::string& str, const std::string& tag, T& outValue)
-{
+template <typename T>
+Result Str2Int(const std::string& str, const std::string& tag, T& outValue) {
     if (str.empty() || tag.empty()) {
         return Result::Error(ResultCode::NONE_ARGUMENT,
-            "The input string and corresponding tag cannot be empty string");
+                             "The input string and corresponding tag cannot be empty string");
     }
     try {
         size_t idx = 0;
         outValue = static_cast<T>(std::stoi(str, &idx));
         if (idx != str.length()) {
-            std::string msg = "For " + tag + ", contains invalid characters after parsing the integer: "
-            + str.substr(idx);
+            std::string msg =
+                "For " + tag + ", contains invalid characters after parsing the integer: " + str.substr(idx);
             return Result::Error(ResultCode::PARSE_FAILURE, msg);
         }
     } catch (const std::exception& e) {
@@ -63,8 +60,7 @@ Result Str2Int(const std::string& str, const std::string& tag, T& outValue)
 }
 
 template <typename T>
-std::string Join(const std::vector<T>& vec, const std::string& delimiter)
-{
+std::string Join(const std::vector<T>& vec, const std::string& delimiter) {
     std::stringstream result;
     for (size_t i = 0; i < vec.size(); ++i) {
         result << vec[i];
@@ -76,8 +72,7 @@ std::string Join(const std::vector<T>& vec, const std::string& delimiter)
 }
 
 template <typename KeyType, typename ValueType>
-std::string GetKeysFromMap(const std::map<KeyType, ValueType>& m, const std::string& delimiter)
-{
+std::string GetKeysFromMap(const std::map<KeyType, ValueType>& m, const std::string& delimiter) {
     std::stringstream result;
     for (auto it = m.begin(); it != m.end(); ++it) {
         result << it->first;
@@ -88,6 +83,6 @@ std::string GetKeysFromMap(const std::map<KeyType, ValueType>& m, const std::str
     return result.str();
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MINDIE_LLM_STRING_UTILS_H
+#endif  // MINDIE_LLM_STRING_UTILS_H

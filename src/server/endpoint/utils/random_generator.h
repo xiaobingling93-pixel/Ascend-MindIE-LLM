@@ -13,42 +13,41 @@
 #ifndef MIES_RANDOM_GENERATOR_H
 #define MIES_RANDOM_GENERATOR_H
 
-#include <random>
-#include <chrono>
-#include <mutex>
-#include <shared_mutex>
-#include <memory>
-#include <iostream>
+#include <algorithm>
+#include <boost/algorithm/hex.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <boost/algorithm/hex.hpp>
-#include <algorithm>
+#include <chrono>
+#include <iostream>
+#include <memory>
+#include <mutex>
+#include <random>
+#include <shared_mutex>
 namespace mindie_llm {
 class RandomGenerator {
-public:
+   public:
     RandomGenerator();
     ~RandomGenerator() = default;
 
-public:
+   public:
     uint32_t GetRand() noexcept;
     static std::shared_ptr<RandomGenerator> GetInstance();
 
-private:
+   private:
     std::mt19937 generator_;
     std::uniform_int_distribution<uint32_t> distribution_;
     static std::shared_mutex gInitMutex;
     static std::shared_ptr<RandomGenerator> gRandomGenerator;
 };
 
-inline std::string GenerateHTTPRequestUUID()
-{
+inline std::string GenerateHTTPRequestUUID() {
     boost::uuids::uuid reqId = boost::uuids::random_generator()();
     std::string reqIdStr = boost::uuids::to_string(reqId);
     reqIdStr.erase(std::remove(reqIdStr.begin(), reqIdStr.end(), '-'), reqIdStr.end());
 
     return reqIdStr;
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // MIES_RANDOM_GENERATOR_H
+#endif  // MIES_RANDOM_GENERATOR_H

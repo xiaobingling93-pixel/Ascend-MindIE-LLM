@@ -12,34 +12,33 @@ from functools import reduce
 import os
 import stat
 from typing import IO, Optional, Any
-from mindie_llm.runtime.utils.helpers.safety.path import (
-    standardize_path, 
-    MAX_PATH_LENGTH
-)
+from mindie_llm.runtime.utils.helpers.safety.path import standardize_path, MAX_PATH_LENGTH
+
 MAX_FILE_SIZE = 100 * 1024 * 1024
 MAX_FILENUM_PER_DIR = 1024
 MAX_LINENUM_PER_FILE = 10 * 1024 * 1024
 
 FLAG_OS_MAP = {
-    'r': os.O_RDONLY, 'r+': os.O_RDWR,
-    'w': os.O_CREAT | os.O_TRUNC | os.O_WRONLY,
-    'w+': os.O_CREAT | os.O_TRUNC | os.O_RDWR,
-    'a': os.O_CREAT | os.O_APPEND | os.O_WRONLY,
-    'a+': os.O_CREAT | os.O_APPEND | os.O_RDWR,
-    'x': os.O_CREAT | os.O_EXCL,
-    "b": getattr(os, "O_BINARY", 0)
+    "r": os.O_RDONLY,
+    "r+": os.O_RDWR,
+    "w": os.O_CREAT | os.O_TRUNC | os.O_WRONLY,
+    "w+": os.O_CREAT | os.O_TRUNC | os.O_RDWR,
+    "a": os.O_CREAT | os.O_APPEND | os.O_WRONLY,
+    "a+": os.O_CREAT | os.O_APPEND | os.O_RDWR,
+    "x": os.O_CREAT | os.O_EXCL,
+    "b": getattr(os, "O_BINARY", 0),
 }
 
 
 def safe_open(
-    file_path: str, 
-    mode: str = 'r',
+    file_path: str,
+    mode: str = "r",
     encoding: Optional[str] = None,
-    permission_mode: int = 0o600, 
+    permission_mode: int = 0o600,
     is_exist_ok: bool = True,
     max_path_length: int = MAX_PATH_LENGTH,
     max_file_size: int = MAX_FILE_SIZE,
-    check_link: bool = True
+    check_link: bool = True,
 ) -> IO[Any]:
     """
     Safely open a file with comprehensive security checks.
@@ -81,8 +80,7 @@ def safe_open(
     flags = [FLAG_OS_MAP.get(mode, os.O_RDONLY) for mode in flags]
     total_flag = reduce(lambda a, b: a | b, flags)
 
-    return os.fdopen(os.open(file_path, total_flag, permission_mode),
-                     mode, encoding=encoding)
+    return os.fdopen(os.open(file_path, total_flag, permission_mode), mode, encoding=encoding)
 
 
 def check_user_write_permission(file_path: str) -> bool:
@@ -114,10 +112,12 @@ def check_uid_permission(path: str) -> None:
     cur_uid = os.geteuid()
     cur_gid = os.getgid()
     if not (cur_uid == 0 or cur_uid == path_owner or path_gid == cur_gid):
-        raise PermissionError(f"The current user does not have permission to access the input path. "
-                              "Because he is neither the root user nor the path owner, "
-                              "nor a member of the same user group as the path owner. "
-                              "Please check and make sure to satisfy at least one of the conditions above.")
+        raise PermissionError(
+            "The current user does not have permission to access the input path. "
+            "Because he is neither the root user nor the path owner, "
+            "nor a member of the same user group as the path owner. "
+            "Please check and make sure to satisfy at least one of the conditions above."
+        )
 
 
 def check_world_write_permission(file_path: str) -> None:
@@ -145,8 +145,8 @@ def check_world_write_permission(file_path: str) -> None:
 def check_file_permission(file_path: str, is_internal_file: bool = False) -> None:
     """
     Check file permissions based on environment variable `MINDIE_CHECK_INPUTFILES_PERMISSION`
-        and internal file flag. 
-        
+        and internal file flag.
+
 
     Args:
         file_path (str): Path to the file.
@@ -178,8 +178,13 @@ def check_file_size_lt(path: str, max_file_size: int = MAX_FILE_SIZE) -> None:
         raise ValueError(f"The size of file should not be greater than {max_file_size}, but got {file_size}.")
 
 
-def check_file_safety(file_path: str, mode: str = 'r', is_exist_ok: bool = True,
-                      max_file_size: int = MAX_FILE_SIZE, is_check_file_size: bool = True) -> None:
+def check_file_safety(
+    file_path: str,
+    mode: str = "r",
+    is_exist_ok: bool = True,
+    max_file_size: int = MAX_FILE_SIZE,
+    is_check_file_size: bool = True,
+) -> None:
     """
     Perform comprehensive safety checks on the file before opening.
 
@@ -198,15 +203,15 @@ def check_file_safety(file_path: str, mode: str = 'r', is_exist_ok: bool = True,
     """
     if os.path.exists(file_path):
         if not is_exist_ok:
-            raise FileExistsError("The file is expected not to exist, but it already does. "
-                                  "Please check the input path.")
+            raise FileExistsError(
+                "The file is expected not to exist, but it already does. Please check the input path."
+            )
         if is_check_file_size:
             check_file_size_lt(file_path, max_file_size)
         file_dir = file_path
     else:
-        if mode == 'r' or mode == 'r+':
-            raise FileNotFoundError("The file is expected to exist, but it does not. "
-                                    "Please check the input path.")
+        if mode == "r" or mode == "r+":
+            raise FileNotFoundError("The file is expected to exist, but it does not. Please check the input path.")
         file_dir = os.path.dirname(file_path)
 
     check_file_permission(file_dir)
@@ -229,8 +234,9 @@ def safe_readlines(file_obj: IO, max_line_num: int = MAX_LINENUM_PER_FILE) -> li
     lines = file_obj.readlines()
     line_num = len(lines)
     if line_num > max_line_num:
-        raise ValueError(f"The file line num is {line_num}, which exceeds the limit {max_line_num}. "
-                         f"Please check the input file.")
+        raise ValueError(
+            f"The file line num is {line_num}, which exceeds the limit {max_line_num}. Please check the input file."
+        )
     return lines
 
 
@@ -251,8 +257,9 @@ def safe_listdir(file_path: str, max_file_num: int = MAX_FILENUM_PER_DIR) -> lis
     filenames = os.listdir(file_path)
     file_num = len(filenames)
     if file_num > max_file_num:
-        raise ValueError(f"The file num in dir is {file_num}, which exceeds the limit {max_file_num}. "
-                         "Please check the input path.")
+        raise ValueError(
+            f"The file num in dir is {file_num}, which exceeds the limit {max_file_num}. Please check the input path."
+        )
     return filenames
 
 

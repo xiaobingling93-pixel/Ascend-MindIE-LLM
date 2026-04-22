@@ -9,24 +9,26 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MODEL_TRANSFER_OUTPUT_HANDLER_H
 #define MODEL_TRANSFER_OUTPUT_HANDLER_H
-#include <thread>
 #include <semaphore.h>
-#include "engine/illm_engine.h"
+
+#include <thread>
+
 #include "concurrent_deque.h"
+#include "engine/illm_engine.h"
 
 namespace mindie_llm {
 class TransferOutputHandler {
-public:
+   public:
     explicit TransferOutputHandler(ForwardRespToManagerCall cb, size_t localDPRank = 0);
 
-    void Entry4Executor(PullKVResponseSPtr pullKvResponse); // used by D instance
+    void Entry4Executor(PullKVResponseSPtr pullKvResponse);  // used by D instance
 
     ConcurrentDeque<RequestId> &GetPulledReqIds();
 
-private:
+   private:
     ForwardRespToManagerCall forwardRespToManagerCall_;
 
     ConcurrentDeque<RequestId> kvPulledReqIds_;
@@ -34,5 +36,5 @@ private:
     size_t localDPRank_{0};
 };
 
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

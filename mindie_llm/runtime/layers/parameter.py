@@ -26,6 +26,7 @@ class BaseParameter(Parameter):
     Args:
         data: The tensor data for the parameter.
     """
+
     def __new__(cls, data: torch.Tensor | None, **kwargs):
         return super().__new__(cls, data=data, requires_grad=False)
 
@@ -59,8 +60,7 @@ class BaseParameter(Parameter):
         """
         if param_data.shape != loaded_weight.size():
             raise ValueError(
-                f"Tried to load weights of size {loaded_weight.size()} "
-                f"to a parameter of size {param_data.shape}"
+                f"Tried to load weights of size {loaded_weight.size()} to a parameter of size {param_data.shape}"
             )
         param_data.copy_(loaded_weight)
 
@@ -108,8 +108,14 @@ class RowParameter(BaseParameter):
     partitioned along the input dimension for tensor parallelism.
     The `input_dim` attribute must be defined on the parameter instance.
     """
-    def load_row_parallel_weight(self, loaded_weight: torch.Tensor, tp_rank: int,
-        loaded_weight_shard_offset: int | None = None, loaded_weight_shard_size: int | None = None) -> None:
+
+    def load_row_parallel_weight(
+        self,
+        loaded_weight: torch.Tensor,
+        tp_rank: int,
+        loaded_weight_shard_offset: int | None = None,
+        loaded_weight_shard_size: int | None = None,
+    ) -> None:
         """Load row-parallel weight for tensor parallel sharding.
 
         Supports uneven partitioning when num_heads (or input dimension) is not
@@ -130,12 +136,8 @@ class RowParameter(BaseParameter):
         if loaded_weight_shard_size is None:
             loaded_weight_shard_size = shard_size
         # Copy the overlapping region between param and loaded weight
-        param_data_with_value = self.data.narrow(
-            self.input_dim, 0, min(shard_size, loaded_weight_shard_size)
-        )
-        loaded_weight = loaded_weight.narrow(
-            self.input_dim, loaded_weight_shard_offset, loaded_weight_shard_size
-        )
+        param_data_with_value = self.data.narrow(self.input_dim, 0, min(shard_size, loaded_weight_shard_size))
+        loaded_weight = loaded_weight.narrow(self.input_dim, loaded_weight_shard_offset, loaded_weight_shard_size)
         self._check_and_copy(param_data_with_value, loaded_weight)
 
         if shard_size > loaded_weight_shard_size:
@@ -143,7 +145,8 @@ class RowParameter(BaseParameter):
             padding_size = list(self.data.shape)
             padding_size[self.input_dim] = shard_size - loaded_weight_shard_size
             param_data_with_padding = self.data.narrow(
-                self.input_dim, loaded_weight_shard_size, padding_size[self.input_dim])
+                self.input_dim, loaded_weight_shard_size, padding_size[self.input_dim]
+            )
             padding_tensor = torch.zeros(padding_size, dtype=loaded_weight.dtype)
             self._check_and_copy(param_data_with_padding, padding_tensor)
         elif shard_size < loaded_weight_shard_size:
@@ -164,9 +167,7 @@ class RowParameter(BaseParameter):
 
         expert_data = self.data[expert_id]
         shard_size = expert_data.shape[self.input_dim]
-        loaded_weight = loaded_weight.narrow(
-            self.input_dim, tp_rank * shard_size, shard_size
-        )
+        loaded_weight = loaded_weight.narrow(self.input_dim, tp_rank * shard_size, shard_size)
 
         self._check_and_copy(expert_data, loaded_weight)
 
@@ -178,6 +179,7 @@ class ColumnParameter(BaseParameter):
     partitioned along the output dimension for tensor parallelism.
     The `output_dim` attribute must be defined on the parameter instance.
     """
+
     def load_column_parallel_weight(self, loaded_weight: torch.Tensor, tp_rank: int) -> None:
         """Load column-parallel weight for tensor parallel sharding.
 
@@ -188,15 +190,13 @@ class ColumnParameter(BaseParameter):
         self.check_required_attr(["output_dim"])
 
         shard_size = self.data.shape[self.output_dim]
-        loaded_weight = loaded_weight.narrow(
-            self.output_dim, tp_rank * shard_size, shard_size
-        )
+        loaded_weight = loaded_weight.narrow(self.output_dim, tp_rank * shard_size, shard_size)
 
         self.load_weight(loaded_weight)
 
     def load_merged_column_weight(
-            self, loaded_weight: torch.Tensor,
-            tp_rank: int, shard_offset: int, shard_size: int) -> None:
+        self, loaded_weight: torch.Tensor, tp_rank: int, shard_offset: int, shard_size: int
+    ) -> None:
         """Load merged column weight with specific shard offset and size.
 
         Args:
@@ -209,15 +209,13 @@ class ColumnParameter(BaseParameter):
 
         param_data = self.data
         param_data = param_data.narrow(self.output_dim, shard_offset, shard_size)
-        loaded_weight = loaded_weight.narrow(
-            self.output_dim, tp_rank * shard_size, shard_size
-        )
+        loaded_weight = loaded_weight.narrow(self.output_dim, tp_rank * shard_size, shard_size)
 
         self._check_and_copy(param_data, loaded_weight)
 
     def load_expert_column_parallel_weight(
-            self, loaded_weight: torch.Tensor, expert_id: int,
-            tp_rank: int, shard_offset: int, shard_size: int) -> None:
+        self, loaded_weight: torch.Tensor, expert_id: int, tp_rank: int, shard_offset: int, shard_size: int
+    ) -> None:
         """Load column weight for a specific expert in MoE models.
 
         Args:
@@ -231,16 +229,18 @@ class ColumnParameter(BaseParameter):
 
         expert_data = self.data[expert_id]
         expert_data = expert_data.narrow(self.output_dim, shard_offset, shard_size)
-        loaded_weight = loaded_weight.narrow(
-            self.output_dim, tp_rank * shard_size, shard_size
-        )
+        loaded_weight = loaded_weight.narrow(self.output_dim, tp_rank * shard_size, shard_size)
 
         self._check_and_copy(expert_data, loaded_weight)
 
     def load_qkv_weight(
-            self, loaded_weight: torch.Tensor,
-            shard_offset: int, shard_size: int,
-            loaded_weight_shard_offset: int | None, loaded_weight_shard_size: int | None) -> None:
+        self,
+        loaded_weight: torch.Tensor,
+        shard_offset: int,
+        shard_size: int,
+        loaded_weight_shard_offset: int | None,
+        loaded_weight_shard_size: int | None,
+    ) -> None:
         """Load QKV weight with special handling for key-value head replication.
 
         Supports total_num_heads not divisible by tp_size. When param shard is larger
@@ -258,10 +258,9 @@ class ColumnParameter(BaseParameter):
         param_data = self.data
         # Copy the overlapping region
         param_data_with_value = param_data.narrow(
-            self.output_dim, shard_offset, min(shard_size, loaded_weight_shard_size))
-        loaded_weight = loaded_weight.narrow(
-            self.output_dim, loaded_weight_shard_offset, loaded_weight_shard_size
+            self.output_dim, shard_offset, min(shard_size, loaded_weight_shard_size)
         )
+        loaded_weight = loaded_weight.narrow(self.output_dim, loaded_weight_shard_offset, loaded_weight_shard_size)
         self._check_and_copy(param_data_with_value, loaded_weight)
 
         if shard_size > loaded_weight_shard_size:
@@ -269,7 +268,8 @@ class ColumnParameter(BaseParameter):
             padding_size = list(param_data.shape)
             padding_size[self.output_dim] = shard_size - loaded_weight_shard_size
             param_data_with_padding = param_data.narrow(
-                self.output_dim, shard_offset + loaded_weight_shard_size, padding_size[self.output_dim])
+                self.output_dim, shard_offset + loaded_weight_shard_size, padding_size[self.output_dim]
+            )
             padding_tensor = torch.zeros(padding_size, dtype=loaded_weight.dtype)
             self._check_and_copy(param_data_with_padding, padding_tensor)
         elif shard_size < loaded_weight_shard_size:
@@ -292,8 +292,14 @@ class BiasParameter(ColumnParameter, RowParameter):
 
     For row-parallel loading, only rank 0 loads the bias; other ranks zero it out.
     """
-    def load_row_parallel_weight(self, loaded_weight: torch.Tensor, tp_rank: int,
-        loaded_weight_shard_offset: int | None = None, loaded_weight_shard_size: int | None = None) -> None:
+
+    def load_row_parallel_weight(
+        self,
+        loaded_weight: torch.Tensor,
+        tp_rank: int,
+        loaded_weight_shard_offset: int | None = None,
+        loaded_weight_shard_size: int | None = None,
+    ) -> None:
         """Load row-parallel bias weight (only rank 0 loads, others zero out).
 
         Args:
@@ -304,14 +310,15 @@ class BiasParameter(ColumnParameter, RowParameter):
         """
         if tp_rank == 0:
             super().load_row_parallel_weight(
-                loaded_weight, tp_rank,
-                loaded_weight_shard_offset, loaded_weight_shard_size)
+                loaded_weight, tp_rank, loaded_weight_shard_offset, loaded_weight_shard_size
+            )
         else:
             self.data.zero_()
 
 
 class ScalerParameter(BaseParameter):
     """Parameter class for scale factors used in quantization."""
+
     pass
 
 
@@ -322,12 +329,18 @@ class PerTensorScaleParameter(ColumnParameter):
     additional processing when weights are generated in float16 but used in
     bfloat16 precision.
     """
+
     pass
 
 
 class ExpertsParameter(BaseParameter):
     """Parameter class for experts' parameters in MoE models."""
-    def load_expert_weight(self, loaded_weight: torch.Tensor, expert_id: int,) -> None:
+
+    def load_expert_weight(
+        self,
+        loaded_weight: torch.Tensor,
+        expert_id: int,
+    ) -> None:
         """Load weight for a specific expert in MoE models.
 
         Args:

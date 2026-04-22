@@ -38,7 +38,7 @@ def get_device_from_ranktable(rank: int, rank_table: str) -> torch.device:
     """
     device_found_flag = False
     logger.info(f"Selecting device from rank table for rank {rank}.")
-    with safe_open(rank_table, 'r', encoding='utf-8') as device_file:
+    with safe_open(rank_table, "r", encoding="utf-8") as device_file:
         data = json.load(device_file)
 
         for server in data["server_list"]:
@@ -51,10 +51,7 @@ def get_device_from_ranktable(rank: int, rank_table: str) -> torch.device:
             if device_found_flag:
                 break
     if not device_found_flag:
-        raise ValueError(
-            f"ERROR: Rank id is not in the rankTableFile, the input rank is "
-            f"{rank}."
-        )
+        raise ValueError(f"ERROR: Rank id is not in the rankTableFile, the input rank is {rank}.")
     return device
 
 
@@ -102,7 +99,7 @@ def set_device(rank: int, npu_id: int = None) -> torch.device:
         device = get_device_from_ranktable(rank, rank_table)
     else:
         device = torch.device(f"npu:{npu_id}")
-    
+
     # Try to set device, it will retry 12 times when it failed.
     retry_max = 12
     for i in range(retry_max):
@@ -114,10 +111,12 @@ def set_device(rank: int, npu_id: int = None) -> torch.device:
                 logger.error(err_msg)
                 raise RuntimeError(err_msg) from e
 
-            warning_msg = f"Set device {device} for rank {rank} fails." \
+            warning_msg = (
+                f"Set device {device} for rank {rank} fails."
                 f"Now wait 5 seconds to retry setting, retry times: {i + 1} / 12"
+            )
             logger.warning(warning_msg)
-            time.sleep(5) # Wait 5s to retry setting
+            time.sleep(5)  # Wait 5s to retry setting
             continue
         break
     logger.info(f"Device {device} has been set to rank {rank}.")

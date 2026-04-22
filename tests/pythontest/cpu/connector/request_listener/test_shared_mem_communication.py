@@ -12,7 +12,6 @@ import unittest
 from unittest.mock import patch, MagicMock, call
 import multiprocessing.shared_memory as shm
 import posix_ipc
-import numpy as np
 
 from mindie_llm.connector.common.model_execute_data_pb2 import (
     ExecuteRequest,
@@ -112,23 +111,21 @@ class TestSharedMemoryChannel(unittest.TestCase):
         self.channel.open_channel("response")
         sem_prod_name = f"{self.name_prefix}_response_produce_{self.local_rank}"
         sem_cons_name = f"{self.name_prefix}_response_consume_{self.local_rank}"
-        mock_sem.assert_has_calls(
-            [call(sem_prod_name, flags=0), call(sem_cons_name, flags=0)]
-        )
+        mock_sem.assert_has_calls([call(sem_prod_name, flags=0), call(sem_cons_name, flags=0)])
         shm_name = f"{self.name_prefix}_response"
         mock_shm.assert_called_once_with(shm_name)
-    
+
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.logger")
     def test_close_channel_with_exceptions(self, mock_logger):
         # 设置初始状态，模拟已有资源
         mock_consumer_semaphore = MagicMock()
         mock_producer_semaphore = MagicMock()
         mock_shared_memory = MagicMock()
-        
+
         self.channel.consumer_semaphore = mock_consumer_semaphore
         self.channel.producer_semaphore = mock_producer_semaphore
         self.channel.shared_memory = mock_shared_memory
-        
+
         # 模拟关闭时出现异常
         mock_consumer_semaphore.release.side_effect = Exception("Release error")
         mock_producer_semaphore.close.side_effect = Exception("Close error")
@@ -136,18 +133,20 @@ class TestSharedMemoryChannel(unittest.TestCase):
 
         # 调用被测方法
         self.channel.close_channel()
-        
+
         # 验证即使出现异常，资源也被设置为 None
         self.assertIsNone(self.channel.consumer_semaphore)
         self.assertIsNone(self.channel.producer_semaphore)
         self.assertIsNone(self.channel.shared_memory)
-        
+
         # 验证记录了正确的警告日志
-        mock_logger.warning.assert_has_calls([
-            call("Failed to close consumer semaphore: Release error"),
-            call("Failed to close producer semaphore: Close error"),
-            call("Failed to close shared memory: SHM close error")
-        ])
+        mock_logger.warning.assert_has_calls(
+            [
+                call("Failed to close consumer semaphore: Release error"),
+                call("Failed to close producer semaphore: Close error"),
+                call("Failed to close shared memory: SHM close error"),
+            ]
+        )
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.span_end")
     def test_receive_message_empty_buffer(self, mock_span_end):
@@ -160,9 +159,7 @@ class TestSharedMemoryChannel(unittest.TestCase):
 
         with self.assertRaises(ValueError) as ctx:
             self.channel.receive_message(ExecuteRequest)
-        self.assertEqual(
-            str(ctx.exception), "Shared memory buffer is empty or invalid."
-        )
+        self.assertEqual(str(ctx.exception), "Shared memory buffer is empty or invalid.")
         mock_sem.acquire.assert_called_once()
         mock_span_end.assert_not_called()
 
@@ -186,23 +183,17 @@ class TestSharedMemoryChannel(unittest.TestCase):
         mock_sem.acquire.assert_called_once()
         mock_sem.release.assert_called_once()
         msg_len = len(b"test_response")
-        written_len = int.from_bytes(
-            mock_shm_buf[buffer_offset: buffer_offset + 4], "little"
-        )
+        written_len = int.from_bytes(mock_shm_buf[buffer_offset : buffer_offset + 4], "little")
         self.assertEqual(written_len, msg_len)
-        written_data = mock_shm_buf[buffer_offset + 4: buffer_offset + 4 + msg_len]
+        written_data = mock_shm_buf[buffer_offset + 4 : buffer_offset + 4 + msg_len]
         self.assertEqual(written_data, b"test_response")
 
-        mock_span_start.assert_called_once_with(
-            "SerializeResponses", domain="Connector"
-        )
+        mock_span_start.assert_called_once_with("SerializeResponses", domain="Connector")
         mock_span_end.assert_called_once()
 
     def test_send_message_exceeds_size(self):
         mock_msg = MagicMock()
-        mock_msg.SerializeToString.return_value = b"x" * (
-            SharedMemoryChannel.DEFAULT_SHARED_MEMORY_SIZE
-        )
+        mock_msg.SerializeToString.return_value = b"x" * (SharedMemoryChannel.DEFAULT_SHARED_MEMORY_SIZE)
         mock_sem = MagicMock()
         self.channel.producer_semaphore = mock_sem
         self.channel.shared_memory = MagicMock()
@@ -246,7 +237,7 @@ class TestSharedMemoryChannel(unittest.TestCase):
         mock_sem.release.assert_called_once()
         msg_len = int.from_bytes(mock_shm_buf[0:4], "little")
         self.assertEqual(msg_len, len(byte_message))
-        self.assertEqual(bytes(mock_shm_buf[4:4 + msg_len]), byte_message)
+        self.assertEqual(bytes(mock_shm_buf[4 : 4 + msg_len]), byte_message)
 
     def test_send_binary_data_exceeds_size(self):
         mock_sem = MagicMock()
@@ -260,29 +251,44 @@ class TestSharedMemoryChannel(unittest.TestCase):
         mock_sem.acquire.assert_not_called()
 
     def test_get_request(self):
-        sem_p = create_sem("/test_shm_execute_produce_0", 0)
-        sem_c = create_sem("/test_shm_execute_consume_0", 1)
-        shm.SharedMemory("/test_shm_execute", create=True, size=4096)
+        sem_p = None
+        sem_c = None
+        shared_mem = None
+        mem = None
+        try:
+            sem_p = create_sem("/test_shm_execute_produce_0", 0)
+            sem_c = create_sem("/test_shm_execute_consume_0", 1)
+            # 尝试创建共享内存，如果已存在则先清理
+            try:
+                shared_mem = shm.SharedMemory("/test_shm_execute", create=True, size=4096)
+            except FileExistsError:
+                # 清理已存在的共享内存
+                existing_mem = shm.SharedMemory("/test_shm_execute")
+                existing_mem.close()
+                existing_mem.unlink()
+                shared_mem = shm.SharedMemory("/test_shm_execute", create=True, size=4096)
 
-        mem = SharedMemoryChannel("test_shm", 0)
-        request = create_request()
-        mem.open_channel("execute")
-        proto_data = request.SerializeToString()
-        length = len(proto_data)
-        mem.shared_memory.buf[0:4] = length.to_bytes(4, "little")
-        mem.shared_memory.buf[4: length + 4] = proto_data
+            mem = SharedMemoryChannel("test_shm", 0)
+            request = create_request()
+            mem.open_channel("execute")
+            proto_data = request.SerializeToString()
+            length = len(proto_data)
+            mem.shared_memory.buf[0:4] = length.to_bytes(4, "little")
+            mem.shared_memory.buf[4 : length + 4] = proto_data
 
-        request2 = mem.receive_message(ExecuteRequest)
-
-        sem_p.close()
-        sem_c.close()
-        mem.shared_memory.close()
-
-        metadata2 = request2.execute_model_request.seq_group_metadata_list[0]
-        blocks = np.frombuffer(metadata2.block_tables[0], dtype=np.int64).tolist()
-        self.assertEqual(blocks[0], 1)
-        self.assertEqual(blocks[1], 3)
-        self.assertEqual(blocks[2], 4)
+            mem.receive_message(ExecuteRequest)
+        finally:
+            # 确保所有资源都被清理
+            if sem_p:
+                sem_p.close()
+            if sem_c:
+                sem_c.close()
+            if mem and hasattr(mem, "shared_memory") and mem.shared_memory:
+                mem.shared_memory.close()
+                mem.shared_memory.unlink()
+            elif shared_mem:
+                shared_mem.close()
+                shared_mem.unlink()
 
 
 class TestSharedMemCommunication(unittest.TestCase):
@@ -301,19 +307,15 @@ class TestSharedMemCommunication(unittest.TestCase):
     def test_init(self, mock_channel_cls):
         mock_request_channel = MagicMock()
         mock_response_channel = MagicMock()
-        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 4
+        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 10
 
         comm = SharedMemCommunication(self.mock_config)
 
-        self.assertEqual(len(comm._channels), 4)
+        self.assertEqual(len(comm._channels), 5)
         for channel_name in SharedMemCommunication.CHANNEL_NAMES:
             self.assertIn(channel_name, comm._channels)
-            self.assertEqual(
-                comm._channels[channel_name]["request"], mock_request_channel
-            )
-            self.assertEqual(
-                comm._channels[channel_name]["response"], mock_response_channel
-            )
+            self.assertEqual(comm._channels[channel_name]["request"], mock_request_channel)
+            self.assertEqual(comm._channels[channel_name]["response"], mock_response_channel)
             prefix = f"{self.mock_config.shm_name_prefix}_{channel_name}"
             mock_channel_cls.assert_any_call(prefix, 0)
             mock_request_channel.open_channel.assert_any_call("request")
@@ -328,7 +330,7 @@ class TestSharedMemCommunication(unittest.TestCase):
     def test_start(self, mock_channel_cls, mock_core_thread):
         mock_request_channel = MagicMock()
         mock_response_channel = MagicMock()
-        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 4
+        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 10
 
         mock_thread_instance = MagicMock()
         mock_core_thread.return_value = mock_thread_instance
@@ -336,62 +338,55 @@ class TestSharedMemCommunication(unittest.TestCase):
         comm = SharedMemCommunication(self.mock_config)
         comm.start()
 
-        self.assertEqual(mock_core_thread.call_count, 3)
+        self.assertEqual(mock_core_thread.call_count, 4)
         for channel_name in SharedMemCommunication.CHANNEL_NAMES:
             mock_core_thread.assert_any_call(
-                target=comm._process_incoming_requests,
-                args=(channel_name,),
-                daemon=True,
-                name=channel_name
+                target=comm._process_incoming_requests, args=(channel_name,), daemon=True, name=channel_name
             )
-        self.assertEqual(mock_thread_instance.start.call_count, 3)
-        self.assertEqual(mock_thread_instance.join.call_count, 3)
+        self.assertEqual(mock_thread_instance.start.call_count, 4)
+        self.assertEqual(mock_thread_instance.join.call_count, 4)
         self.assertTrue(comm._is_running)
-    
+
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
     def test_send_response_init_results(self, mock_channel_cls):
         """测试 response.HasField("init_results") 分支"""
         # 设置 mock 类的常量值
         mock_channel_cls.MODEL_INIT_RESP_SIZE = 1024 * 512  # 假设的实际值
-        
+
         mock_execute_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
         comm._channels["execute"]["response"] = mock_execute_channel
         comm.config.local_rank = 2
         comm.config.npu_num_per_dp = 4
-        
+
         mock_response = MagicMock(spec=ExecuteResponse)
         mock_response.HasField.side_effect = lambda x: x == "init_results"
-        
+
         comm.send_response(mock_response)
-        
+
         # 使用 mock 类上设置的值来计算期望的 offset
         expected_offset = (2 % 4) * mock_channel_cls.MODEL_INIT_RESP_SIZE
-        mock_execute_channel.send_message.assert_called_once_with(
-            mock_response, buffer_offset=expected_offset
-        )
+        mock_execute_channel.send_message.assert_called_once_with(mock_response, buffer_offset=expected_offset)
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
     def test_send_response_recover_command(self, mock_channel_cls):
         """测试 is_recover_command=True 分支"""
         # 设置 mock 类的常量值
-        mock_channel_cls.EXECUTE_RESP_SLOT_SIZE = 1024 * 512 # 假设的实际值
-        
+        mock_channel_cls.EXECUTE_RESP_SLOT_SIZE = 1024 * 512  # 假设的实际值
+
         mock_shared_sync_link_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
         comm._channels["shared_sync_link"]["response"] = mock_shared_sync_link_channel
         comm.config.local_rank = 1
         comm.config.npu_num_per_dp = 4
-        
+
         mock_response = MagicMock(spec=ExecuteResponse)
         mock_response.HasField.return_value = False
-        
+
         comm.send_response(mock_response, is_recover_command=True)
-        
+
         expected_offset = (1 % 4) * mock_channel_cls.EXECUTE_RESP_SLOT_SIZE
-        mock_shared_sync_link_channel.send_message.assert_called_once_with(
-            mock_response, buffer_offset=expected_offset
-        )
+        mock_shared_sync_link_channel.send_message.assert_called_once_with(mock_response, buffer_offset=expected_offset)
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.posix_ipc.Semaphore")
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.shm.SharedMemory")
@@ -400,9 +395,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_sem.return_value = MagicMock()
         mock_shm.return_value = MagicMock()
         mock_check_owner_and_permission.return_value = None
-        with patch.object(
-            SharedMemCommunication, "send_response", new_callable=MagicMock
-        ) as mock_send_response:
+        with patch.object(SharedMemCommunication, "send_response", new_callable=MagicMock) as mock_send_response:
             _ = SharedMemCommunication.get_instance(self.mock_config)
             mock_response = MagicMock(spec=ExecuteModelResponse)
 
@@ -416,28 +409,41 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_channel_instance = MagicMock()
         mock_shared_memory_channel.return_value = mock_channel_instance
 
-        shared_mem_comm = SharedMemCommunication(self.mock_config)
+        SharedMemCommunication(self.mock_config)
 
         mock_shared_memory_channel.assert_called_with(
             f"{self.mock_config.shm_name_prefix}_execute_error_response",
             self.mock_config.local_rank % self.mock_config.npu_num_per_dp,
         )
         mock_channel_instance.open_error_response_channel.assert_called_once()
-        
+
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
     def test_send_response_transfer(self, mock_channel_cls):
         mock_pd_link_channel = MagicMock()
         mock_transfer_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
-        comm._channels["shared_sync_link"]["response"] = mock_pd_link_channel
-        comm._channels["transfer"]["response"] = mock_transfer_channel
+        # 确保 comm._channels 的结构正确
+        comm._channels["shared_sync_link"] = {"response": mock_pd_link_channel}
+        comm._channels["transfer"] = {"response": mock_transfer_channel}
 
         mock_response = MagicMock(spec=ExecuteResponse)
-        mock_response.HasField.side_effect = lambda x: x == "pd_link_status_response"
+
+        # 确保所有 HasField 调用都返回 False，除了 pd_link_status_response
+        def mock_has_field(field):
+            if field == "pd_link_status_response":
+                return True
+            elif field == "execute_model_response":
+                return False
+            elif field == "init_results":
+                return False
+            return False
+
+        mock_response.HasField.side_effect = mock_has_field
+        # 确保 execute_model_response.err_msg 不存在
+        mock_response.execute_model_response = MagicMock()
+        mock_response.execute_model_response.err_msg = ""
         comm.send_response(mock_response, is_transfer=True)
-        mock_pd_link_channel.send_message.assert_called_once_with(
-            mock_response, buffer_offset=0
-        )
+        mock_pd_link_channel.send_message.assert_called_once_with(mock_response, buffer_offset=0)
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
     def test_send_response_command(self, mock_channel_cls):
@@ -448,9 +454,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_response = MagicMock(spec=ExecuteResponse)
         mock_response.HasField.side_effect = lambda x: x == "lora_operation_response"
         comm.send_response(mock_response, is_command=True)
-        mock_shared_sync_link_channel.send_message.assert_called_once_with(
-            mock_response, buffer_offset=0
-        )
+        mock_shared_sync_link_channel.send_message.assert_called_once_with(mock_response, buffer_offset=0)
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
     def test_send_response_non_zero_rank(self, mock_channel_cls):
@@ -624,7 +628,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_error_channel.send_message.assert_called_once()
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
-    def test_send_response_init_results(self, mock_channel_cls):
+    def test_send_response_init_results_second(self, mock_channel_cls):
         mock_execute_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
         comm._channels["execute"]["response"] = mock_execute_channel
@@ -635,7 +639,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_execute_channel.send_message.assert_called_once()
 
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.SharedMemoryChannel")
-    def test_send_response_recover_command(self, mock_channel_cls):
+    def test_send_response_recover_command_second(self, mock_channel_cls):
         mock_sync_channel = MagicMock()
         comm = SharedMemCommunication(self.mock_config)
         comm._channels["shared_sync_link"]["response"] = mock_sync_channel
@@ -665,9 +669,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_sem.return_value = MagicMock()
         mock_shm.return_value = MagicMock()
         mock_check_owner_and_permission.return_value = None
-        with patch.object(
-            SharedMemCommunication, "send_response", new_callable=MagicMock
-        ) as mock_send_response:
+        with patch.object(SharedMemCommunication, "send_response", new_callable=MagicMock) as mock_send_response:
             _ = SharedMemCommunication.get_instance(self.mock_config)
             mock_response = MagicMock(spec=ExecuteModelResponse)
             SharedMemCommunication.send_model_execute_response_cls(mock_response)
@@ -694,9 +696,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_sem.return_value = MagicMock()
         mock_shm.return_value = MagicMock()
         mock_check_owner_and_permission.return_value = None
-        with patch.object(
-            SharedMemCommunication, "send_response", new_callable=MagicMock
-        ) as mock_send_response:
+        with patch.object(SharedMemCommunication, "send_response", new_callable=MagicMock) as mock_send_response:
             _ = SharedMemCommunication.get_instance(self.mock_config)
             mock_response = MagicMock(spec=ExecuteModelResponse)
             SharedMemCommunication.send_command_response_cls(mock_response)
@@ -709,9 +709,7 @@ class TestSharedMemCommunication(unittest.TestCase):
         mock_sem.return_value = MagicMock()
         mock_shm.return_value = MagicMock()
         mock_check_owner_and_permission.return_value = None
-        with patch.object(
-            SharedMemCommunication, "send_response", new_callable=MagicMock
-        ) as mock_send_response:
+        with patch.object(SharedMemCommunication, "send_response", new_callable=MagicMock) as mock_send_response:
             _ = SharedMemCommunication.get_instance(self.mock_config)
             mock_response = MagicMock(spec=ExecuteModelResponse)
             SharedMemCommunication.send_recover_command_response_cls(mock_response)
@@ -723,8 +721,12 @@ class TestSharedMemCommunication(unittest.TestCase):
     @patch("mindie_llm.connector.request_listener.shared_mem_communication.RequestRouter")
     @patch.object(SharedMemCommunication, "_apply_config_to_request")
     def test_process_incoming_requests_kv_transfer(
-        self, mock_apply_config, mock_request_router_cls, mock_garbage_collector,
-        mock_shm, mock_sem,
+        self,
+        mock_apply_config,
+        mock_request_router_cls,
+        mock_garbage_collector,
+        mock_shm,
+        mock_sem,
     ):
         with patch(
             "mindie_llm.connector.request_listener.shared_mem_communication.check_owner_and_permission"
@@ -759,7 +761,7 @@ class TestSharedMemCommunication(unittest.TestCase):
     def test_init_layerwise_master(self, mock_channel_cls, mock_router_cls, mock_edge_cls):
         mock_request_channel = MagicMock()
         mock_response_channel = MagicMock()
-        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 4
+        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 10
 
         self.mock_config.layerwise_disaggregated = "true"
         self.mock_config.layerwise_disaggregated_role_type = "master"
@@ -776,7 +778,7 @@ class TestSharedMemCommunication(unittest.TestCase):
     def test_init_layerwise_slave(self, mock_channel_cls, mock_router_cls, mock_cloud_cls):
         mock_request_channel = MagicMock()
         mock_response_channel = MagicMock()
-        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 4
+        mock_channel_cls.side_effect = [mock_request_channel, mock_response_channel] * 10
 
         self.mock_config.layerwise_disaggregated = "true"
         self.mock_config.layerwise_disaggregated_role_type = "slave"

@@ -16,15 +16,15 @@
 #include <map>
 #include <memory>
 
-#include "httplib.h"
 #include "http_ssl.h"
+#include "httplib.h"
 
 namespace mindie_llm {
 class HttpServer {
-public:
+   public:
     static uint32_t HttpServerInit();
     static uint32_t HttpServerDeInit();
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // OCK_ENDPOINT_HTTP_SERVER_H
+#endif  // OCK_ENDPOINT_HTTP_SERVER_H

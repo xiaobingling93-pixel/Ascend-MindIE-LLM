@@ -14,6 +14,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class CloudCutInputData():
+class CloudCutInputData:
     seq_len: int = 0
     prefill_gap_time: list = None

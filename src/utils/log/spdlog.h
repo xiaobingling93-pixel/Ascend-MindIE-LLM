@@ -17,16 +17,16 @@
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 #pragma GCC diagnostic ignored "-Wsign-conversion"
 
+#include "spdlog/async.h"
+#include "spdlog/common.h"
 #include "spdlog/details/file_helper.h"
 #include "spdlog/details/log_msg.h"
-#include "spdlog/sinks/base_sink.h"
-#include "spdlog/common.h"
-#include "spdlog/async.h"
 #include "spdlog/details/os.h"
-#include "spdlog/sinks/stdout_sinks.h"
+#include "spdlog/sinks/base_sink.h"
 #include "spdlog/sinks/rotating_file_sink.h"
+#include "spdlog/sinks/stdout_sinks.h"
 #include "spdlog/spdlog.h"
 
 #pragma GCC diagnostic pop
 
-#endif // LOG_SPDLOG_H
+#endif  // LOG_SPDLOG_H

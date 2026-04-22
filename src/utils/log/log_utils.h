@@ -22,9 +22,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "spdlog.h"
-
 #include "log_config.h"
+#include "spdlog.h"
 
 namespace mindie_llm {
 
@@ -33,7 +32,7 @@ const size_t LOG_FILE_SIZE_LIMIT = 524288000;
 const size_t LOG_FILE_NUM_LIMIT = 64;
 
 class LogUtils {
-public:
+   public:
     static void SetMindieLogParamBool(LoggerType loggerType, bool &logParam, const std::string &envVar);
 
     static void SetMindieLogParamString(LoggerType loggerType, std::string &logParam, const std::string &envVar);
@@ -56,7 +55,7 @@ public:
 };
 
 class GenericRotationFileSink : public spdlog::sinks::base_sink<std::mutex> {
-public:
+   public:
     GenericRotationFileSink(const std::string &baseFileName, size_t maxFileSize, size_t maxFileNum,
                             const spdlog::file_event_handlers &eventHandlers, const std::string &baseDir);
     ~GenericRotationFileSink() override;
@@ -64,11 +63,11 @@ public:
     bool CreateFileIfNeeded();
     const std::string &GetLastError() const;
 
-protected:
+   protected:
     void sink_it_(const spdlog::details::log_msg &msg) override;
     void flush_() override;
 
-private:
+   private:
     std::string GenerateFileName(std::string &fileName, size_t index) const;
 
     bool RenameFile(std::string &srcFileName, std::string &targetFileName) const;

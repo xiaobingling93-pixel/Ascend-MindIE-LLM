@@ -9,54 +9,56 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <gtest/gtest.h>
-#include <string>
-#include <climits>
-#include <unistd.h>
-#include <set>
-#include <vector>
-#include <map>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
+
 #include <common_util.h>
+#include <env_util.h>
+#include <gtest/gtest.h>
+#include <unistd.h>
+
+#include <algorithm>
 #include <chrono>
-#include <thread>
+#include <climits>
+#include <iomanip>
+#include <map>
+#include <mockcpp/mockcpp.hpp>
 #include <nlohmann/json.hpp>
+#include <set>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "file_system.h"
 using Json = nlohmann::json;
 
 namespace mindie_llm {
 
 // Test Suite for CanonicalPath function
 class CommonUtilsTest : public ::testing::Test {
-public:
+   public:
     std::string configPath_;
     const char* mindieLlmPath;
     const char* mindieMiesPath;
 
-protected:
-    void SetUp() override
-    {
+   protected:
+    void SetUp() override {
         setenv("MINDIE_LLM_HOME_PATH", MINDIE_LLM_HOME_PATH_TEST, 1);
         const char* mindieLlmPathEnv = getenv("MINDIE_LLM_HOME_PATH");
         if (mindieLlmPathEnv != nullptr) {
             mindieLlmPath = mindieLlmPathEnv;
         }
 
-        const char* mindieMiesPathEnv = getenv("MINDIE_LLM_HOME_PATH");
+        setenv("MIES_INSTALL_PATH", MINDIE_LLM_HOME_PATH_TEST, 1);
+        const char* mindieMiesPathEnv = getenv("MIES_INSTALL_PATH");
         if (mindieMiesPathEnv != nullptr) {
             mindieMiesPath = mindieMiesPathEnv;
         }
         SetConfigPath();
     }
 
-    void TearDown() override
-    {
-    }
+    void TearDown() override {}
 
-    void SetConfigPath()
-    {
+    void SetConfigPath() {
         std::string homePath;
         GetLlmPath(homePath);
         configPath_ = homePath + "/conf/config.json";
@@ -65,8 +67,7 @@ protected:
 
 // GetDuration测试
 // 测试正常持续时间
-TEST_F(CommonUtilsTest, TestGetDurationSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetDurationSuccess) {
     auto start = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));  // 暂停 100 毫秒
     auto end = std::chrono::steady_clock::now();
@@ -77,13 +78,12 @@ TEST_F(CommonUtilsTest, TestGetDurationSuccess)
 
 // GetCurTime测试
 // 测试获取时间正确
-TEST_F(CommonUtilsTest, TestGetCurTimeSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetCurTimeSuccess) {
     std::string timeStr = GetCurTime();
 
     auto now = std::chrono::system_clock::now();
     std::time_t nowC = std::chrono::system_clock::to_time_t(now);
-    tm *parts = std::localtime(&nowC);
+    tm* parts = std::localtime(&nowC);
 
     std::stringstream expectedTime;
     expectedTime << std::put_time(parts, "%Y-%m-%d %H:%M:%S");
@@ -99,8 +99,7 @@ TEST_F(CommonUtilsTest, TestGetCurTimeSuccess)
 
 // Split测试
 // 测试字符串分割正确
-TEST_F(CommonUtilsTest, TestSplitByBasicStrSuccess)
-{
+TEST_F(CommonUtilsTest, TestSplitByBasicStrSuccess) {
     std::string splitStr = "llm,service";
     char delim = ',';
     std::vector<std::string> result = Split(splitStr, delim);
@@ -111,8 +110,7 @@ TEST_F(CommonUtilsTest, TestSplitByBasicStrSuccess)
 }
 
 // 测试单个字符串分割正确
-TEST_F(CommonUtilsTest, TestSplitBySingleStrSuccess)
-{
+TEST_F(CommonUtilsTest, TestSplitBySingleStrSuccess) {
     std::string splitStr = "llm";
     char delim = ',';
     std::vector<std::string> result = Split(splitStr, delim);
@@ -121,8 +119,7 @@ TEST_F(CommonUtilsTest, TestSplitBySingleStrSuccess)
 }
 
 // 测试空字符串分割正确
-TEST_F(CommonUtilsTest, TestSplitByEmptyStrSuccess)
-{
+TEST_F(CommonUtilsTest, TestSplitByEmptyStrSuccess) {
     std::string splitStr = "";
     char delim = ',';
     std::vector<std::string> result = Split(splitStr, delim);
@@ -131,15 +128,13 @@ TEST_F(CommonUtilsTest, TestSplitByEmptyStrSuccess)
 
 // CanonicalPath测试
 // 测试空路径
-TEST_F(CommonUtilsTest, TestCanonicalPathByEmptyPathFail)
-{
+TEST_F(CommonUtilsTest, TestCanonicalPathByEmptyPathFail) {
     std::string path = "";
     EXPECT_FALSE(CanonicalPath(path));
 }
 
 // 测试有效绝对路径
-TEST_F(CommonUtilsTest, TestCanonicalByValidPathSuccess)
-{
+TEST_F(CommonUtilsTest, TestCanonicalByValidPathSuccess) {
     const char* homePath = getenv("HOME");
     if (homePath != nullptr) {
         std::string path = homePath;
@@ -150,16 +145,14 @@ TEST_F(CommonUtilsTest, TestCanonicalByValidPathSuccess)
 }
 
 // 测试路径长度超出限制
-TEST_F(CommonUtilsTest, TestCanonicalByPathTooLongFail)
-{
+TEST_F(CommonUtilsTest, TestCanonicalByPathTooLongFail) {
     std::string path(PATH_MAX + 1, 'a');  // 创建一个超长路径
-    EXPECT_FALSE(CanonicalPath(path));  // 应该返回 false
+    EXPECT_FALSE(CanonicalPath(path));    // 应该返回 false
 }
 
 // GetHomePath测试
 // 测试是否能获取正确路径
-TEST_F(CommonUtilsTest, TestGetHomePathSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetHomePathSuccess) {
     std::string homePath;
     Error result = GetHomePath(homePath);
     EXPECT_TRUE(result.IsOk());
@@ -167,38 +160,31 @@ TEST_F(CommonUtilsTest, TestGetHomePathSuccess)
 
 // GetLlmPath测试
 // 测试是否能获取正确路径
-TEST_F(CommonUtilsTest, TestGetLlmPathSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetLlmPathSuccess) {
     std::string llmPath;
     Error result = GetLlmPath(llmPath);
     EXPECT_TRUE(result.IsOk());
 }
 
 // 测试错误的环境变量是否被校验住
-TEST_F(CommonUtilsTest, TestGetLlmPathByInvalidEnvFail)
-{
-    setenv("MINDIE_LLM_HOME_PATH", "", 1);
+TEST_F(CommonUtilsTest, TestGetLlmPathByInvalidEnvFail) {
+    EnvUtil::GetInstance().SetEnvVar("MIES_INSTALL_PATH", "");
     std::string llmPath;
     Error result = GetLlmPath(llmPath);
-    setenv("MINDIE_LLM_HOME_PATH", mindieLlmPath, 1);
+    EnvUtil::GetInstance().SetEnvVar("MIES_INSTALL_PATH", MINDIE_LLM_HOME_PATH_TEST);
     EXPECT_FALSE(result.IsOk());
 }
 
 // IsNumber测试
-TEST_F(CommonUtilsTest, TestIsNumberByEmptyStringFail)
-{
-    EXPECT_FALSE(IsNumber(""));
-}
+TEST_F(CommonUtilsTest, TestIsNumberByEmptyStringFail) { EXPECT_FALSE(IsNumber("")); }
 
-TEST_F(CommonUtilsTest, TestIsNumberByValidNumberSuccess)
-{
+TEST_F(CommonUtilsTest, TestIsNumberByValidNumberSuccess) {
     EXPECT_TRUE(IsNumber("123"));
     EXPECT_TRUE(IsNumber("-123"));
     EXPECT_TRUE(IsNumber("0"));
 }
 
-TEST_F(CommonUtilsTest, TestIsNumberByInvalidNumberFail)
-{
+TEST_F(CommonUtilsTest, TestIsNumberByInvalidNumberFail) {
     EXPECT_FALSE(IsNumber("123a"));
     EXPECT_FALSE(IsNumber("-123a"));
     EXPECT_FALSE(IsNumber("12 3"));
@@ -206,16 +192,14 @@ TEST_F(CommonUtilsTest, TestIsNumberByInvalidNumberFail)
 }
 
 // GetConfigPath测试
-TEST_F(CommonUtilsTest, TestGetConfigPathWithoutEnvSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetConfigPathWithoutEnvSuccess) {
     std::string outConfigPath;
     Error result = GetConfigPath(outConfigPath);
     EXPECT_TRUE(result.IsOk());
 }
 
 // 设置环境变量MIES_CONFIG_JSON_PATH测试
-TEST_F(CommonUtilsTest, TestGetConfigPathWithEnvSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetConfigPathWithEnvSuccess) {
     setenv("MIES_CONFIG_JSON_PATH", configPath_.c_str(), 1);
     std::string outConfigPath;
     Error result = GetConfigPath(outConfigPath);
@@ -224,8 +208,7 @@ TEST_F(CommonUtilsTest, TestGetConfigPathWithEnvSuccess)
 }
 
 // GetModelInfo测试
-TEST_F(CommonUtilsTest, TestGetModelInfoSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetModelInfoSuccess) {
     std::string modelName;
     size_t serverCount = 0;
     size_t tp = 0;
@@ -234,16 +217,14 @@ TEST_F(CommonUtilsTest, TestGetModelInfoSuccess)
 }
 
 // CheckSystemConfig测试
-TEST_F(CommonUtilsTest, TestCheckSystemConfigSuccess)
-{
+TEST_F(CommonUtilsTest, TestCheckSystemConfigSuccess) {
     Json backendJsonData;
     bool result = CheckSystemConfig(configPath_, backendJsonData, "BackendConfig");
     EXPECT_TRUE(result);
 }
 
 // TrimSpace测试
-TEST_F(CommonUtilsTest, TestTrimSpaceSuccess)
-{
+TEST_F(CommonUtilsTest, TestTrimSpaceSuccess) {
     // 测试前后都有空格
     EXPECT_EQ(mindie_llm::TrimSpace("  hello world  "), "hello world");
 
@@ -264,8 +245,7 @@ TEST_F(CommonUtilsTest, TestTrimSpaceSuccess)
 }
 
 // ToLower测试
-TEST_F(CommonUtilsTest, TestToLowerSuccess)
-{
+TEST_F(CommonUtilsTest, TestToLowerSuccess) {
     EXPECT_EQ(mindie_llm::ToLower("HELLO WORLD"), "hello world");
     EXPECT_EQ(mindie_llm::ToLower("Hello123"), "hello123");
     EXPECT_EQ(mindie_llm::ToLower("hello"), "hello");
@@ -273,8 +253,7 @@ TEST_F(CommonUtilsTest, TestToLowerSuccess)
 }
 
 // ToUpper测试
-TEST_F(CommonUtilsTest, TestToUpperSuccess)
-{
+TEST_F(CommonUtilsTest, TestToUpperSuccess) {
     EXPECT_EQ(mindie_llm::ToUpper("hello world"), "HELLO WORLD");
     EXPECT_EQ(mindie_llm::ToUpper("Hello123"), "HELLO123");
     EXPECT_EQ(mindie_llm::ToUpper("HELLO"), "HELLO");
@@ -282,8 +261,7 @@ TEST_F(CommonUtilsTest, TestToUpperSuccess)
 }
 
 // GetHostIP测试
-TEST_F(CommonUtilsTest, TestGetHostIPSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetHostIPSuccess) {
     std::vector<std::string> ips = mindie_llm::GetHostIP(true);
     // 应该至少有一个IP地址
     EXPECT_FALSE(ips.empty());
@@ -294,8 +272,7 @@ TEST_F(CommonUtilsTest, TestGetHostIPSuccess)
 }
 
 // GetBinaryPath测试
-TEST_F(CommonUtilsTest, TestGetBinaryPathSuccess)
-{
+TEST_F(CommonUtilsTest, TestGetBinaryPathSuccess) {
     std::string binaryPath;
     bool result = mindie_llm::GetBinaryPath(binaryPath);
     EXPECT_TRUE(result);
@@ -303,8 +280,7 @@ TEST_F(CommonUtilsTest, TestGetBinaryPathSuccess)
 }
 
 // JoinStrings测试
-TEST_F(CommonUtilsTest, TestJoinStringsSuccess)
-{
+TEST_F(CommonUtilsTest, TestJoinStringsSuccess) {
     std::vector<std::string> strings = {"hello", "world", "test"};
     std::string result = mindie_llm::JoinStrings(strings, ",");
     EXPECT_EQ(result, "hello,world,test");
@@ -321,8 +297,7 @@ TEST_F(CommonUtilsTest, TestJoinStringsSuccess)
 }
 
 // RandomNumber测试
-TEST_F(CommonUtilsTest, TestRandomNumberSuccess)
-{
+TEST_F(CommonUtilsTest, TestRandomNumberSuccess) {
     uint32_t maxNumber = 100;
     uint32_t randomNum = mindie_llm::RandomNumber(maxNumber);
     EXPECT_LE(randomNum, maxNumber);
@@ -333,8 +308,7 @@ TEST_F(CommonUtilsTest, TestRandomNumberSuccess)
 }
 
 // SerializeSet测试
-TEST_F(CommonUtilsTest, TestSerializeSetSuccess)
-{
+TEST_F(CommonUtilsTest, TestSerializeSetSuccess) {
     std::set<uint32_t> testSet = {1, 2, 3, 5, 8};
     std::string serialized = mindie_llm::SerializeSet(testSet);
     EXPECT_EQ(serialized, "1,2,3,5,8");
@@ -351,8 +325,7 @@ TEST_F(CommonUtilsTest, TestSerializeSetSuccess)
 }
 
 // DeserializeSet测试
-TEST_F(CommonUtilsTest, TestDeserializeSetSuccess)
-{
+TEST_F(CommonUtilsTest, TestDeserializeSetSuccess) {
     std::string data = "1,2,3,5,8";
     std::set<size_t> result = mindie_llm::DeserializeSet(data);
     std::set<size_t> expected = {1, 2, 3, 5, 8};
@@ -369,8 +342,7 @@ TEST_F(CommonUtilsTest, TestDeserializeSetSuccess)
 }
 
 // ParsePortFromIp测试
-TEST_F(CommonUtilsTest, TestParsePortFromIpSuccess)
-{
+TEST_F(CommonUtilsTest, TestParsePortFromIpSuccess) {
     uint32_t port;
     bool result = mindie_llm::ParsePortFromIp("192.168.1.1;8080", port);
     EXPECT_TRUE(result);
@@ -382,17 +354,15 @@ TEST_F(CommonUtilsTest, TestParsePortFromIpSuccess)
 }
 
 // ReverseDpInstId测试
-TEST_F(CommonUtilsTest, TestReverseDpInstIdSuccess)
-{
-    uint64_t dpInstanceId = 1234500067; // pid=123450, dpIdx=67
+TEST_F(CommonUtilsTest, TestReverseDpInstIdSuccess) {
+    uint64_t dpInstanceId = 1234500067;  // pid=123450, dpIdx=67
     auto result = mindie_llm::ReverseDpInstId(dpInstanceId);
-    EXPECT_EQ(result.first, 123450);   // pid
+    EXPECT_EQ(result.first, 123450);  // pid
     EXPECT_EQ(result.second, 67);     // dpIdx
 }
 
 // CleanStringForJson测试
-TEST_F(CommonUtilsTest, TestCleanStringForJsonSuccess)
-{
+TEST_F(CommonUtilsTest, TestCleanStringForJsonSuccess) {
     // 测试正常字符串
     std::string normalStr = "Hello World";
     std::string cleaned = mindie_llm::CleanStringForJson(normalStr);
@@ -414,8 +384,7 @@ TEST_F(CommonUtilsTest, TestCleanStringForJsonSuccess)
 }
 
 // IsFloatEquals测试
-TEST_F(CommonUtilsTest, TestIsFloatEqualsSuccess)
-{
+TEST_F(CommonUtilsTest, TestIsFloatEqualsSuccess) {
     EXPECT_TRUE(mindie_llm::IsFloatEquals(1.0f, 1.0f));
     EXPECT_TRUE(mindie_llm::IsFloatEquals(1.0f, 1.000001f));
     EXPECT_FALSE(mindie_llm::IsFloatEquals(1.0f, 1.1f));
@@ -424,8 +393,7 @@ TEST_F(CommonUtilsTest, TestIsFloatEqualsSuccess)
 }
 
 // SplitString测试
-TEST_F(CommonUtilsTest, TestSplitStringSuccess)
-{
+TEST_F(CommonUtilsTest, TestSplitStringSuccess) {
     std::string testStr = "hello,world,test";
     std::vector<std::string> result = mindie_llm::SplitString(testStr, ',');
     std::vector<std::string> expected = {"hello", "world", "test"};
@@ -442,8 +410,7 @@ TEST_F(CommonUtilsTest, TestSplitStringSuccess)
 }
 
 // SplitPath测试
-TEST_F(CommonUtilsTest, TestSplitPathSuccess)
-{
+TEST_F(CommonUtilsTest, TestSplitPathSuccess) {
     std::string path = "/usr/local/bin";
     std::vector<std::string> result = mindie_llm::SplitPath(path);
     std::vector<std::string> expected = {"usr", "local", "bin"};
@@ -460,8 +427,7 @@ TEST_F(CommonUtilsTest, TestSplitPathSuccess)
 }
 
 // AbsoluteToAnonymousPath测试
-TEST_F(CommonUtilsTest, TestAbsoluteToAnonymousPathSuccess)
-{
+TEST_F(CommonUtilsTest, TestAbsoluteToAnonymousPathSuccess) {
     // 测试正常路径
     std::string path = "/usr/local/bin";
     std::string result = mindie_llm::AbsoluteToAnonymousPath(path);
@@ -482,8 +448,7 @@ TEST_F(CommonUtilsTest, TestAbsoluteToAnonymousPathSuccess)
 }
 
 // AbsoluteToRelativePath测试
-TEST_F(CommonUtilsTest, TestAbsoluteToRelativePathSuccess)
-{
+TEST_F(CommonUtilsTest, TestAbsoluteToRelativePathSuccess) {
     // 测试正常情况
     std::string absPath = "/usr/local/bin/test";
     std::string absDir = "/usr/local";
@@ -500,8 +465,7 @@ TEST_F(CommonUtilsTest, TestAbsoluteToRelativePathSuccess)
 }
 
 // 测试模板函数 VectorToString
-TEST_F(CommonUtilsTest, TestVectorToStringSuccess)
-{
+TEST_F(CommonUtilsTest, TestVectorToStringSuccess) {
     std::vector<int> intVec = {1, 2, 3, 4, 5};
     std::string result = mindie_llm::VectorToString(intVec);
     EXPECT_EQ(result, "[1, 2, 3, 4, 5]");
@@ -517,25 +481,20 @@ TEST_F(CommonUtilsTest, TestVectorToStringSuccess)
 }
 
 // 测试模板函数 MapToString
-TEST_F(CommonUtilsTest, TestMapToStringSuccess)
-{
+TEST_F(CommonUtilsTest, TestMapToStringSuccess) {
     std::map<int, std::string> testMap = {{1, "one"}, {2, "two"}};
     std::string result = mindie_llm::MapToString(testMap);
     EXPECT_TRUE(result.find("1: one") != std::string::npos);
     EXPECT_TRUE(result.find("2: two") != std::string::npos);
 
-    std::map<int, std::vector<std::string>> complexMap = {
-        {1, {"a", "b"}},
-        {2, {"c", "d"}}
-    };
+    std::map<int, std::vector<std::string>> complexMap = {{1, {"a", "b"}}, {2, {"c", "d"}}};
     std::string complexResult = mindie_llm::MapToString(complexMap);
     EXPECT_TRUE(complexResult.find("1: [a, b]") != std::string::npos);
     EXPECT_TRUE(complexResult.find("2: [c, d]") != std::string::npos);
 }
 
 // 测试模板函数 MergeMaps
-TEST_F(CommonUtilsTest, TestMergeMapsSuccess)
-{
+TEST_F(CommonUtilsTest, TestMergeMapsSuccess) {
     std::map<int, int> totalMap = {{1, 10}, {2, 20}};
     std::map<int, int> subMap = {{1, 5}, {3, 30}};
 
@@ -546,8 +505,7 @@ TEST_F(CommonUtilsTest, TestMergeMapsSuccess)
 }
 
 // 测试模板函数 RemoveMapElements
-TEST_F(CommonUtilsTest, TestRemoveMapElementsSuccess)
-{
+TEST_F(CommonUtilsTest, TestRemoveMapElementsSuccess) {
     std::map<int, std::string> inputMap = {{1, "one"}, {2, "two"}, {3, "three"}};
     std::vector<int> keysToRemove = {1, 3};
 
@@ -558,24 +516,22 @@ TEST_F(CommonUtilsTest, TestRemoveMapElementsSuccess)
 }
 
 // CheckIPV4测试
-TEST_F(CommonUtilsTest, TestCheckIPV4Success)
-{
+TEST_F(CommonUtilsTest, TestCheckIPV4Success) {
     // 测试有效的IPv4地址
     EXPECT_TRUE(mindie_llm::CheckIPV4("192.168.1.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV4("10.0.0.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV4("172.16.0.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV4("127.0.0.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV4("255.255.255.255", "testIP", true));
-    
+
     // 测试0.0.0.0地址（enableZeroIp=true时允许）
     EXPECT_TRUE(mindie_llm::CheckIPV4("0.0.0.0", "testIP", true));
-    
+
     // 测试0.0.0.0地址（enableZeroIp=false时不允许）
     EXPECT_FALSE(mindie_llm::CheckIPV4("0.0.0.0", "testIP", false));
 }
 
-TEST_F(CommonUtilsTest, TestCheckIPV4Fail)
-{
+TEST_F(CommonUtilsTest, TestCheckIPV4Fail) {
     // 测试无效的IPv4地址
     EXPECT_FALSE(mindie_llm::CheckIPV4("256.1.2.3", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV4("1.2.3.256", "testIP", true));
@@ -583,108 +539,113 @@ TEST_F(CommonUtilsTest, TestCheckIPV4Fail)
     EXPECT_FALSE(mindie_llm::CheckIPV4("192.168.1.1.1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV4("abc.def.ghi.jkl", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV4("192.168.001.001", "testIP", true));
-    
+
     // 测试空字符串
     EXPECT_FALSE(mindie_llm::CheckIPV4("", "testIP", true));
-    
+
     // 测试超长地址
-    std::string longIP(33, '1'); // 超过MAX_IPV4_LENGTH
+    std::string longIP(33, '1');  // 超过MAX_IPV4_LENGTH
     longIP[3] = longIP[7] = longIP[11] = longIP[15] = '.';
     EXPECT_FALSE(mindie_llm::CheckIPV4(longIP, "testIP", true));
 }
 
 // CheckIPV6测试
-TEST_F(CommonUtilsTest, TestCheckIPV6Success)
-{
+TEST_F(CommonUtilsTest, TestCheckIPV6Success) {
     // 测试有效的IPv6地址
     EXPECT_TRUE(mindie_llm::CheckIPV6("::1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV6("2001:db8::1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV6("2001:db8:0:0:0:0:0:1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV6("2001:db8::1:0:0:0:1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIPV6("[2001:db8::1]", "testIP", true));
-    
+
     // 测试::地址（enableZeroIp=true时允许）
     EXPECT_TRUE(mindie_llm::CheckIPV6("::", "testIP", true));
-    
+
     // 测试::地址（enableZeroIp=false时不允许）
     EXPECT_FALSE(mindie_llm::CheckIPV6("::", "testIP", false));
 }
 
-TEST_F(CommonUtilsTest, TestCheckIPV6Fail)
-{
+TEST_F(CommonUtilsTest, TestCheckIPV6Fail) {
     // 测试无效的IPv6地址
     EXPECT_FALSE(mindie_llm::CheckIPV6("2001:db8::1::1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV6("2001:db8:g::1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV6("2001:db8::1:", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV6(":2001:db8::1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIPV6("2001:db8::1:1:1:1:1:1:1", "testIP", true));
-    
+
     // 测试空字符串
     EXPECT_FALSE(mindie_llm::CheckIPV6("", "testIP", true));
-    
+
     // 测试超长地址
-    std::string longIP(129, '1'); // 超过MAX_IPV6_LENGTH
+    std::string longIP(129, '1');  // 超过MAX_IPV6_LENGTH
     EXPECT_FALSE(mindie_llm::CheckIPV6(longIP, "testIP", true));
 }
 
 // CheckIp测试
-TEST_F(CommonUtilsTest, TestCheckIpSuccess)
-{
+TEST_F(CommonUtilsTest, TestCheckIpSuccess) {
     // 测试有效的IPv4地址
     EXPECT_TRUE(mindie_llm::CheckIp("192.168.1.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIp("10.0.0.1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIp("127.0.0.1", "testIP", true));
-    
+
     // 测试有效的IPv6地址
     EXPECT_TRUE(mindie_llm::CheckIp("::1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIp("2001:db8::1", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIp("[2001:db8::1]", "testIP", true));
-    
+
     // 测试0地址（enableZeroIp=true时允许）
     EXPECT_TRUE(mindie_llm::CheckIp("0.0.0.0", "testIP", true));
     EXPECT_TRUE(mindie_llm::CheckIp("::", "testIP", true));
-    
+
     // 测试0地址（enableZeroIp=false时不允许）
     EXPECT_FALSE(mindie_llm::CheckIp("0.0.0.0", "testIP", false));
     EXPECT_FALSE(mindie_llm::CheckIp("::", "testIP", false));
 }
 
-TEST_F(CommonUtilsTest, TestCheckIpFail)
-{
+TEST_F(CommonUtilsTest, TestCheckIpFail) {
     EXPECT_FALSE(mindie_llm::CheckIp("", "testIP", true));
-    
+
     // 测试既不是IPv4也不是IPv6的地址
     EXPECT_FALSE(mindie_llm::CheckIp("localhost", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("example.com", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("2001:db8", "testIP", true));
-    
+
     // 测试无效的IPv4地址
     EXPECT_FALSE(mindie_llm::CheckIp("256.1.2.3", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.001.001", "testIP", true));
-    
+
     // 测试无效的IPv6地址
     EXPECT_FALSE(mindie_llm::CheckIp("2001:db8::1::1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("2001:db8:g::1", "testIP", true));
 }
 
-TEST_F(CommonUtilsTest, TestCheckIpEdgeCases)
-{
+TEST_F(CommonUtilsTest, TestCheckIpEdgeCases) {
     // 测试混合格式（包含冒号和点，但格式不正确）
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.1:8080", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("2001:db8.1.2.3", "testIP", true));
-    
+
     // 测试特殊字符
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.1.1@", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("2001:db8::1#", "testIP", true));
-    
+
     // 测试前导和尾随空格
     EXPECT_FALSE(mindie_llm::CheckIp(" 192.168.1.1", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.1.1 ", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp(" 2001:db8::1 ", "testIP", true));
-    
+
     // 测试端口号格式（应该被拒绝）
     EXPECT_FALSE(mindie_llm::CheckIp("192.168.1.1:8080", "testIP", true));
     EXPECT_FALSE(mindie_llm::CheckIp("[2001:db8::1]:8080", "testIP", true));
 }
+
+// 测试whl包场景，MINDIE_LLM_HOME_PATH 下存在 __init__.py，获取到 MINDIE_LLM_HOME_PATH 路径
+TEST_F(CommonUtilsTest, TestGetHomePathWhlPkgSuccess) {
+    std::string homePath;
+    auto existsMock = MOCKER(mindie_llm::FileSystem::Exists);
+    existsMock.stubs().with(any()).will(returnValue(true));
+    Error result = GetHomePath(homePath);
+    EXPECT_TRUE(result.IsOk());
 }
+
+}  // namespace mindie_llm

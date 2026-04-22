@@ -9,23 +9,23 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef LATENCY_PREDICTOR
 #define LATENCY_PREDICTOR
 
 #include <atomic>
-#include <numeric>
 #include <deque>
-#include <set>
 #include <map>
+#include <numeric>
+#include <set>
 
 #include "batch_latency_tracker.h"
+#include "concurrent_map.h"
+#include "config_info.h"
 #include "decode_regression.h"
+#include "policy/seq_group_collection.h"
 #include "prefill_regression.h"
 #include "sequence_group.h"
-#include "policy/seq_group_collection.h"
-#include "config_info.h"
-#include "concurrent_map.h"
 
 using TimePoint = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
@@ -42,7 +42,7 @@ struct BatchStats {
 using BatchStatsPtr = std::shared_ptr<BatchStats>;
 
 class LatencyPredictor {
-public:
+   public:
     LatencyPredictor() = default;
 
     LatencyPredictor(const LatencyPredictor &) = delete;
@@ -58,10 +58,8 @@ public:
     float PredictBatchExecTime(BatchStats &batchStats);
 
     // 在 AddPercentileData 中添加 numOutputTokens 参数，用于时延归一化
-    void AddPercentileData(
-        SequenceGroupSPtr& seqGroup,
-        std::shared_ptr<SchedulerConfig>& schedulerConfig,
-        uint32_t numOutputTokens = 1);
+    void AddPercentileData(SequenceGroupSPtr &seqGroup, std::shared_ptr<SchedulerConfig> &schedulerConfig,
+                           uint32_t numOutputTokens = 1);
 
     double GetDecodeRecentAvgLatency(size_t forwardNum);
 
@@ -73,11 +71,11 @@ public:
 
     void UpdateEdgeCloudBatchStats(ForwardMode forwardMode);
 
-    int GetPrefillProcessing() const {return prefillProcessing_;};
-   
-    int GetDecodeProcessing() const {return decodeProcessing_;};
+    int GetPrefillProcessing() const { return prefillProcessing_; };
 
-private:
+    int GetDecodeProcessing() const { return decodeProcessing_; };
+
+   private:
     // moving average for decode time regression
     DecodeRegression decodeRegression_ = DecodeRegression();
     PrefillRegression prefillRegression_ = PrefillRegression();
@@ -87,11 +85,11 @@ private:
     BatchLatencyTracker decodeLatency_ = BatchLatencyTracker();
 
     std::atomic<int> batchId_{0};
-    ConcurrentMap<int, BatchStatsPtr> batchStatsMap_; // batchId->BatchStatsPtr
+    ConcurrentMap<int, BatchStatsPtr> batchStatsMap_;  // batchId->BatchStatsPtr
 
     int prefillProcessing_{0};
     int decodeProcessing_{0};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // LATENCY_PREDICTOR
+#endif  // LATENCY_PREDICTOR

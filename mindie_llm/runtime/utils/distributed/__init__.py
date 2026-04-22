@@ -37,8 +37,7 @@ def get_parallel_info_manager() -> ParallelInfoManager:
     return _PARALLEL_INFO_MANAGER
 
 
-def init_distributed( 
-    rank: int, world_size: int, local_rank: int, llm_config=None, server_config=None) -> None: 
+def init_distributed(rank: int, world_size: int, local_rank: int, llm_config=None, server_config=None) -> None:
     """Initializes the distributed training environment and parallel info manager.
 
     This function sets up the PyTorch distributed process group using HCCL backend
@@ -62,7 +61,7 @@ def init_distributed(
         raise ValueError("Master port is not set, use export MASTER_PORT=xxxx to solve")
     init_method = f"tcp://{master_ip}:{master_port}"
     logger.info(f"rank: {rank}, world_size: {world_size}, init_method: {init_method}, start to init distributed")
-    dist.init_process_group(backend='hccl', init_method=init_method, world_size=world_size, rank=rank)
+    dist.init_process_group(backend="hccl", init_method=init_method, world_size=world_size, rank=rank)
 
     # initialize parallel info manager
     global _PARALLEL_INFO_MANAGER

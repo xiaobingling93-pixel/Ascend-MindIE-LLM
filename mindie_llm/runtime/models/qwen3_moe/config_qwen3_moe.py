@@ -19,10 +19,10 @@ class Qwen3MoeConfig(HuggingFaceConfig):
 
     Extends HuggingFaceConfig with Qwen3-Moe-specific attributes.
     """
+
     use_qk_norm: bool = True
     is_reasoning_model: bool = True
 
     def __init__(self, **kwargs):
-        """Initializes Qwen3-Moe configuration with optional keyword arguments.
-        """
+        """Initializes Qwen3-Moe configuration with optional keyword arguments."""
         super().__init__(**kwargs)

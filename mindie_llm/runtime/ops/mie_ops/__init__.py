@@ -16,12 +16,14 @@ from mindie_llm.runtime.utils.npu.device_utils import DeviceType, get_npu_node_i
 def import_mie_ops_by_device():
     mie_ops_version_map = {
         DeviceType.ASCEND_910B: "mie_ops_ascend910b",
-        DeviceType.ASCEND_910_93: "mie_ops_ascend910_93"
+        DeviceType.ASCEND_910_93: "mie_ops_ascend910_93",
     }
     device_type = get_npu_node_info().get_device_type()
     if device_type not in mie_ops_version_map:
-        raise EnvironmentError(f"Unsupported device type: {device_type} for mie_ops. "
-                               f"{mie_ops_version_map.values()} are supported currently.")
+        raise EnvironmentError(
+            f"Unsupported device type: {device_type} for mie_ops. "
+            f"{mie_ops_version_map.values()} are supported currently."
+        )
     importlib.import_module(mie_ops_version_map[device_type])
 
 

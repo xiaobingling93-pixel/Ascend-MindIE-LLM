@@ -12,8 +12,8 @@
 
 #ifndef QPS_TRACKER_H
 #define QPS_TRACKER_H
-#include <vector>
 #include <atomic>
+#include <vector>
 
 namespace mindie_llm {
 struct QCntBucket {
@@ -22,16 +22,16 @@ struct QCntBucket {
 };
 
 class QPSTracker {
-public:
+   public:
     QPSTracker(int timeWindowInterval, int bucketTimeInterval);
     float GetQPS();
     void Record();
 
-private:
-    int64_t bucketTimeInterval_; // ms
-    int64_t timeWindowInterval_; // ms
+   private:
+    int64_t bucketTimeInterval_;  // ms
+    int64_t timeWindowInterval_;  // ms
     size_t bucketsNum_;
     std::vector<QCntBucket> buckets_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

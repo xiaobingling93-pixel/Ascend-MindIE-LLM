@@ -13,10 +13,11 @@
 #ifndef MINDIE_LLM_LORA_MANAGER_H
 #define MINDIE_LLM_LORA_MANAGER_H
 
-#include <string>
 #include <mutex>
-#include "lora/ilora_manager.h"
+#include <string>
+
 #include "executor/executor_interface.h"
+#include "lora/ilora_manager.h"
 
 namespace mindie_llm {
 // Lora加载卸载返回状态索引
@@ -31,11 +32,11 @@ enum class LoraStatus {
     SLOTS_FULL_WITH_UNLOADING = 7,  // 槽位已满，有正在卸载的lora
     UNLOAD_SUCCESS = 8,             // 异步接口返回卸载成功
     LORA_NOT_FOUND = 9,             // 未找到该lora,该lora未被加载或者等待卸载
-    UNSUPPORT_CMD  = 10             // 未采用python组图
+    UNSUPPORT_CMD = 10              // 未采用python组图
 };
 
 class LoraManager : public ILoraManager {
-public:
+   public:
     // 初始化一次
     static void Initialize(std::vector<IExecutorSPtr> executors, uint32_t maxLoras);
 
@@ -71,15 +72,15 @@ public:
     // 加载判断LoRA状态
     LoraStatus GetLoraStatus(const LoraParamSPtr loraInfo, bool &loraIsInvalid);
 
-private:
-    ConcurrentMap<std::string, LoraParamSPtr> loaded_;                      // 已经加载的
-    ConcurrentMap<std::string, LoraParamSPtr> wait2Unloaded_;               // 等待被卸载的
-    ConcurrentMap<std::string, uint32_t> loraIdRef_;                        // lora引用计数
+   private:
+    ConcurrentMap<std::string, LoraParamSPtr> loaded_;         // 已经加载的
+    ConcurrentMap<std::string, LoraParamSPtr> wait2Unloaded_;  // 等待被卸载的
+    ConcurrentMap<std::string, uint32_t> loraIdRef_;           // lora引用计数
     IExecutorSPtr executor_;
     uint32_t maxLoras_ = 0;
     static std::once_flag initFlag_;
     static std::vector<std::shared_ptr<LoraManager>> instances_;
 };
 using LlmLoraPtr = std::shared_ptr<LoraManager>;
-}
-#endif // MINDIE_LLM_LORA_MANAGER_H
+}  // namespace mindie_llm
+#endif  // MINDIE_LLM_LORA_MANAGER_H

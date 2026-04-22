@@ -13,22 +13,22 @@
 #ifndef MINDIE_LLM_POST_PROCESSING_PROFILER_H
 #define MINDIE_LLM_POST_PROCESSING_PROFILER_H
 
-#include <iostream>
 #include <chrono>
-#include <unordered_map>
-#include <string>
-#include <vector>
-#include <stack>
-#include <thread>
+#include <iostream>
 #include <mutex>
+#include <stack>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
 #include "log.h"
 
 namespace PostProcessingProfiler {
 class TimeCost {
-public:
+   public:
     TimeCost(std::string nameStr, std::string pidStr, std::string tidStr) noexcept
-        : name(nameStr), pid(pidStr), tid(tidStr)
-    {
+        : name(nameStr), pid(pidStr), tid(tidStr) {
         start_ = std::chrono::high_resolution_clock::now();
         std::chrono::microseconds d = std::chrono::duration_cast<std::chrono::microseconds>(start_.time_since_epoch());
         start = static_cast<unsigned long>(d.count());
@@ -36,8 +36,7 @@ public:
 
     ~TimeCost() = default;
 
-    void ElapsedUS()
-    {
+    void ElapsedUS() {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::microseconds d = std::chrono::duration_cast<std::chrono::microseconds>(end - start_);
         duration = static_cast<unsigned long>(d.count());
@@ -49,35 +48,32 @@ public:
     std::string pid;
     std::string tid;
 
-private:
+   private:
     std::chrono::high_resolution_clock::time_point start_;
 };
 
 class Profiler {
-public:
+   public:
     Profiler(const Profiler &) = delete;
 
-    Profiler &operator = (const Profiler &) = delete;
+    Profiler &operator=(const Profiler &) = delete;
 
-    ~Profiler(){};
+    ~Profiler() {};
 
-    static Profiler &GetInstance()
-    {
+    static Profiler &GetInstance() {
         static Profiler instance;
         return instance;
     }
 
-    void TimerStart(std::string name, std::string pid, std::string tid)
-    {
+    void TimerStart(std::string name, std::string pid, std::string tid) {
         if (activate) {
             std::thread::id threadId = std::this_thread::get_id();
-            TimeCost tc{ name, pid, tid };
+            TimeCost tc{name, pid, tid};
             timeStack[threadId].push(tc);
         }
     }
 
-    void TimerEnd()
-    {
+    void TimerEnd() {
         if (activate) {
             std::thread::id threadId = std::this_thread::get_id();
             auto tstack = timeStack[threadId];
@@ -95,8 +91,7 @@ public:
         }
     }
 
-    std::vector<TimeCost> ExportResult()
-    {
+    std::vector<TimeCost> ExportResult() {
         for (auto &kv : timeStack) {
             if (!kv.second.empty()) {
                 MINDIE_LLM_LOG_WARN("There are unclosed timer, with name: " << kv.second.top().name);
@@ -106,28 +101,24 @@ public:
         return timeVec;
     }
 
-    void SetActivate(bool isActivate)
-    {
-        activate = isActivate;
-    }
+    void SetActivate(bool isActivate) { activate = isActivate; }
 
-    void Elapsed(TimeCost tc)
-    {
+    void Elapsed(TimeCost tc) {
         tc.ElapsedUS();
         lk.lock();
         timeVec.push_back(tc);
         lk.unlock();
     }
 
-private:
-    Profiler(){};
+   private:
+    Profiler() {};
     std::unordered_map<std::thread::id, std::stack<TimeCost>> timeStack;
     std::vector<TimeCost> timeVec;
     std::mutex lk;
     bool activate = false;
 };
-} // PostProcessingProfiler
+}  // namespace PostProcessingProfiler
 
 #define PROFILER Profiler::GetInstance()
 
-#endif // MINDIE_LLM_POST_PROCESSING_PROFILER_H
+#endif  // MINDIE_LLM_POST_PROCESSING_PROFILER_H

@@ -9,14 +9,15 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <utility>
-#include "log.h"
+
 #include "latency_predictor.h"
 
+#include <utility>
+
+#include "log.h"
+
 namespace mindie_llm {
-void LatencyPredictor::UpdateBatchStats()
-{
+void LatencyPredictor::UpdateBatchStats() {
     int preBatchId = batchId_.load();
     std::optional<BatchStatsPtr> batchStatsOpt = batchStatsMap_.Get(preBatchId);
     if (!batchStatsOpt.has_value()) {
@@ -41,8 +42,7 @@ void LatencyPredictor::UpdateBatchStats()
                          << ", batchSpendTime: " << batchStatsPtr->batchSpendTimeFloat << "ms");
 }
 
-float LatencyPredictor::PredictBatchExecTime(BatchStats &batchStats)
-{
+float LatencyPredictor::PredictBatchExecTime(BatchStats &batchStats) {
     if (batchStats.forwardMode == ForwardMode::PREFILL) {
         return prefillRegression_.Predict(batchStats.numBatchedTokens);
     } else {
@@ -50,11 +50,8 @@ float LatencyPredictor::PredictBatchExecTime(BatchStats &batchStats)
     }
 }
 
-void LatencyPredictor::AddPercentileData(
-    SequenceGroupSPtr &seqGroup,
-    std::shared_ptr<SchedulerConfig> &schedulerConfig,
-    uint32_t numOutputTokens)
-{
+void LatencyPredictor::AddPercentileData(SequenceGroupSPtr &seqGroup, std::shared_ptr<SchedulerConfig> &schedulerConfig,
+                                         uint32_t numOutputTokens) {
     // avoid nullptr
     if (seqGroup == nullptr) {
         return;
@@ -85,13 +82,11 @@ void LatencyPredictor::AddPercentileData(
     seqGroup->lastCompletionTime = now;
 }
 
-double LatencyPredictor::GetDecodeRecentAvgLatency(size_t forwardNum)
-{
+double LatencyPredictor::GetDecodeRecentAvgLatency(size_t forwardNum) {
     return decodeLatency_.GetRecentAvgLatency(forwardNum);
 }
 
-void LatencyPredictor::SaveBatchStats(BatchStatsPtr batchStats)
-{
+void LatencyPredictor::SaveBatchStats(BatchStatsPtr batchStats) {
     if (batchId_ >= INT_MAX) {
         batchId_.store(0);
     }
@@ -99,8 +94,7 @@ void LatencyPredictor::SaveBatchStats(BatchStatsPtr batchStats)
     batchStatsMap_.Insert(batchId_.load(), batchStats);
 }
 
-void LatencyPredictor::SetBatchExecuteStartTime(TimePoint batchStartTime)
-{
+void LatencyPredictor::SetBatchExecuteStartTime(TimePoint batchStartTime) {
     std::optional<BatchStatsPtr> batchStatsOpt = batchStatsMap_.Get(batchId_.load());
     if (!batchStatsOpt.has_value()) {
         return;
@@ -109,4 +103,4 @@ void LatencyPredictor::SetBatchExecuteStartTime(TimePoint batchStartTime)
     batchStatsPtr->batchStartTime = batchStartTime;
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

@@ -21,7 +21,7 @@ from .config import SAMPLING_DTYPE
 
 class Request:
     counter = count()
-    
+
     def __init__(
         self,
         req_id: int,
@@ -30,7 +30,7 @@ class Request:
         generation_params: GenerationParams,
         has_sampling: bool = False,
         sampling_params: Optional[np.ndarray] = None,
-        max_placeholder_num: int = 0
+        max_placeholder_num: int = 0,
     ):
         self.req_id = req_id
         self.reserved_seq_ids = []
@@ -61,7 +61,7 @@ class Request:
 
         # max_placeholder_num contains num_new_tokens
         self.max_placeholder_num = max_placeholder_num
-        
+
         # kvp or cp with mtp
         self.sp_tokens = None
         self.sp_rank_id = None
@@ -82,12 +82,14 @@ class Request:
         self.completed = []
 
     def __repr__(self):
-        return (f"Request(req_id={self.req_id}, "
-                f"input_ids={self.input_ids[:50]}, "
-                f"max_new_tokens={self.max_new_tokens}, "
-                f"max_placeholder_num={self.max_placeholder_num}), "
-                f"input_length={self.input_length}), "
-                f"output_len={self.output_len})")
+        return (
+            f"Request(req_id={self.req_id}, "
+            f"input_ids={self.input_ids[:50]}, "
+            f"max_new_tokens={self.max_new_tokens}, "
+            f"max_placeholder_num={self.max_placeholder_num}), "
+            f"input_length={self.input_length}), "
+            f"output_len={self.output_len})"
+        )
 
     @classmethod
     def from_warmup(
@@ -98,7 +100,7 @@ class Request:
         max_placeholder_num: int = 1,
         warmup_topk_size: int = 1000,
         enable_warmup_sampling: bool = True,
-        is_multimodal: bool = False
+        is_multimodal: bool = False,
     ):
         req_id = next(Request.counter)
         input_ids = np.ones(input_len, dtype=np.int64)
@@ -112,7 +114,7 @@ class Request:
             GenerationParams(max_new_tokens=max_output_len, seed=0, ignore_eos=True),
             has_sampling=True,
             sampling_params=sampling_params_ins,
-            max_placeholder_num=max_placeholder_num
+            max_placeholder_num=max_placeholder_num,
         )
 
     @classmethod
@@ -124,12 +126,7 @@ class Request:
         return cls(req_id, seq_id, input_ids, generation_params, has_sampling, sampling_params)
 
     def update_with_parallel_strategy(
-        self,
-        dp_rank_id: int,
-        scp_size: int,
-        block_size: int,
-        num_new_token: int = 0,
-        is_prefill: bool = True
+        self, dp_rank_id: int, scp_size: int, block_size: int, num_new_token: int = 0, is_prefill: bool = True
     ):
         self.dp_rank_id = dp_rank_id
 
@@ -139,11 +136,11 @@ class Request:
             else:
                 self.is_append_block = False
                 num_empty_slot = self._get_num_empty_slots(self.sp_rank_id)
-                if (self.max_placeholder_num > num_empty_slot):
+                if self.max_placeholder_num > num_empty_slot:
                     next_sp_rank = (self.sp_rank_id + 1) % scp_size
                     reserved_slots = self.max_placeholder_num - num_empty_slot
                     next_rank_num_empty_slot = self._get_num_empty_slots(next_sp_rank)
-                    if (next_rank_num_empty_slot < reserved_slots):
+                    if next_rank_num_empty_slot < reserved_slots:
                         self.is_append_block = True
                         self.block_rank_id = next_sp_rank
 
@@ -152,14 +149,9 @@ class Request:
                 else:
                     self.sp_tokens[self.sp_rank_id] += num_empty_slot
                     self.sp_rank_id = (self.sp_rank_id + 1) % scp_size
-                    self.sp_tokens[self.sp_rank_id] += (num_new_token - num_empty_slot)
+                    self.sp_tokens[self.sp_rank_id] += num_new_token - num_empty_slot
 
-    def update_with_features(
-        self,
-        is_mix_model: bool,
-        scp_size: int,
-        is_prefill: bool = True
-    ):
+    def update_with_features(self, is_mix_model: bool, scp_size: int, is_prefill: bool = True):
         if is_prefill:
             if scp_size > 1:
                 self.computed_blocks = [0] * scp_size
@@ -174,12 +166,7 @@ class Request:
                 self.split_end_position = self.input_length + self.output_len + self.max_placeholder_num
                 self.last_prompt = True
 
-    def update_block_table(
-        self,
-        scp_size: int,
-        block_size: int,
-        is_prefill: bool = True
-    ):
+    def update_block_table(self, scp_size: int, block_size: int, is_prefill: bool = True):
         if scp_size > 1:
             if is_prefill:
                 required_block_num = self._get_block_counts(block_size, is_prefill=is_prefill)
@@ -187,7 +174,7 @@ class Request:
                 max_blocks = block_nums.max()
                 self.block_tables = np.full((scp_size, required_block_num), -1, dtype=np.int32)
                 for i in range(scp_size):
-                    self.block_tables[i, :block_nums[i]] = 0
+                    self.block_tables[i, : block_nums[i]] = 0
 
                 self.prefill_block_rank_id = self._build_prefill_block_rank_id(max_blocks, scp_size)
 
@@ -199,7 +186,7 @@ class Request:
         else:
             required_block_num = self._get_block_counts(block_size, is_prefill=is_prefill)
             self.block_tables = np.zeros(required_block_num, dtype=np.int32)
-    
+
     # this method only called in prefill stage
     def build(
         self,
@@ -213,16 +200,10 @@ class Request:
         self.update_block_table(scp_size, block_size)
 
     # this method only called in decode stage
-    def step(
-        self,
-        num_new_token: int,
-        scp_size: int,
-        block_size: int,
-        is_mix_model: bool
-    ):
+    def step(self, num_new_token: int, scp_size: int, block_size: int, is_mix_model: bool):
         self.update_with_parallel_strategy(self.dp_rank_id, scp_size, block_size, num_new_token, False)
         self.update_with_features(is_mix_model, scp_size, False)
-        self.update_block_table(scp_size, block_size, False)  
+        self.update_block_table(scp_size, block_size, False)
         self.output_len += num_new_token
 
     def _compute_sp_tokens_and_rank_id(self, block_size, scp_size):
@@ -234,8 +215,8 @@ class Request:
         while remaining > 0:
             tokens_in_block = min(remaining, block_size)
 
-            is_last_block = (remaining <= block_size)
-            has_used_all_ranks = (block_count >= scp_size)
+            is_last_block = remaining <= block_size
+            has_used_all_ranks = block_count >= scp_size
 
             if is_last_block and has_used_all_ranks:
                 rank_idx = scp_size - 1
@@ -265,7 +246,7 @@ class Request:
         else:
             total_length = self.input_length + self.output_len + self.max_placeholder_num
         return math.ceil(total_length / block_size)
-    
+
     def _get_num_empty_slots(self, sp_rank_id, block_size: int = 128):
         used_slot_num = self.sp_tokens[sp_rank_id]
         block_count = np.count_nonzero(self.block_tables[sp_rank_id] != -1)

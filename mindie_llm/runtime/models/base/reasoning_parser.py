@@ -73,14 +73,17 @@ class CommonReasoningParser(ReasoningParser):
         delta_reasoning_content_token_ids = []
         delta_content_token_ids = []
 
-        reasoning_end_token_index = len(all_token_ids) if self.end_reasoning_token_id not in all_token_ids \
+        reasoning_end_token_index = (
+            len(all_token_ids)
+            if self.end_reasoning_token_id not in all_token_ids
             else all_token_ids.index(self.end_reasoning_token_id)
+        )
         # get reasoning delta
         if current_index < reasoning_end_token_index:
             delta_reasoning_content_token_ids = all_token_ids[current_index:reasoning_end_token_index]
         # get content delta
         if reasoning_end_token_index < len(all_token_ids) - 1:
-            delta_content_token_ids = all_token_ids[max(1 + reasoning_end_token_index, current_index):]
+            delta_content_token_ids = all_token_ids[max(1 + reasoning_end_token_index, current_index) :]
         return delta_reasoning_content_token_ids, delta_content_token_ids
 
     def single_process_reasoning(self, all_token_ids: List[int]) -> Tuple[List[int], List[int]]:
@@ -110,8 +113,11 @@ class CommonReasoningParser(ReasoningParser):
         reasoning_content_end_index = all_token_ids.index(self.end_reasoning_token_id)
         reasoning_content_token_ids = all_token_ids[reasoning_content_start_index:reasoning_content_end_index]
         # final answer
-        content_token_ids = [] if reasoning_content_end_index == len(all_token_ids) - 1 \
-            else all_token_ids[reasoning_content_end_index + 1:]
+        content_token_ids = (
+            []
+            if reasoning_content_end_index == len(all_token_ids) - 1
+            else all_token_ids[reasoning_content_end_index + 1 :]
+        )
         return reasoning_content_token_ids, content_token_ids
 
     def count_reasoning_tokens(self, all_token_ids: List[int]) -> int:

@@ -13,8 +13,8 @@
 #ifndef MINDIE_LLM_REQUEST_ID_H
 #define MINDIE_LLM_REQUEST_ID_H
 
-#include <string>
 #include <atomic>
+#include <string>
 
 namespace mindie_llm {
 using RequestIdNew = std::string;
@@ -22,12 +22,11 @@ using RequestIdNew = std::string;
 /// @brief 虚推请求对应的固定 SequenceId（用于 LLM 引擎层特殊处理）
 constexpr int64_t SIMULATE_SEQUENCE_ID = 9223372036854774L;
 
-inline RequestIdNew GetNextInferRequestId()
-{
+inline RequestIdNew GetNextInferRequestId() {
     static std::atomic<uint64_t> inferRequestIdGenerator{0};
     const std::string prefix{"endpoint_common_"};
     return prefix + std::to_string(inferRequestIdGenerator.fetch_add(1, std::memory_order_relaxed));
 }
 
-}
+}  // namespace mindie_llm
 #endif

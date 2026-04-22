@@ -22,11 +22,10 @@ namespace mindie_llm {
 std::atomic<SequenceId> g_globalSeqId{100};
 std::atomic<BatchId> g_globalBatchId{0};
 
-RequestId IDUtils::GenerateRequestID()
-{
+RequestId IDUtils::GenerateRequestID() {
     using namespace std::chrono;
 
-    constexpr int HEX_WIDTH = 16; // Width for 64-bit hex representation
+    constexpr int HEX_WIDTH = 16;  // Width for 64-bit hex representation
 
     uint64_t nowMicro =
         static_cast<uint64_t>(duration_cast<microseconds>(system_clock::now().time_since_epoch()).count());
@@ -36,7 +35,7 @@ RequestId IDUtils::GenerateRequestID()
     std::seed_seq seed{static_cast<uint32_t>(nowMicro & 0xFFFFFFFF), static_cast<uint32_t>(nowMicro >> 32),
                        static_cast<uint32_t>(nowCpu & 0xFFFFFFFF), static_cast<uint32_t>(nowCpu >> 32)};
 
-    std::mt19937_64 rng(seed); // Initialize a 64-bit random number generator with the seed sequence
+    std::mt19937_64 rng(seed);  // Initialize a 64-bit random number generator with the seed sequence
 
     uint64_t part1 = rng();
     uint64_t part2 = rng();
@@ -52,4 +51,4 @@ SequenceId IDUtils::GenerateSequenceId() { return g_globalSeqId.fetch_add(1); }
 
 BatchId IDUtils::GenerateBatchID() { return g_globalBatchId.fetch_add(1); }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

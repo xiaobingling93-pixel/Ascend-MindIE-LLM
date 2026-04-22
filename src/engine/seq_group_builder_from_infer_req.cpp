@@ -9,21 +9,20 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+#include "seq_group_builder_from_infer_req.h"
+
 #include <functional>
+
+#include "common_util.h"
 #include "log.h"
 #include "request_response/request.h"
 #include "request_response/request_id.h"
-#include "common_util.h"
-#include "seq_group_builder_from_infer_req.h"
 
 namespace mindie_llm {
 SequenceGroupSPtr SeqGroupBuilderFromInferReq::BuildSequenceGroup(RequestSPtr request,
-                                                                  SchedulerConfigSPtr schedulerConfig,
-                                                                  size_t rankId)
-{
+                                                                  SchedulerConfigSPtr schedulerConfig, size_t rankId) {
     // 设置sampling参数
-    SamplingParamsSPtr sampleParamSptr =
-        GetSampleParamFromInferRequest(request, true);
+    SamplingParamsSPtr sampleParamSptr = GetSampleParamFromInferRequest(request, true);
     sampleParamSptr->enableParallelSampling = (sampleParamSptr->useBeamsearch || sampleParamSptr->bestOf > 1);
 
     // 创建sequence，当前一个SequenceGroup只有一个Sequence
@@ -51,8 +50,7 @@ SequenceGroupSPtr SeqGroupBuilderFromInferReq::BuildSequenceGroup(RequestSPtr re
 }
 
 SamplingParamsSPtr SeqGroupBuilderFromInferReq::GetSampleParamFromInferRequest(RequestSPtr request,
-                                                                               bool chooseV2BlockManager)
-{
+                                                                               bool chooseV2BlockManager) {
     SamplingParamsSPtr sampleParamSptr = std::make_shared<SamplingParams>();
     sampleParamSptr->maxOutputLen = request->maxOutputLen;
     sampleParamSptr->temperature = request->temperature;
@@ -88,8 +86,7 @@ SamplingParamsSPtr SeqGroupBuilderFromInferReq::GetSampleParamFromInferRequest(R
 }
 
 SequenceSPtr SeqGroupBuilderFromInferReq::InitSeqFromInferRequest(RequestSPtr request,
-                                                                  SchedulerConfigSPtr schedulerConfig)
-{
+                                                                  SchedulerConfigSPtr schedulerConfig) {
     SequenceId seqId = IDUtils::GenerateSequenceId();
     // 避免随机生成的ID与虚拟推理ID冲突，若冲突则重新生成
     while (seqId == SIMULATE_SEQUENCE_ID) {
@@ -99,7 +96,7 @@ SequenceSPtr SeqGroupBuilderFromInferReq::InitSeqFromInferRequest(RequestSPtr re
     if (request->isSimulateRequest) {
         seqId = SIMULATE_SEQUENCE_ID;
         MINDIE_LLM_LOG_DEBUG("[SimulateInference] Detected simulate inference request, requestId: "
-            << request->requestId << ", assigned fixed seqId: " << seqId);
+                             << request->requestId << ", assigned fixed seqId: " << seqId);
     }
     // 获取prompt的token信息
     std::vector<TokenId> inputsTokenIds = request->input_ids;
@@ -119,8 +116,7 @@ SequenceSPtr SeqGroupBuilderFromInferReq::InitSeqFromInferRequest(RequestSPtr re
  */
 void SeqGroupBuilderFromInferReq::InitSeqGrpFromInferRequest(RequestSPtr request, RequestIdNew inferReqId,
                                                              SequenceGroupSPtr &seqGroup,
-                                                             SchedulerConfigSPtr schedulerConfigSptr)
-{
+                                                             SchedulerConfigSPtr schedulerConfigSptr) {
     seqGroup->metrics_.inferReqId_ = inferReqId;
     seqGroup->priority_ = request->priority;
     seqGroup->isSynchronous_ = request->isSynchronous;
@@ -140,7 +136,7 @@ void SeqGroupBuilderFromInferReq::InitSeqGrpFromInferRequest(RequestSPtr request
     std::hash<std::string> hasher;
     if (seqGroup->loraId_.has_value()) {
         HashValue hv = hasher(seqGroup->loraId_.value());
-        hv |= 1; // 要确保非0
+        hv |= 1;  // 要确保非0
         if (seqGroup->loraId_.value() == "None") {
             seqGroup->firstSeq->SetExtraHash(INVALID_HASH_VALUE);
         } else {
@@ -153,8 +149,8 @@ void SeqGroupBuilderFromInferReq::InitSeqGrpFromInferRequest(RequestSPtr request
     uint32_t inputTokenNum = static_cast<uint32_t>(seqGroup->seqs_.at(0)->data_.promptTokenIds.size());
     seqGroup->maxIterTimes_ =
         std::min(schedulerConfigSptr->maxSeqLen - inputTokenNum, schedulerConfigSptr->maxIterTimes);
-    seqGroup->maxOutputLen_ = std::min(seqGroup->maxIterTimes_, seqGroup->sampling->maxOutputLen); // 作为配置基础值
-    seqGroup->sampling->maxOutputLen = seqGroup->maxOutputLen_; // 作为每次重计算后，后续还需要推的最大长度
+    seqGroup->maxOutputLen_ = std::min(seqGroup->maxIterTimes_, seqGroup->sampling->maxOutputLen);  // 作为配置基础值
+    seqGroup->sampling->maxOutputLen = seqGroup->maxOutputLen_;  // 作为每次重计算后，后续还需要推的最大长度
 }
 
-} // namespace mindie_llm
+}  // namespace mindie_llm

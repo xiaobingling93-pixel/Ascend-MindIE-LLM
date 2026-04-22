@@ -13,8 +13,8 @@
 #ifndef MINDIE_LOG_DEF_H
 #define MINDIE_LOG_DEF_H
 
-#include <string>
 #include <sstream>
+#include <string>
 namespace mindie_llm {
 // model name
 const std::string MINDIE_SERVER = "server";
@@ -145,45 +145,38 @@ const std::string SIMULATE_NORMAL = "20";
 // err code = ERROR code head + model code + error level + submodel code + features code + ERROR type code
 
 inline std::string GenerateDaemonErrCode(const std::string &level, const std::string &featType,
-                                         const std::string &errType)
-{
+                                         const std::string &errType) {
     std::stringstream ss;
     ss << "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level + SUBMODLE_CODE_DAEMON + featType + errType + "] ";
     return ss.str();
 }
 
 inline std::string GenerateEndpointErrCode(const std::string &level, const std::string &featType,
-                                           const std::string &errType)
-{
+                                           const std::string &errType) {
     std::stringstream ss;
     ss << "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level + SUBMODLE_CODE_ENDPOINT + featType + errType + "] ";
     return ss.str();
 }
 
 inline std::string GenerateTokenizerErrCode(const std::string &level, const std::string &featType,
-                                            const std::string &errType)
-{
+                                            const std::string &errType) {
     std::stringstream ss;
     ss << "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level + SUBMODLE_CODE_TOKENIZER + featType + errType +
               "] ";
     return ss.str();
 }
 inline std::string GenerateInferInstanceErrCode(const std::string &level, const std::string &featType,
-    const std::string &errType)
-{
+                                                const std::string &errType) {
     std::stringstream ss;
     ss << "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level + SUBMODLE_CODE_INFERINSTANCE + featType + errType +
               "] ";
     return ss.str();
 }
 
-inline std::string GenerateHealthCheckerErrCode(
-    const std::string& level,
-    const std::string& featType,
-    const std::string& errType)
-{
-    return "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level +
-        SUBMODLE_CODE_HEALTHCHECKER + featType + errType + "] ";
+inline std::string GenerateHealthCheckerErrCode(const std::string &level, const std::string &featType,
+                                                const std::string &errType) {
+    return "[" + MINDIE_ERRORCODE_HEAD + MINDIE_SERVER_CODE + level + SUBMODLE_CODE_HEALTHCHECKER + featType + errType +
+           "] ";
 }
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

@@ -9,18 +9,19 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef SELF_ATTN_BLOCK_MANAGER_H
 #define SELF_ATTN_BLOCK_MANAGER_H
 
 #include <unordered_map>
+
 #include "basic_types.h"
 #include "block_manager_interface.h"
-#include "sequence.h"
 #include "block_table.h"
 #include "block_tracker.h"
 #include "cpu_npu_block_allocator.h"
 #include "mem_pool.h"
+#include "sequence.h"
 namespace mindie_llm {
 
 /// 此模块负责为自回归生成的token进行kvCache的分配，交换，回收等基础功能，
@@ -33,7 +34,7 @@ namespace mindie_llm {
 /// \param speculativeSlots 预分配的slot，并行解码场景，会生成多个slot，kvCache存储到预分配的slot中
 /// \param enableCaching    是否开启prefix cache功能
 class SelfAttnBlockManager : public BlockSpaceManager {
-public:
+   public:
     explicit SelfAttnBlockManager(const BlockManagerConfig &config, size_t localDPRank = 0);
 
     AllocStatus CanAllocate(const SequenceGroupSPtr &seqGroup) const override;
@@ -49,7 +50,7 @@ public:
 
     void AppendSlotNew(const SequenceGroupSPtr &seqGroup) override;
 
-    void AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId>& tokens) override;
+    void AppendTokenToLatestRank(SequenceId seqId, const std::vector<TokenId> &tokens) override;
 
     bool IsAppendBlock(SequenceId seqId) override;
 
@@ -91,11 +92,12 @@ public:
 
     std::vector<size_t> GetAllrankComputedBlockNum(const std::vector<SequenceSPtr> &seqs) override;
 
-    std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
-                                                size_t computedLens, uint32_t tpSize, std::string modelName) override;
+    std::vector<BlockId> GetRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs, size_t computedLens,
+                                                   uint32_t tpSize, std::string modelName) override;
 
-    std::vector<size_t> GetAllRankRemoteComputedBlockIds(
-        const std::vector<SequenceSPtr> &seqs, std::vector<size_t> &computedBlocksNum, std::string modelName) override;
+    std::vector<size_t> GetAllRankRemoteComputedBlockIds(const std::vector<SequenceSPtr> &seqs,
+                                                         std::vector<size_t> &computedBlocksNum,
+                                                         std::string modelName) override;
 
     void Fork(SequenceSPtr &parentSeq, SequenceSPtr &childSeq) override;
 
@@ -122,16 +124,16 @@ public:
 
     void LwdInitCloudBlockManager(const BlockManagerConfig &lwdCloudConfig, size_t localDPRank = 0) override {};
 
-    void LwdGetCloudRankedBlockIds(SequenceId seqId,
-        std::vector<std::vector<BlockId>> &rankedBlockIds) const override {};
+    void LwdGetCloudRankedBlockIds(SequenceId seqId, std::vector<std::vector<BlockId>> &rankedBlockIds) const override {
+    };
 
-    size_t LwdGetCloudLatestAppendedRankId(SequenceId seqId) const override {return 0;};
+    size_t LwdGetCloudLatestAppendedRankId(SequenceId seqId) const override { return 0; };
 
-    size_t LwdGetCloudAppendedBlockRankId(SequenceId seqId) const override {return 0;};
+    size_t LwdGetCloudAppendedBlockRankId(SequenceId seqId) const override { return 0; };
 
-    std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const override {return {};};
+    std::vector<size_t> LwdGetCloudTokenCountPerRank(SequenceId seqId) const override { return {}; };
 
-private:
+   private:
     size_t GetNumRequiredBlocks(size_t seqLen, size_t blockSize) const;
 
     AllocStatus CanSwap(const SequenceGroupSPtr &seqGroup, DeviceType dstDeviceType, SequenceStatus status,
@@ -169,6 +171,6 @@ private:
 };
 using SelfAttnBlockManagerPtr = std::unique_ptr<SelfAttnBlockManager>;
 using SelfAttnBlockManagerSPtr = std::shared_ptr<SelfAttnBlockManager>;
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
-#endif // SELF_ATTN_BLOCK_MANAGER_H
+#endif  // SELF_ATTN_BLOCK_MANAGER_H

@@ -9,18 +9,18 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
-#include <pybind11/stl.h>
+
+#include <pybind11/chrono.h>
 #include <pybind11/complex.h>
 #include <pybind11/functional.h>
-#include <pybind11/chrono.h>
-#include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
 #include "prefix_tree.h"
 
 namespace py = pybind11;
-PYBIND11_MODULE(_prefix_tree, m)
-{
+PYBIND11_MODULE(_prefix_tree, m) {
     py::class_<mindie_llm::prefix_tree::PrefixTree>(m, "_PrefixTree")
         .def(py::init<int, int, int>())
         .def("put", &mindie_llm::prefix_tree::PrefixTree::Put)

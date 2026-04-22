@@ -9,33 +9,27 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef BLOCK_TRACKER_H
 #define BLOCK_TRACKER_H
 
-#include <unordered_map>
-#include <limits>
 #include <functional>
+#include <limits>
+#include <unordered_map>
 
 #include "device_aware_block_allocator.h"
 #include "math_utils.h"
 #include "sequence.h"
 
-
 namespace mindie_llm {
 // 为 std::pair 提供哈希函数
 struct PairHash {
     template <typename T1, typename T2>
-    size_t operator()(const std::pair<T1, T2>& p) const
-    {
+    size_t operator()(const std::pair<T1, T2> &p) const {
         auto h1 = std::hash<T1>{}(p.first);
         auto h2 = std::hash<T2>{}(p.second);
-        size_t hashValue = h1 ^ (
-            h2
-            + 0x9e3779b97f4a7c15ULL
-            + (h1 << mindie_llm::HASH_SHIFT_LEFT)
-            + (h1 >> mindie_llm::HASH_SHIFT_RIGHT)
-        );
+        size_t hashValue = h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << mindie_llm::HASH_SHIFT_LEFT) +
+                                 (h1 >> mindie_llm::HASH_SHIFT_RIGHT));
         return hashValue;
     }
 };
@@ -48,7 +42,7 @@ class BlockComputedAttr {
         TimeStamp lastAccessed = DEFAULT_LAST_ACCESSED_TIME;
     };
 
-public:
+   public:
     BlockComputedAttr(size_t numBlocks, BlockId beginBlockId) : blockInfos_(numBlocks), beginBlockId_(beginBlockId) {}
 
     ~BlockComputedAttr() = default;
@@ -71,13 +65,12 @@ public:
 
     TimeStamp LastAccessed(BlockId blockId) const;
 
-private:
+   private:
     std::vector<BlockInfo> blockInfos_;
 
     BlockId beginBlockId_;
 
-    bool IsValidBlockId(BlockId blockId) const
-    {
+    bool IsValidBlockId(BlockId blockId) const {
         if (beginBlockId_ > std::numeric_limits<BlockId>::max() - static_cast<BlockId>(blockInfos_.size())) {
             throw std::runtime_error("blockId range overflow!");
         }
@@ -90,25 +83,24 @@ private:
 };
 
 class SeqsBlocksComputedTracker {
-public:
+   public:
     SeqsBlocksComputedTracker() = default;
 
-    SeqsBlocksComputedTracker(DeviceAwareBlockAllocatorSPtr allocator, size_t blockSize,
-        bool enableCaching, size_t rankSize)
-        : allocator_(allocator), blockSize_(blockSize), enableCaching_(enableCaching), rankSize_(rankSize)
-    {}
+    SeqsBlocksComputedTracker(DeviceAwareBlockAllocatorSPtr allocator, size_t blockSize, bool enableCaching,
+                              size_t rankSize)
+        : allocator_(allocator), blockSize_(blockSize), enableCaching_(enableCaching), rankSize_(rankSize) {}
 
     ~SeqsBlocksComputedTracker() = default;
 
     // only computed blocks are considered cached. and for prefill request, just read from recorded cached tokens.
-    size_t GetCachedTokensNum(const SequenceSPtr &seq, size_t rankIdx,
-        std::vector<HashValue> &blockHashes, bool seqPrefillFlag);
+    size_t GetCachedTokensNum(const SequenceSPtr &seq, size_t rankIdx, std::vector<HashValue> &blockHashes,
+                              bool seqPrefillFlag);
 
     size_t GetCachedTokensNum(const SequenceSPtr &seq);
 
     void RemoveSeq(SequenceId seqId);
 
-private:
+   private:
     DeviceAwareBlockAllocatorSPtr allocator_;
 
     size_t blockSize_;
@@ -121,7 +113,7 @@ private:
 };
 
 class SeqsLastAccessBlocksTracker {
-public:
+   public:
     SeqsLastAccessBlocksTracker() = default;
 
     explicit SeqsLastAccessBlocksTracker(DeviceAwareBlockAllocatorSPtr allocator) : allocator_(allocator) {}
@@ -136,11 +128,11 @@ public:
 
     void UpdateSeqBlocksLastAccess(SequenceId seqId, std::vector<std::vector<BlockId>> &rankedBlockIds);
 
-private:
+   private:
     DeviceAwareBlockAllocatorSPtr allocator_;
 
     std::unordered_map<SequenceId, TimeStamp> seqIdToLastAccessTime_ = {};
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 
 #endif

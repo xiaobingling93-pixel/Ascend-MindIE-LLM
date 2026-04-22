@@ -9,36 +9,36 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef MODEL_EXEC_OUTPUT_HANDLER_H
 #define MODEL_EXEC_OUTPUT_HANDLER_H
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <thread>
 #include <unordered_set>
-#include <atomic>
-#include <chrono>
 
-#include "concurrent_deque.h"
-#include "executor/executor_interface.h"
-#include "engine/illm_engine.h"
-#include "concurrent_map.h"
-#include "memory_utils.h"
-#include "live_infer_context.h"
 #include "buffered_responser.h"
-#include "policy/stage_policy/stage_policy.h"
+#include "concurrent_deque.h"
+#include "concurrent_map.h"
+#include "engine/illm_engine.h"
+#include "executor/executor_interface.h"
 #include "latency_predictor/latency_predictor.h"
 #include "layerwise_mixin/layerwise_mixin.h"
+#include "live_infer_context.h"
+#include "memory_utils.h"
+#include "policy/stage_policy/stage_policy.h"
 
 namespace mindie_llm {
 using MicroSeconds = std::chrono::microseconds;
 
 class ModelExecOutputHandler {
-public:
+   public:
     explicit ModelExecOutputHandler(ForwardRespToManagerCall cb, Role pdRole, SchedulerConfigSPtr &config,
                                     std::shared_ptr<LatencyPredictor> latencypredictor, size_t localDPRank = 0);
 
-    void Entry4Executor(ModelBatchResultSPtr &modelBatchResult); // for model backend agent
+    void Entry4Executor(ModelBatchResultSPtr &modelBatchResult);  // for model backend agent
 
     ConcurrentDeque<SequenceId> &GetFinishedSeqIds();
 
@@ -52,18 +52,18 @@ public:
     // flex 场景中， 需要在请求完成时记录时间戳
     void SetStagePolicy(std::shared_ptr<StagePolicy> stagePolicy) { stagePolicy_ = stagePolicy; }
 
-private:
+   private:
     Role role_{Role::PnD};
-    ForwardRespToManagerCall forwardRespToManagerCall_; // from llm manager
+    ForwardRespToManagerCall forwardRespToManagerCall_;  // from llm manager
     SchedulerConfigSPtr schedulerConfig_;
     BufferResponseConfig bufferResponseConfig_;
     std::shared_ptr<LatencyPredictor> latencypredictor_;
     size_t localDPRank_{0};
     ConcurrentDeque<std::pair<SequenceId, TokenId>>
-        seqIdToOutputTokenQueue_; // this queue is fill by std::pair<SequenceId, TokenId>
+        seqIdToOutputTokenQueue_;  // this queue is fill by std::pair<SequenceId, TokenId>
     // model execution output handler will save finished req ids and scheduler will use it to finish requests.
-    ConcurrentDeque<SequenceId> finishedSeqIds_;      // will be used by scheduler, seqs that are finished
-    ConcurrentDeque<SequenceId> execExceptionSeqIds_; // will be used by scheduler, seqs of execution exception
+    ConcurrentDeque<SequenceId> finishedSeqIds_;       // will be used by scheduler, seqs that are finished
+    ConcurrentDeque<SequenceId> execExceptionSeqIds_;  // will be used by scheduler, seqs of execution exception
     std::atomic<size_t> asyncBatchNum_{0};
     BufferedResponser bufferedResponser_;
     // store rankid for logging
@@ -102,5 +102,5 @@ private:
     // 边云新增
     LayerwiseMixin layerwiseMixin_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

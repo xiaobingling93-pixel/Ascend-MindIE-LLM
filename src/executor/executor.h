@@ -9,14 +9,15 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
- 
+
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
 #include <thread>
-#include "executor/executor_interface.h"
+
 #include "communicator.h"
 #include "data_type.h"
+#include "executor/executor_interface.h"
 
 namespace mindie_llm {
 struct ModelLaunchConfig {
@@ -43,7 +44,7 @@ struct ModelLaunchConfig {
 };
 
 class Executor : public IExecutor {
-public:
+   public:
     Executor() : IExecutor() {}
     ~Executor() override = default;
 
@@ -90,7 +91,7 @@ public:
 
     LoraOperationResponse GetLoraOperationResponse() const override;
 
-private:
+   private:
     bool InitWorkerProcesses(const ModelLaunchConfig &modelConfig, const std::string &sharedMemPrefix);
     bool AsyncResponseHandler(ExecuteResponse &response);
     bool ParseFromModelConfig(std::unordered_map<std::string, std::string> &config,
@@ -111,11 +112,11 @@ private:
     void HandleExecuteModelResponse(ExecuteResponse &modelExecuteResponse);
     bool HandleRecoverCommandResult(RecoverCommandInfo &commandInfo, std::vector<ExecuteResponse> &responses) const;
     bool AggregatePDLinkStatusResponses(const std::vector<ExecuteResponse> &responseVec,
-                                  ExecuteResponse &aggregatedResponse) const;
+                                        ExecuteResponse &aggregatedResponse) const;
     bool HandlePDLinkStatusResponse(ExecuteResponse &executeResponse);
     void HandleKVTransferResponse(ExecuteResponse &executeResponse);
-    std::vector<std::string> BuildConnectorCommand(const ModelLaunchConfig &modelConfig, const std::string &sharedMemPrefix,
-        uint32_t rankInDP) const;
+    std::vector<std::string> BuildConnectorCommand(const ModelLaunchConfig &modelConfig,
+                                                   const std::string &sharedMemPrefix, uint32_t rankInDP) const;
     bool ExecuteCommand(const std::vector<std::string> &command);
     static void ConsumePipe(FILE *pipe);
     void JoinPipeThreads();
@@ -140,5 +141,5 @@ private:
     ThinkingConfig thinkingConfig_;
     std::vector<pid_t> childPids_;
 };
-} // namespace mindie_llm
+}  // namespace mindie_llm
 #endif

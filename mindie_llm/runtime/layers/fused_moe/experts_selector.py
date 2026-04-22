@@ -19,17 +19,19 @@ import torch_npu
 SOFTMAX = "softmax"
 
 
-def select_experts(hidden_states: torch.Tensor,
-                   router_logits: torch.Tensor,
-                   top_k: int,
-                   use_grouped_topk: bool,
-                   renormalize: bool,
-                   topk_group: Optional[int] = None,
-                   num_expert_group: Optional[int] = None,
-                   scoring_func: str = SOFTMAX,
-                   routed_scaling_factor: float = 1.0,
-                   e_score_correction_bias: Optional[torch.Tensor] = None,
-                   global_num_experts: int = -1):
+def select_experts(
+    hidden_states: torch.Tensor,
+    router_logits: torch.Tensor,
+    top_k: int,
+    use_grouped_topk: bool,
+    renormalize: bool,
+    topk_group: Optional[int] = None,
+    num_expert_group: Optional[int] = None,
+    scoring_func: str = SOFTMAX,
+    routed_scaling_factor: float = 1.0,
+    e_score_correction_bias: Optional[torch.Tensor] = None,
+    global_num_experts: int = -1,
+):
     if scoring_func == SOFTMAX:
         # group topk is not used when softmax activation is applied
         norm_type = 0
@@ -38,22 +40,20 @@ def select_experts(hidden_states: torch.Tensor,
     else:
         norm_type = 1
 
-    if e_score_correction_bias is not None and \
-        e_score_correction_bias.dtype != router_logits.dtype:
-        e_score_correction_bias = e_score_correction_bias.to(
-            router_logits.dtype)
+    if e_score_correction_bias is not None and e_score_correction_bias.dtype != router_logits.dtype:
+        e_score_correction_bias = e_score_correction_bias.to(router_logits.dtype)
 
     topk_weights, topk_ids, _ = torch_npu.npu_moe_gating_top_k(
         router_logits,
         k=top_k,
         bias=e_score_correction_bias,
-        k_group=topk_group,             # number of selected experts group
-        group_count=num_expert_group,   # number of experts groups
+        k_group=topk_group,  # number of selected experts group
+        group_count=num_expert_group,  # number of experts groups
         group_select_mode=1,
         renorm=0,
-        norm_type=norm_type,            # 0 Softmax, 1 Sigmoid
+        norm_type=norm_type,  # 0 Softmax, 1 Sigmoid
         routed_scaling_factor=routed_scaling_factor,
-        eps=float(1e-20)
+        eps=float(1e-20),
     )
 
     if renormalize:
